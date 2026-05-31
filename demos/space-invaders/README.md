@@ -10,7 +10,7 @@ npm run build
 npm run dev --workspace @ai-game-assets/demo-space-invaders
 ```
 
-Open `http://127.0.0.1:4177`.
+Open the URL printed by the dev server. It starts from `http://127.0.0.1:4177`, but automatically moves to the next available ports if the demo or asset API ports are already in use.
 
 The asset designer uses real OpenAI image generation through `@ai-game-assets/dev`. It can regenerate options from the edited prompt, preview an option in the running game, promote it through the dev server, and restart to verify the manifest's active version persisted.
 
