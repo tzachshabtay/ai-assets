@@ -1,0 +1,71 @@
+import { defineAiAssets } from "@ai-game-assets/core";
+
+export const assets = defineAiAssets(
+{
+  "hero.ship": {
+    "id": "hero.ship",
+    "kind": "image",
+    "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
+    "dimensions": {
+      "width": 64,
+      "height": 64
+    },
+    "settings": {
+      "model": "gpt-image-1.5",
+      "background": "transparent",
+      "quality": "low",
+      "format": "png"
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/hero.ship.default.svg",
+        "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
+        "createdAt": "2026-05-30T00:00:00.000Z",
+        "model": "starter-asset"
+      }
+    }
+  },
+  "invader.scout": {
+    "id": "invader.scout",
+    "kind": "image",
+    "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background.",
+    "dimensions": {
+      "width": 64,
+      "height": 64
+    },
+    "settings": {
+      "model": "gpt-image-1.5",
+      "background": "transparent",
+      "quality": "low",
+      "format": "png"
+    },
+    "activeVersion": "promoted-1780236988072",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/invader.scout.default.svg",
+        "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background.",
+        "createdAt": "2026-05-30T00:00:00.000Z",
+        "model": "starter-asset"
+      },
+      "promoted-1780236988072": {
+        "name": "promoted-1780236988072",
+        "file": "/assets/invader.scout.promoted-1780236988072.png",
+        "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background.",
+        "createdAt": "2026-05-31T14:16:28.096Z",
+        "model": "gpt-image-1.5",
+        "settings": {
+          "model": "gpt-image-1.5",
+          "background": "transparent",
+          "quality": "low",
+          "format": "png"
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
+      }
+    }
+  }
+}
+);

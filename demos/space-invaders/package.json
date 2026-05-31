@@ -1,0 +1,21 @@
+{
+  "name": "@ai-game-assets/demo-space-invaders",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --format=esm --sourcemap --outfile=public/game.js",
+    "dev": "node dev-server.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-game-assets/core": "file:../../packages/core",
+    "@ai-game-assets/dev": "file:../../packages/dev",
+    "@ai-game-assets/phaser": "file:../../packages/phaser",
+    "phaser": ">=4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12",
+    "typescript": "^5.8.0"
+  }
+}

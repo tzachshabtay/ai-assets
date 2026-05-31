@@ -1,0 +1,81 @@
+export type AiAssetKind = "image" | "spritesheet" | "animation";
+
+export type AiAssetBackground = "transparent" | "opaque" | "auto";
+
+export type AiAssetQuality = "low" | "medium" | "high" | "auto";
+
+export type AiAssetFormat = "png" | "webp" | "jpg" | "svg";
+
+export type AiAssetDimensions = {
+  width: number;
+  height: number;
+};
+
+export type AiAssetFrameGrid = {
+  frameWidth: number;
+  frameHeight: number;
+  columns: number;
+  rows: number;
+  margin?: number;
+  spacing?: number;
+};
+
+export type AiAssetAnimation = {
+  key: string;
+  frames: number[];
+  frameRate: number;
+  repeat?: number;
+};
+
+export type AiAssetGenerationSettings = {
+  model?: string;
+  size?: string;
+  quality?: AiAssetQuality;
+  background?: AiAssetBackground;
+  format?: AiAssetFormat;
+  moderation?: "auto" | "low";
+  referenceAssetIds?: string[];
+};
+
+export type AiAssetVersion = {
+  name: string;
+  file: string;
+  prompt: string;
+  createdAt: string;
+  model?: string;
+  revisedPrompt?: string;
+  settings?: AiAssetGenerationSettings;
+  parentVersion?: string;
+  notes?: string;
+};
+
+export type AiAssetDefinition = {
+  id: string;
+  kind: AiAssetKind;
+  prompt: string;
+  negativePrompt?: string;
+  style?: string;
+  dimensions: AiAssetDimensions;
+  frameGrid?: AiAssetFrameGrid;
+  animations?: AiAssetAnimation[];
+  settings?: AiAssetGenerationSettings;
+  activeVersion: string;
+  versions: Record<string, AiAssetVersion>;
+  tags?: string[];
+};
+
+export type AiAssetManifest = {
+  schemaVersion: 1;
+  assets: Record<string, AiAssetDefinition>;
+};
+
+export type AiAssetSelection = {
+  assetId: string;
+  versionName?: string;
+};
+
+export type ResolvedAiAsset = {
+  asset: AiAssetDefinition;
+  versionName: string;
+  version: AiAssetVersion;
+};

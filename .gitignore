@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.tools/
+.DS_Store
+.env
+*.env
+**/.env
+**/*.env
+examples/*/public/assets/*.png
+examples/*/public/assets/*.webp
+examples/*/public/assets/*.jpg
+demos/*/public/game.js
+demos/*/public/game.js.map

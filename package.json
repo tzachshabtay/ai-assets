@@ -1,0 +1,21 @@
+{
+  "name": "ai-game-assets",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Prompt-aware AI asset pipeline for TypeScript 2D games.",
+  "type": "module",
+  "packageManager": "npm@11.16.0",
+  "workspaces": [
+    "packages/*",
+    "examples/*",
+    "demos/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}

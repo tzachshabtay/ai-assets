@@ -1,0 +1,112 @@
+export type GenerateDebugOptionsRequest = {
+  assetId: string;
+  prompt?: string;
+  count?: number;
+};
+
+export type GeneratedDebugOption = {
+  index: number;
+  dataUrl: string;
+  mimeType: string;
+  prompt: string;
+  model?: string;
+  revisedPrompt?: string;
+};
+
+export type SaveDebugOptionRequest = {
+  assetId: string;
+  versionName: string;
+  dataUrl: string;
+  prompt: string;
+  model?: string;
+  revisedPrompt?: string;
+  activate?: boolean;
+  notes?: string;
+};
+
+export class AiAssetDebugClient {
+  readonly endpoint: string;
+
+  constructor(endpoint = "http://127.0.0.1:3977") {
+    this.endpoint = endpoint.replace(/\/$/, "");
+  }
+
+  async generate(request: GenerateDebugOptionsRequest): Promise<GeneratedDebugOption[]> {
+    const url = `${this.endpoint}/__ai-assets/generate`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+
+    const body = await response.json() as { options: GeneratedDebugOption[] };
+    return body.options;
+  }
+
+  async getManifest(): Promise<AiAssetManifest> {
+    const url = `${this.endpoint}/__ai-assets/manifest`;
+    const response = await fetchDebugEndpoint(url, {
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+
+    return response.json() as Promise<AiAssetManifest>;
+  }
+
+  async save(request: SaveDebugOptionRequest): Promise<void> {
+    const url = `${this.endpoint}/__ai-assets/save`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+  }
+}
+import type { AiAssetManifest } from "@ai-game-assets/core";
+
+async function fetchDebugEndpoint(
+  url: string,
+  init?: RequestInit
+): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    throw new Error(
+      [
+        `Could not reach the AI asset dev server at ${url}.`,
+        "Make sure the demo dev server is running and that the assetApi URL matches it.",
+        `Original error: ${errorMessage(error)}`
+      ].join(" ")
+    );
+  }
+}
+
+async function responseErrorMessage(response: Response): Promise<string> {
+  const text = await response.text();
+
+  try {
+    const body = JSON.parse(text) as { error?: string };
+    return body.error ?? text;
+  } catch {
+    return text;
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}

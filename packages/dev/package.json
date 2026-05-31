@@ -1,0 +1,29 @@
+{
+  "name": "@ai-game-assets/dev",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@ai-game-assets/core": "file:../core"
+  },
+  "peerDependencies": {
+    "openai": ">=5"
+  },
+  "peerDependenciesMeta": {
+    "openai": {
+      "optional": true
+    }
+  }
+}
