@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import {
   AiAssetDebugClient,
   AiAssetRuntime,
+  createAiAnimations,
   installAiAssetDesigner,
   loadAiAssets,
 } from "@ai-game-assets/phaser";
@@ -15,7 +16,7 @@ const debugClient = new AiAssetDebugClient(assetApi);
 type DemoScene = Phaser.Scene & {
   aiRuntime?: AiAssetRuntime;
   hero?: Phaser.GameObjects.Image;
-  invaders?: Phaser.GameObjects.Image[];
+  invaders?: Phaser.GameObjects.Sprite[];
   applyAssetTexture?: (assetId: string, textureKey: string) => void;
 };
 
@@ -31,7 +32,7 @@ function startGame(assetManifest: AiAssetManifest): void {
   class SpaceInvadersScene extends Phaser.Scene {
     aiRuntime?: AiAssetRuntime;
     hero?: Phaser.GameObjects.Image;
-    invaders: Phaser.GameObjects.Image[] = [];
+    invaders: Phaser.GameObjects.Sprite[] = [];
     applyAssetTexture?: (assetId: string, textureKey: string) => void;
 
     private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -56,6 +57,9 @@ function startGame(assetManifest: AiAssetManifest): void {
     create() {
       sceneRef = this;
       this.aiRuntime = new AiAssetRuntime(this, assetManifest);
+      createAiAnimations(this, assetManifest, "invader.scout.idle");
+      createAiAnimations(this, assetManifest, "invader.scout.shooting");
+      createAiAnimations(this, assetManifest, "invader.scout.destroyed");
       this.cursors = this.input.keyboard?.createCursorKeys();
       this.fireKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
@@ -79,12 +83,13 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       for (let row = 0; row < 3; row += 1) {
         for (let col = 0; col < 8; col += 1) {
-          const invader = this.add.image(
+          const invader = this.add.sprite(
             112 + col * 60,
             118 + row * 58,
-            this.aiRuntime.key("invader.scout")
+            this.aiRuntime.key("invader.scout.idle")
           );
           invader.setDisplaySize(42, 42);
+          invader.play("invader.scout.idle");
           this.invaders.push(invader);
         }
       }
@@ -95,6 +100,12 @@ function startGame(assetManifest: AiAssetManifest): void {
         }
 
         if (assetId === "invader.scout") {
+          for (const invader of this.invaders ?? []) {
+            invader.setTexture(textureKey);
+          }
+        }
+
+        if (assetId === "invader.scout.idle") {
           for (const invader of this.invaders ?? []) {
             invader.setTexture(textureKey);
           }
@@ -163,7 +174,11 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       if (time - this.lastInvaderShotAt > 780) {
         this.lastInvaderShotAt = time;
-        const shooter = Phaser.Utils.Array.GetRandom(this.invaders) as Phaser.GameObjects.Image;
+        const shooter = Phaser.Utils.Array.GetRandom(this.invaders) as Phaser.GameObjects.Sprite;
+        shooter.play("invader.scout.shooting");
+        shooter.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+          if (shooter.active) shooter.play("invader.scout.idle");
+        });
         this.invaderBullets.push(this.add.rectangle(shooter.x, shooter.y + 30, 5, 16, 0xfca5a5));
       }
     }
@@ -175,9 +190,10 @@ function startGame(assetManifest: AiAssetManifest): void {
         for (const invader of [...this.invaders]) {
           if (Phaser.Geom.Intersects.RectangleToRectangle(bullet.getBounds(), invader.getBounds())) {
             bullet.destroy();
-            invader.destroy();
             this.bullets = this.bullets.filter((candidate) => candidate !== bullet);
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
+            invader.play("invader.scout.destroyed");
+            invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
             this.scoreText?.setText(`Score ${this.score}`);
             break;

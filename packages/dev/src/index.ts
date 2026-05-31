@@ -1,5 +1,6 @@
 export type {
   AiImageProvider,
+  GenerateAssetReference,
   GeneratedAssetOption,
   GenerateAssetRequest,
   OpenAiImageProviderOptions

@@ -1,11 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { AiAssetManifest } from "@ai-game-assets/core";
+import { resolveAiAsset, type AiAssetManifest } from "@ai-game-assets/core";
 import type { AiImageProvider } from "./provider.js";
 import {
   type AssetStoreOptions,
   readManifest,
   saveGeneratedOption
 } from "./asset-store.js";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 export type AiAssetDevServerOptions = AssetStoreOptions & {
   provider: AiImageProvider;
@@ -71,7 +73,8 @@ async function routeRequest(
     const generated = await options.provider.generate({
       asset,
       prompt: body.prompt,
-      count: body.count
+      count: body.count,
+      references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds)
     });
 
     sendJson(response, 200, {
@@ -119,6 +122,34 @@ async function routeRequest(
   }
 
   sendJson(response, 404, { error: "Not found" });
+}
+
+async function getReferenceImages(
+  options: AiAssetDevServerOptions,
+  manifest: AiAssetManifest,
+  referenceAssetIds: string[] | undefined
+) {
+  if (!referenceAssetIds?.length) return undefined;
+
+  return Promise.all(referenceAssetIds.map(async (assetId) => {
+    const resolved = resolveAiAsset(manifest, assetId);
+    const fileName = path.basename(resolved.version.file);
+    const filePath = path.join(options.assetsDir, fileName);
+
+    return {
+      image: await readFile(filePath),
+      mimeType: mimeTypeFromFile(fileName),
+      fileName
+    };
+  }));
+}
+
+function mimeTypeFromFile(fileName: string): string {
+  if (/\.png$/i.test(fileName)) return "image/png";
+  if (/\.webp$/i.test(fileName)) return "image/webp";
+  if (/\.jpe?g$/i.test(fileName)) return "image/jpeg";
+  if (/\.svg$/i.test(fileName)) return "image/svg+xml";
+  return "application/octet-stream";
 }
 
 function getAsset(manifest: AiAssetManifest, assetId: string) {

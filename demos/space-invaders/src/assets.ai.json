@@ -29,7 +29,7 @@
     "invader.scout": {
       "id": "invader.scout",
       "kind": "image",
-      "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background.",
+      "prompt": "Alien invader scout for a 2D space invaders game, neon beetle-like armor, readable silhouette, transparent background.",
       "dimensions": {
         "width": 64,
         "height": 64
@@ -40,12 +40,26 @@
         "quality": "low",
         "format": "png"
       },
+      "linkedAnimationAssets": {
+        "idle": {
+          "label": "Idle",
+          "assetId": "invader.scout.idle"
+        },
+        "shooting": {
+          "label": "Shooting",
+          "assetId": "invader.scout.shooting"
+        },
+        "destroyed": {
+          "label": "Destroyed",
+          "assetId": "invader.scout.destroyed"
+        }
+      },
       "activeVersion": "promoted-1780236988072",
       "versions": {
         "default": {
           "name": "default",
           "file": "/assets/invader.scout.default.svg",
-          "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background.",
+          "prompt": "Alien invader scout for a 2D space invaders game, neon beetle-like armor, readable silhouette, transparent background.",
           "createdAt": "2026-05-30T00:00:00.000Z",
           "model": "starter-asset"
         },
@@ -63,6 +77,201 @@
           },
           "parentVersion": "default",
           "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
+    "invader.scout.idle": {
+      "id": "invader.scout.idle",
+      "kind": "spritesheet",
+      "prompt": "Four-frame idle spritesheet for the alien invader scout. Keep the same character identity from the base reference. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+      "dimensions": {
+        "width": 1024,
+        "height": 1024
+      },
+      "frameGrid": {
+        "frameWidth": 256,
+        "frameHeight": 1024,
+        "columns": 4,
+        "rows": 1
+      },
+      "animations": [
+        {
+          "key": "invader.scout.idle",
+          "frames": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frameRate": 6,
+          "repeat": -1
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-1.5",
+        "background": "transparent",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.scout"
+        ]
+      },
+      "activeVersion": "generated-idle-1780239036123",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.scout.idle.default.svg",
+          "prompt": "Four-frame idle spritesheet for the alien invader scout. Keep the same character identity from the base reference. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "generated-idle-1780239036123": {
+          "name": "generated-idle-1780239036123",
+          "file": "/assets/invader.scout.idle.generated-idle-1780239036123.png",
+          "prompt": "Four-frame idle spritesheet for the alien invader scout. Keep the same character identity from the base reference. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T14:50:36.150Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.scout"
+            ]
+          },
+          "parentVersion": "default",
+          "notes": "Generated for the Space Invaders animation demo."
+        }
+      }
+    },
+    "invader.scout.shooting": {
+      "id": "invader.scout.shooting",
+      "kind": "spritesheet",
+      "prompt": "Four-frame shooting spritesheet for the alien invader scout. Keep the same character identity from the base reference. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+      "dimensions": {
+        "width": 1024,
+        "height": 1024
+      },
+      "frameGrid": {
+        "frameWidth": 256,
+        "frameHeight": 1024,
+        "columns": 4,
+        "rows": 1
+      },
+      "animations": [
+        {
+          "key": "invader.scout.shooting",
+          "frames": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frameRate": 10,
+          "repeat": 0
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-1.5",
+        "background": "transparent",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.scout"
+        ]
+      },
+      "activeVersion": "generated-shooting-1780239052135",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.scout.shooting.default.svg",
+          "prompt": "Four-frame shooting spritesheet for the alien invader scout. Keep the same character identity from the base reference. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+          "createdAt": "2026-05-31T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "generated-shooting-1780239052135": {
+          "name": "generated-shooting-1780239052135",
+          "file": "/assets/invader.scout.shooting.generated-shooting-1780239052135.png",
+          "prompt": "Four-frame shooting spritesheet for the alien invader scout. Keep the same character identity from the base reference. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+          "createdAt": "2026-05-31T14:50:52.158Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.scout"
+            ]
+          },
+          "parentVersion": "default",
+          "notes": "Generated for the Space Invaders animation demo."
+        }
+      }
+    },
+    "invader.scout.destroyed": {
+      "id": "invader.scout.destroyed",
+      "kind": "spritesheet",
+      "prompt": "Four-frame destroyed spritesheet for the alien invader scout. Keep the same character identity from the base reference. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+      "dimensions": {
+        "width": 1024,
+        "height": 1024
+      },
+      "frameGrid": {
+        "frameWidth": 256,
+        "frameHeight": 1024,
+        "columns": 4,
+        "rows": 1
+      },
+      "animations": [
+        {
+          "key": "invader.scout.destroyed",
+          "frames": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frameRate": 12,
+          "repeat": 0
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-1.5",
+        "background": "transparent",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.scout"
+        ]
+      },
+      "activeVersion": "generated-destroyed-1780239070336",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.scout.destroyed.default.svg",
+          "prompt": "Four-frame destroyed spritesheet for the alien invader scout. Keep the same character identity from the base reference. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-05-31T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "generated-destroyed-1780239070336": {
+          "name": "generated-destroyed-1780239070336",
+          "file": "/assets/invader.scout.destroyed.generated-destroyed-1780239070336.png",
+          "prompt": "Four-frame destroyed spritesheet for the alien invader scout. Keep the same character identity from the base reference. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-05-31T14:51:10.359Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.scout"
+            ]
+          },
+          "parentVersion": "default",
+          "notes": "Generated for the Space Invaders animation demo."
         }
       }
     }

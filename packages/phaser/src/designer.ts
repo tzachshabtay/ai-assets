@@ -39,6 +39,8 @@ type DesignerElements = {
   toggle: HTMLButtonElement;
   panel: HTMLDivElement;
   assetSelect: HTMLSelectElement;
+  animationSelect: HTMLSelectElement;
+  animationField: HTMLLabelElement;
   promptInput: HTMLTextAreaElement;
   regenerateButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
@@ -56,6 +58,7 @@ export function installAiAssetDesigner(
   const client = options.client ?? new AiAssetDebugClient();
   let manifest = options.manifest;
   let selectedAssetId = options.assetIds?.[0] ?? Object.keys(manifest.assets)[0];
+  let selectedTargetAssetId = selectedAssetId;
   let selectedOption: GeneratedDebugOption | undefined;
 
   if (!selectedAssetId) {
@@ -72,15 +75,42 @@ export function installAiAssetDesigner(
     elements.toggle.setAttribute("aria-expanded", String(isOpen));
   };
 
-  const syncAsset = (assetId: string) => {
+  const syncAnimationChoices = (assetId: string) => {
+    const asset = manifest.assets[assetId];
+    const linkedAnimations = Object.entries(asset.linkedAnimationAssets ?? {});
+    elements.animationSelect.innerHTML = "";
+
+    const baseOption = document.createElement("option");
+    baseOption.value = assetId;
+    baseOption.textContent = "Base image";
+    elements.animationSelect.append(baseOption);
+
+    for (const [key, linkedAnimation] of linkedAnimations) {
+      const option = document.createElement("option");
+      option.value = linkedAnimation.assetId;
+      option.textContent = linkedAnimation.label || readableAssetName(key);
+      elements.animationSelect.append(option);
+    }
+
+    elements.animationField.hidden = linkedAnimations.length === 0;
+    selectedTargetAssetId = assetId;
+    elements.animationSelect.value = selectedTargetAssetId;
+  };
+
+  const syncTargetAsset = (assetId: string) => {
     const asset = manifest.assets[assetId];
     const activeVersion = asset.versions[asset.activeVersion];
     elements.promptInput.value = activeVersion?.prompt ?? asset.prompt;
-    elements.versionLabel.textContent = `Active version: ${asset.activeVersion}`;
+    elements.versionLabel.textContent = `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
     elements.options.innerHTML = "";
     setStatus(elements, "", "idle");
     elements.promoteButton.disabled = true;
     selectedOption = undefined;
+  };
+
+  const syncAsset = (assetId: string) => {
+    syncAnimationChoices(assetId);
+    syncTargetAsset(selectedTargetAssetId);
   };
 
   elements.toggle.addEventListener("click", () => {
@@ -92,6 +122,11 @@ export function installAiAssetDesigner(
     syncAsset(selectedAssetId);
   });
 
+  elements.animationSelect.addEventListener("change", () => {
+    selectedTargetAssetId = elements.animationSelect.value;
+    syncTargetAsset(selectedTargetAssetId);
+  });
+
   elements.regenerateButton.addEventListener("click", async () => {
     setStatus(elements, "Generating options...", "busy");
     elements.promoteButton.disabled = true;
@@ -100,7 +135,7 @@ export function installAiAssetDesigner(
 
     try {
       const generated = await client.generate({
-        assetId: selectedAssetId,
+        assetId: selectedTargetAssetId,
         prompt: elements.promptInput.value,
         count: options.optionCount ?? 3
       });
@@ -109,7 +144,7 @@ export function installAiAssetDesigner(
         elements,
         generated,
         scene: options.scene,
-        assetId: selectedAssetId,
+        assetId: selectedTargetAssetId,
         onPreview: options.onPreview,
         onSelected(option) {
           selectedOption = option;
@@ -134,7 +169,7 @@ export function installAiAssetDesigner(
 
     try {
       await client.save({
-        assetId: selectedAssetId,
+        assetId: selectedTargetAssetId,
         versionName,
         dataUrl: selectedOption.dataUrl,
         prompt: selectedOption.prompt,
@@ -146,8 +181,8 @@ export function installAiAssetDesigner(
 
       manifest = await client.getManifest();
       options.onManifestUpdated?.(manifest);
-      syncAsset(selectedAssetId);
-      setStatus(elements, `Promoted ${selectedAssetId} to ${versionName}.`, "success");
+      syncTargetAsset(selectedTargetAssetId);
+      setStatus(elements, `Promoted ${selectedTargetAssetId} to ${versionName}.`, "success");
 
       if (options.restartOnPromote) {
         window.location.reload();
@@ -206,6 +241,10 @@ function createDesignerElements(
     assetSelect.append(option);
   }
 
+  const animationSelect = document.createElement("select");
+  animationSelect.className = "ai-game-assets-designer__animation-select";
+  const animationField = labelWrap("Animation", animationSelect);
+
   const promptInput = document.createElement("textarea");
   promptInput.className = "ai-game-assets-designer__prompt";
   promptInput.rows = 6;
@@ -239,6 +278,7 @@ function createDesignerElements(
   panel.append(
     title,
     labelWrap("Asset", assetSelect),
+    animationField,
     labelWrap("Prompt", promptInput),
     actions,
     versionLabel,
@@ -252,6 +292,8 @@ function createDesignerElements(
     toggle,
     panel,
     assetSelect,
+    animationSelect,
+    animationField,
     promptInput,
     regenerateButton,
     promoteButton,

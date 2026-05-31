@@ -5,6 +5,13 @@ export type GenerateAssetRequest = {
   prompt?: string;
   count?: number;
   settings?: AiAssetGenerationSettings;
+  references?: GenerateAssetReference[];
+};
+
+export type GenerateAssetReference = {
+  image: Uint8Array;
+  mimeType: string;
+  fileName: string;
 };
 
 export type GeneratedAssetOption = {
@@ -47,31 +54,27 @@ export function createOpenAiImageProvider(
       const requestedFormat =
         request.settings?.format ?? request.asset.settings?.format ?? "png";
       const outputFormat = normalizeOutputFormat(requestedFormat);
-      const response = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model,
-          prompt: gameAssetPrompt(request, prompt),
-          n: request.count ?? 1,
-          size: request.settings?.size ?? request.asset.settings?.size ?? "1024x1024",
-          quality:
-            request.settings?.quality ??
-            request.asset.settings?.quality ??
-            options.quality ??
-            "auto",
-          background:
-            request.settings?.background ??
-            request.asset.settings?.background ??
-            options.background ??
-            "transparent",
-          output_format: outputFormat,
-          moderation: request.settings?.moderation ?? request.asset.settings?.moderation
-        })
-      });
+      const requestBody = {
+        model,
+        prompt: gameAssetPrompt(request, prompt),
+        n: request.count ?? 1,
+        size: request.settings?.size ?? request.asset.settings?.size ?? "1024x1024",
+        quality:
+          request.settings?.quality ??
+          request.asset.settings?.quality ??
+          options.quality ??
+          "auto",
+        background:
+          request.settings?.background ??
+          request.asset.settings?.background ??
+          options.background ??
+          "transparent",
+        output_format: outputFormat,
+        moderation: request.settings?.moderation ?? request.asset.settings?.moderation
+      };
+      const response = request.references?.length
+        ? await createImageEdit(apiKey, requestBody, request.references)
+        : await createImageGeneration(apiKey, requestBody);
 
       if (!response.ok) {
         const body = await response.text();
@@ -108,14 +111,81 @@ export function createOpenAiImageProvider(
 }
 
 function gameAssetPrompt(request: GenerateAssetRequest, prompt: string): string {
-  return [
+  const lines = [
     prompt,
     "",
     "Create this as a clean 2D game asset sprite.",
     `Asset kind: ${request.asset.kind}.`,
     `Target canvas: ${request.asset.dimensions.width}x${request.asset.dimensions.height}.`,
     "Use a transparent background, readable silhouette, centered subject, no text, no watermark."
-  ].join("\n");
+  ];
+
+  if (request.asset.frameGrid) {
+    lines.push(
+      `Create a ${request.asset.frameGrid.columns} column by ${request.asset.frameGrid.rows} row spritesheet.`,
+      `Each frame is ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}.`,
+      "Keep each frame aligned to the grid with consistent scale and spacing."
+    );
+  }
+
+  if (request.references?.length) {
+    lines.push(
+      "Use the provided reference image for character identity, colors, silhouette, and materials."
+    );
+  }
+
+  return lines.join("\n");
+}
+
+async function createImageGeneration(
+  apiKey: string,
+  body: Record<string, unknown>
+): Promise<Response> {
+  return fetch("https://api.openai.com/v1/images/generations", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+}
+
+async function createImageEdit(
+  apiKey: string,
+  body: Record<string, unknown>,
+  references: GenerateAssetReference[]
+): Promise<Response> {
+  const form = new FormData();
+
+  for (const [key, value] of Object.entries(body)) {
+    if (value !== undefined) {
+      form.append(key, String(value));
+    }
+  }
+
+  for (const reference of references) {
+    form.append(
+      "image[]",
+      new Blob([arrayBufferFromBytes(reference.image)], { type: reference.mimeType }),
+      reference.fileName
+    );
+  }
+
+  return fetch("https://api.openai.com/v1/images/edits", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: form
+  });
+}
+
+function arrayBufferFromBytes(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  ) as ArrayBuffer;
 }
 
 function normalizeOutputFormat(

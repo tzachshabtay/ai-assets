@@ -56,6 +56,12 @@ export function assertAsset(asset: AiAssetDefinition): void {
     assertPositiveInteger(asset.frameGrid.rows, `${asset.id}.frameGrid.rows`);
   }
 
+  for (const [key, linkedAnimation] of Object.entries(asset.linkedAnimationAssets ?? {})) {
+    assertNonEmpty(key, `${asset.id}.linkedAnimationAssets key`);
+    assertNonEmpty(linkedAnimation.label, `${asset.id}.linkedAnimationAssets.${key}.label`);
+    assertNonEmpty(linkedAnimation.assetId, `${asset.id}.linkedAnimationAssets.${key}.assetId`);
+  }
+
   for (const [versionName, version] of Object.entries(asset.versions)) {
     assertVersion(asset.id, versionName, version);
   }

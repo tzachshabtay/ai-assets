@@ -25,6 +25,12 @@ export type AiAssetAnimation = {
   frames: number[];
   frameRate: number;
   repeat?: number;
+  prompt?: string;
+};
+
+export type AiAssetLinkedAnimation = {
+  label: string;
+  assetId: string;
 };
 
 export type AiAssetGenerationSettings = {
@@ -59,6 +65,7 @@ export type AiAssetDefinition = {
   frameGrid?: AiAssetFrameGrid;
   animations?: AiAssetAnimation[];
   settings?: AiAssetGenerationSettings;
+  linkedAnimationAssets?: Record<string, AiAssetLinkedAnimation>;
   activeVersion: string;
   versions: Record<string, AiAssetVersion>;
   tags?: string[];
