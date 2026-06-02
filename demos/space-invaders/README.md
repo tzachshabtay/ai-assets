@@ -16,6 +16,6 @@ The asset designer uses real OpenAI image generation through `@ai-game-assets/de
 
 Optional environment variables:
 
-- `OPENAI_IMAGE_MODEL`: defaults to `gpt-image-1.5`.
+- `OPENAI_IMAGE_MODEL`: defaults to `gpt-image-2`; the demo uses `background: "auto"` because this model rejects the explicit `transparent` background parameter.
 - `AI_ASSET_API_PORT`: defaults to `3977`.
 - `SPACE_INVADERS_DEMO_PORT`: defaults to `4177`.

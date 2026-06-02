@@ -1,11 +1,23 @@
-import type { AiAssetManifest } from "@ai-game-assets/core";
+import type { AiAssetDefinition, AiAssetManifest } from "@ai-game-assets/core";
 import { AiAssetDebugClient, type GeneratedDebugOption } from "./debug-client.js";
+
+type AiAssetTextureFrameConfig = {
+  frameWidth: number;
+  frameHeight: number;
+  margin?: number;
+  spacing?: number;
+};
 
 export type AiAssetDesignerSceneLike = {
   textures: {
     exists(key: string): boolean;
     remove(key: string): unknown;
     addImage(key: string, image: HTMLImageElement): unknown;
+    addSpriteSheet?(
+      key: string,
+      image: HTMLImageElement,
+      config: AiAssetTextureFrameConfig
+    ): unknown;
   };
   input?: {
     keyboard?: {
@@ -23,8 +35,16 @@ export type AiAssetDesignerOptions = {
   optionCount?: number;
   mount?: HTMLElement;
   restartOnPromote?: boolean;
+  previewDisplaySize?:
+    | Record<string, AiAssetPreviewDisplaySize>
+    | ((assetId: string, asset: AiAssetDefinition) => AiAssetPreviewDisplaySize | undefined);
   onPreview(assetId: string, textureKey: string): void;
   onManifestUpdated?(manifest: AiAssetManifest): void;
+};
+
+export type AiAssetPreviewDisplaySize = {
+  width: number;
+  height: number;
 };
 
 export type AiAssetDesigner = {
@@ -42,6 +62,10 @@ type DesignerElements = {
   animationSelect: HTMLSelectElement;
   animationField: HTMLLabelElement;
   promptInput: HTMLTextAreaElement;
+  currentImage: HTMLImageElement;
+  currentAnimation: HTMLDivElement;
+  currentAnimationButton: HTMLButtonElement;
+  currentPreview: HTMLDivElement;
   regenerateButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
   restartButton: HTMLButtonElement;
@@ -60,6 +84,7 @@ export function installAiAssetDesigner(
   let selectedAssetId = options.assetIds?.[0] ?? Object.keys(manifest.assets)[0];
   let selectedTargetAssetId = selectedAssetId;
   let selectedOption: GeneratedDebugOption | undefined;
+  let stopCurrentAnimationPreview: (() => void) | undefined;
 
   if (!selectedAssetId) {
     throw new Error("AI asset designer requires at least one asset.");
@@ -100,8 +125,17 @@ export function installAiAssetDesigner(
   const syncTargetAsset = (assetId: string) => {
     const asset = manifest.assets[assetId];
     const activeVersion = asset.versions[asset.activeVersion];
+    stopCurrentAnimationPreview?.();
+    stopCurrentAnimationPreview = undefined;
     elements.promptInput.value = activeVersion?.prompt ?? asset.prompt;
     elements.versionLabel.textContent = `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
+    elements.currentImage.src = activeVersion?.file ?? "";
+    elements.currentImage.alt = `${readableAssetName(assetId)} active version`;
+    elements.currentPreview.hidden = !activeVersion?.file;
+    elements.currentAnimation.hidden = true;
+    elements.currentImage.hidden = false;
+    elements.currentAnimationButton.hidden = !activeVersion?.file || !asset.frameGrid;
+    elements.currentAnimationButton.textContent = "Animate";
     elements.options.innerHTML = "";
     setStatus(elements, "", "idle");
     elements.promoteButton.disabled = true;
@@ -144,7 +178,9 @@ export function installAiAssetDesigner(
         elements,
         generated,
         scene: options.scene,
+        manifest,
         assetId: selectedTargetAssetId,
+        designerOptions: options,
         onPreview: options.onPreview,
         onSelected(option) {
           selectedOption = option;
@@ -195,6 +231,32 @@ export function installAiAssetDesigner(
 
   elements.restartButton.addEventListener("click", () => {
     window.location.reload();
+  });
+
+  elements.currentAnimationButton.addEventListener("click", () => {
+    const asset = manifest.assets[selectedTargetAssetId];
+    const activeVersion = asset.versions[asset.activeVersion];
+
+    if (!asset.frameGrid || !activeVersion?.file) return;
+
+    if (stopCurrentAnimationPreview) {
+      stopCurrentAnimationPreview();
+      stopCurrentAnimationPreview = undefined;
+      elements.currentAnimation.hidden = true;
+      elements.currentImage.hidden = false;
+      elements.currentAnimationButton.textContent = "Animate";
+      return;
+    }
+
+    elements.currentImage.hidden = true;
+    elements.currentAnimation.hidden = false;
+    elements.currentAnimationButton.textContent = "Stop";
+    stopCurrentAnimationPreview = startSpritesheetPreview({
+      element: elements.currentAnimation,
+      src: activeVersion.file,
+      asset,
+      displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset)
+    });
   });
 
   syncAsset(selectedAssetId);
@@ -249,6 +311,20 @@ function createDesignerElements(
   promptInput.className = "ai-game-assets-designer__prompt";
   promptInput.rows = 6;
 
+  const currentPreview = document.createElement("div");
+  currentPreview.className = "ai-game-assets-designer__current";
+  const currentImage = document.createElement("img");
+  currentImage.className = "ai-game-assets-designer__current-image";
+  const currentAnimation = document.createElement("div");
+  currentAnimation.className = "ai-game-assets-designer__animation-stage";
+  currentAnimation.hidden = true;
+  const currentAnimationButton = document.createElement("button");
+  currentAnimationButton.type = "button";
+  currentAnimationButton.className = "ai-game-assets-designer__animate-button";
+  currentAnimationButton.textContent = "Animate";
+  currentAnimationButton.hidden = true;
+  currentPreview.append(currentImage, currentAnimation, currentAnimationButton);
+
   const regenerateButton = document.createElement("button");
   regenerateButton.type = "button";
   regenerateButton.textContent = "Regenerate";
@@ -279,6 +355,7 @@ function createDesignerElements(
     title,
     labelWrap("Asset", assetSelect),
     animationField,
+    labelWrap("Current", currentPreview),
     labelWrap("Prompt", promptInput),
     actions,
     versionLabel,
@@ -295,6 +372,10 @@ function createDesignerElements(
     animationSelect,
     animationField,
     promptInput,
+    currentImage,
+    currentAnimation,
+    currentAnimationButton,
+    currentPreview,
     regenerateButton,
     promoteButton,
     restartButton,
@@ -308,30 +389,37 @@ function renderOptions(options: {
   elements: DesignerElements;
   generated: GeneratedDebugOption[];
   scene: AiAssetDesignerSceneLike;
+  manifest: AiAssetManifest;
   assetId: string;
+  designerOptions: AiAssetDesignerOptions;
   onPreview(assetId: string, textureKey: string): void;
   onSelected(option: GeneratedDebugOption): void;
 }): void {
   options.elements.options.innerHTML = "";
+  const asset = options.manifest.assets[options.assetId];
 
   for (const option of options.generated) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "ai-game-assets-designer__option";
+    const card = document.createElement("div");
+    card.className = "ai-game-assets-designer__option";
+
+    const selectButton = document.createElement("button");
+    selectButton.type = "button";
+    selectButton.className = "ai-game-assets-designer__option-select";
 
     const image = document.createElement("img");
     image.src = option.dataUrl;
     image.alt = `${options.assetId} option ${option.index + 1}`;
-    button.append(image);
+    selectButton.append(image);
 
-    button.addEventListener("click", () => {
-      for (const item of options.elements.options.querySelectorAll("button")) {
+    selectButton.addEventListener("click", () => {
+      for (const item of options.elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
         item.classList.remove("is-selected");
       }
 
-      button.classList.add("is-selected");
+      card.classList.add("is-selected");
       previewOption({
         scene: options.scene,
+        manifest: options.manifest,
         assetId: options.assetId,
         option,
         onPreview: options.onPreview
@@ -340,12 +428,54 @@ function renderOptions(options: {
       setStatus(options.elements, `Previewing option ${option.index + 1}.`, "info");
     });
 
-    options.elements.options.append(button);
+    card.append(selectButton);
+
+    if (asset.frameGrid) {
+      const animationStage = document.createElement("div");
+      animationStage.className = "ai-game-assets-designer__option-animation";
+      animationStage.hidden = true;
+
+      const animateButton = document.createElement("button");
+      animateButton.type = "button";
+      animateButton.className = "ai-game-assets-designer__animate-button";
+      animateButton.textContent = "Animate";
+      let stopAnimation: (() => void) | undefined;
+
+      animateButton.addEventListener("click", () => {
+        if (stopAnimation) {
+          stopAnimation();
+          stopAnimation = undefined;
+          animationStage.hidden = true;
+          image.hidden = false;
+          animateButton.textContent = "Animate";
+          return;
+        }
+
+        image.hidden = true;
+        animationStage.hidden = false;
+        animateButton.textContent = "Stop";
+        stopAnimation = startSpritesheetPreview({
+          element: animationStage,
+          src: option.dataUrl,
+          asset,
+          displaySize: resolvePreviewDisplaySize(
+            options.designerOptions,
+            options.assetId,
+            asset
+          )
+        });
+      });
+
+      card.append(animationStage, animateButton);
+    }
+
+    options.elements.options.append(card);
   }
 }
 
 function previewOption(options: {
   scene: AiAssetDesignerSceneLike;
+  manifest: AiAssetManifest;
   assetId: string;
   option: GeneratedDebugOption;
   onPreview(assetId: string, textureKey: string): void;
@@ -358,10 +488,90 @@ function previewOption(options: {
       options.scene.textures.remove(textureKey);
     }
 
-    options.scene.textures.addImage(textureKey, image);
+    const asset = options.manifest.assets[options.assetId];
+    if (asset.frameGrid && options.scene.textures.addSpriteSheet) {
+      options.scene.textures.addSpriteSheet(textureKey, image, {
+        frameWidth: asset.frameGrid.frameWidth,
+        frameHeight: asset.frameGrid.frameHeight,
+        margin: asset.frameGrid.margin,
+        spacing: asset.frameGrid.spacing
+      });
+    } else {
+      options.scene.textures.addImage(textureKey, image);
+    }
+
     options.onPreview(options.assetId, textureKey);
   };
   image.src = options.option.dataUrl;
+}
+
+function startSpritesheetPreview(options: {
+  element: HTMLDivElement;
+  src: string;
+  asset: AiAssetDefinition;
+  displaySize: AiAssetPreviewDisplaySize;
+}): () => void {
+  const frameGrid = options.asset.frameGrid;
+
+  if (!frameGrid) {
+    return () => undefined;
+  }
+
+  const frames =
+    options.asset.animations?.[0]?.frames ??
+    Array.from(
+      { length: frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows },
+      (_, index) => index
+    );
+  const frameRate = options.asset.animations?.[0]?.frameRate ?? 8;
+  let frameCursor = 0;
+
+  const renderFrame = () => {
+    const frame = frames[frameCursor % frames.length] ?? 0;
+    const column = frame % frameGrid.columns;
+    const row = Math.floor(frame / frameGrid.columns);
+
+    options.element.style.width = `${options.displaySize.width}px`;
+    options.element.style.height = `${options.displaySize.height}px`;
+    options.element.style.backgroundImage = `url("${cssUrl(options.src)}")`;
+    options.element.style.backgroundSize =
+      `${frameGrid.columns * options.displaySize.width}px ${frameGrid.rows * options.displaySize.height}px`;
+    options.element.style.backgroundPosition =
+      `-${column * options.displaySize.width}px -${row * options.displaySize.height}px`;
+    frameCursor += 1;
+  };
+
+  renderFrame();
+  const interval = window.setInterval(renderFrame, 1000 / frameRate);
+
+  return () => {
+    window.clearInterval(interval);
+    options.element.removeAttribute("style");
+  };
+}
+
+function resolvePreviewDisplaySize(
+  options: AiAssetDesignerOptions,
+  assetId: string,
+  asset: AiAssetDefinition
+): AiAssetPreviewDisplaySize {
+  const configured =
+    typeof options.previewDisplaySize === "function"
+      ? options.previewDisplaySize(assetId, asset)
+      : options.previewDisplaySize?.[assetId];
+
+  if (configured) {
+    return configured;
+  }
+
+  return {
+    width: asset.frameGrid?.frameWidth ?? asset.dimensions.width,
+    height: asset.frameGrid?.frameHeight ?? asset.dimensions.height
+  };
+}
+
+function cssUrl(value: string): string {
+  return value.replace(/["\\]/g, "\\$&");
 }
 
 function bindKeyboardCapture(root: HTMLElement, scene: AiAssetDesignerSceneLike): void {
@@ -465,6 +675,8 @@ function ensureDesignerStyles(): void {
 .ai-game-assets-designer__panel {
   display: none;
   width: min(340px, calc(100vw - 28px));
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
   margin-top: 10px;
   padding: 14px;
   border: 1px solid #303949;
@@ -496,6 +708,40 @@ function ensureDesignerStyles(): void {
   font: inherit;
 }
 .ai-game-assets-designer__field textarea { resize: vertical; }
+.ai-game-assets-designer__current {
+  min-height: 96px;
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border: 1px solid #384251;
+  border-radius: 6px;
+  background: #0f1218;
+  overflow: hidden;
+}
+.ai-game-assets-designer__current-image {
+  max-width: 100%;
+  max-height: 112px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.ai-game-assets-designer__animation-stage,
+.ai-game-assets-designer__option-animation {
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.ai-game-assets-designer__animate-button {
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #273142;
+  color: #fff;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ai-game-assets-designer__current .ai-game-assets-designer__animate-button {
+  width: 100%;
+}
 .ai-game-assets-designer__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -553,15 +799,28 @@ function ensureDesignerStyles(): void {
   background: #0f1218;
   min-height: 86px;
   display: grid;
+  gap: 6px;
+  place-items: center;
+  padding: 6px;
+}
+.ai-game-assets-designer__option.is-selected { border-color: #6ed3ff; }
+.ai-game-assets-designer__option-select {
+  width: 100%;
+  min-height: 74px;
+  border: 0;
+  background: transparent;
+  display: grid;
   place-items: center;
   cursor: pointer;
 }
-.ai-game-assets-designer__option.is-selected { border-color: #6ed3ff; }
-.ai-game-assets-designer__option img {
+.ai-game-assets-designer__option-select img {
   width: 68px;
   height: 68px;
   object-fit: contain;
   image-rendering: pixelated;
+}
+.ai-game-assets-designer__option .ai-game-assets-designer__animate-button {
+  width: 100%;
 }
 `;
   document.head.append(style);

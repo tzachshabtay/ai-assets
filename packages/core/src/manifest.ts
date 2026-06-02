@@ -50,6 +50,9 @@ export function assertAsset(asset: AiAssetDefinition): void {
   }
 
   if (asset.frameGrid) {
+    if (asset.frameGrid.frameCount !== undefined) {
+      assertPositiveInteger(asset.frameGrid.frameCount, `${asset.id}.frameGrid.frameCount`);
+    }
     assertPositiveInteger(asset.frameGrid.frameWidth, `${asset.id}.frameGrid.frameWidth`);
     assertPositiveInteger(asset.frameGrid.frameHeight, `${asset.id}.frameGrid.frameHeight`);
     assertPositiveInteger(asset.frameGrid.columns, `${asset.id}.frameGrid.columns`);

@@ -12,6 +12,7 @@ export type AiAssetDimensions = {
 };
 
 export type AiAssetFrameGrid = {
+  frameCount?: number;
   frameWidth: number;
   frameHeight: number;
   columns: number;

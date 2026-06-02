@@ -79,36 +79,23 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       this.hero = this.add.image(320, 570, this.aiRuntime.key("hero.ship"));
       this.hero.setDisplaySize(54, 54);
-      this.invaders = [];
-
-      for (let row = 0; row < 3; row += 1) {
-        for (let col = 0; col < 8; col += 1) {
-          const invader = this.add.sprite(
-            112 + col * 60,
-            118 + row * 58,
-            this.aiRuntime.key("invader.scout.idle")
-          );
-          invader.setDisplaySize(42, 42);
-          invader.play("invader.scout.idle");
-          this.invaders.push(invader);
-        }
-      }
+      this.spawnInvaders();
 
       this.applyAssetTexture = (assetId, textureKey) => {
         if (assetId === "hero.ship" && this.hero) {
           this.hero.setTexture(textureKey);
+          this.hero.setDisplaySize(54, 54);
         }
 
         if (assetId === "invader.scout") {
           for (const invader of this.invaders ?? []) {
             invader.setTexture(textureKey);
+            invader.setDisplaySize(42, 42);
           }
         }
 
-        if (assetId === "invader.scout.idle") {
-          for (const invader of this.invaders ?? []) {
-            invader.setTexture(textureKey);
-          }
+        if (assetId.startsWith("invader.scout.")) {
+          this.recreateAiAnimations(assetId, textureKey);
         }
       };
 
@@ -117,6 +104,13 @@ function startGame(assetManifest: AiAssetManifest): void {
         manifest: assetManifest,
         client: debugClient,
         assetIds: ["hero.ship", "invader.scout"],
+        previewDisplaySize: {
+          "hero.ship": { width: 54, height: 54 },
+          "invader.scout": { width: 42, height: 42 },
+          "invader.scout.idle": { width: 42, height: 42 },
+          "invader.scout.shooting": { width: 42, height: 42 },
+          "invader.scout.destroyed": { width: 42, height: 42 }
+        },
         onPreview: (assetId, textureKey) => {
           this.applyAssetTexture?.(assetId, textureKey);
         }
@@ -172,6 +166,11 @@ function startGame(assetManifest: AiAssetManifest): void {
         for (const invader of this.invaders) invader.y += 14;
       }
 
+      if (this.invaders.some((invader) => invader.y > 625)) {
+        this.resetWave("Invaders regrouped.");
+        return;
+      }
+
       if (time - this.lastInvaderShotAt > 780) {
         this.lastInvaderShotAt = time;
         const shooter = Phaser.Utils.Array.GetRandom(this.invaders) as Phaser.GameObjects.Sprite;
@@ -210,8 +209,59 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
 
       if (this.invaders.length === 0) {
-        this.statusText?.setText("Wave cleared.");
+        this.resetWave("Wave cleared.");
       }
+    }
+
+    private spawnInvaders(): void {
+      if (!this.aiRuntime) return;
+
+      this.invaders = [];
+      this.invaderDirection = 1;
+
+      for (let row = 0; row < 3; row += 1) {
+        for (let col = 0; col < 8; col += 1) {
+          const invader = this.add.sprite(
+            112 + col * 60,
+            118 + row * 58,
+            this.aiRuntime.key("invader.scout.idle")
+          );
+          invader.setDisplaySize(42, 42);
+          invader.play("invader.scout.idle");
+          this.invaders.push(invader);
+        }
+      }
+    }
+
+    private resetWave(message: string): void {
+      for (const invader of this.invaders) invader.destroy();
+      for (const bullet of this.bullets) bullet.destroy();
+      for (const bullet of this.invaderBullets) bullet.destroy();
+
+      this.bullets = [];
+      this.invaderBullets = [];
+      this.spawnInvaders();
+      this.statusText?.setText(`${message} New wave incoming.`);
+    }
+
+    private recreateAiAnimations(assetId: string, textureKey: string): string[] {
+      const asset = assetManifest.assets[assetId];
+      const animationKeys: string[] = [];
+
+      for (const animation of asset?.animations ?? []) {
+        this.anims.remove(animation.key);
+        this.anims.create({
+          key: animation.key,
+          frames: this.anims.generateFrameNumbers(textureKey, {
+            frames: animation.frames
+          }),
+          frameRate: animation.frameRate,
+          repeat: animation.repeat ?? -1
+        });
+        animationKeys.push(animation.key);
+      }
+
+      return animationKeys;
     }
   }
 

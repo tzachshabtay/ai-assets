@@ -40,7 +40,7 @@ const assetDevServer = createAiAssetDevServer({
   publicPathPrefix: "/assets",
   port: assetApiPort,
   provider: createOpenAiImageProvider({
-    model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-1.5",
+    model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2",
     background: "transparent",
     quality: "low"
   })
@@ -111,7 +111,14 @@ async function findAvailablePort(startPort, reservedPorts = new Set()) {
     }
   }
 
-  throw new Error(`No available port found from ${startPort} to ${startPort + 99}.`);
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const port = await findEphemeralPort();
+    if (!reservedPorts.has(port)) return port;
+  }
+
+  throw new Error(
+    `No available port found from ${startPort} to ${startPort + 99}, and the OS did not provide an unreserved fallback port.`
+  );
 }
 
 function canListen(port) {
@@ -123,6 +130,26 @@ function canListen(port) {
       server.close(() => resolve(true));
     });
     server.listen(port, "127.0.0.1");
+  });
+}
+
+function findEphemeralPort() {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer();
+
+    server.once("error", reject);
+    server.once("listening", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : undefined;
+      server.close(() => {
+        if (port) {
+          resolve(port);
+        } else {
+          reject(new Error("Unable to read OS-assigned port."));
+        }
+      });
+    });
+    server.listen(0, "127.0.0.1");
   });
 }
 

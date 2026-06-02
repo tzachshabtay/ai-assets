@@ -43,8 +43,8 @@ export const assets = defineAiAssets({
     prompt: "Draw a small heroic knight in an idle pose, pixel art, transparent background.",
     dimensions: { width: 32, height: 32 },
     settings: {
-      model: "gpt-image-1.5",
-      background: "transparent",
+      model: "gpt-image-2",
+      background: "auto",
       quality: "auto",
       format: "png"
     },
@@ -55,7 +55,7 @@ export const assets = defineAiAssets({
         file: "/assets/hero.idle.default.png",
         prompt: "Draw a small heroic knight in an idle pose, pixel art, transparent background.",
         createdAt: "2026-05-30T00:00:00.000Z",
-        model: "gpt-image-1.5"
+        model: "gpt-image-2"
       }
     }
   }

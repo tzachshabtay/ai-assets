@@ -23,10 +23,22 @@ export type PhaserLoaderLike = {
 export type PhaserTextureManagerLike = {
   exists(key: string): boolean;
   remove(key: string): unknown;
+  addImage?(key: string, image: HTMLImageElement): unknown;
+  addSpriteSheet?(
+    key: string,
+    image: HTMLImageElement,
+    config: {
+      frameWidth: number;
+      frameHeight: number;
+      margin?: number;
+      spacing?: number;
+    }
+  ): unknown;
 };
 
 export type PhaserAnimationsLike = {
   create(config: unknown): unknown;
+  remove?(key: string): unknown;
   generateFrameNumbers(
     key: string,
     config: { frames: number[] }

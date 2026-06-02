@@ -16,7 +16,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-game-assets/core": "file:../core"
+    "@ai-game-assets/core": "file:../core",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0"
   },
   "peerDependencies": {
     "openai": ">=5"
