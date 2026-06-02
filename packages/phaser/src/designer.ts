@@ -131,11 +131,16 @@ export function installAiAssetDesigner(
     elements.versionLabel.textContent = `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
     elements.currentImage.src = activeVersion?.file ?? "";
     elements.currentImage.alt = `${readableAssetName(assetId)} active version`;
+    elements.currentPreview.setAttribute(
+      "aria-label",
+      `Preview active ${readableAssetName(assetId)} version`
+    );
     elements.currentPreview.hidden = !activeVersion?.file;
     elements.currentAnimation.hidden = true;
     elements.currentImage.hidden = false;
     elements.currentAnimationButton.hidden = !activeVersion?.file || !asset.frameGrid;
     elements.currentAnimationButton.textContent = "Animate";
+    elements.currentPreview.classList.add("is-selected");
     elements.options.innerHTML = "";
     setStatus(elements, "", "idle");
     elements.promoteButton.disabled = true;
@@ -159,6 +164,36 @@ export function installAiAssetDesigner(
   elements.animationSelect.addEventListener("change", () => {
     selectedTargetAssetId = elements.animationSelect.value;
     syncTargetAsset(selectedTargetAssetId);
+  });
+
+  elements.currentPreview.addEventListener("click", () => {
+    const asset = manifest.assets[selectedTargetAssetId];
+    const activeVersion = asset.versions[asset.activeVersion];
+
+    if (!activeVersion?.file) return;
+
+    for (const item of elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
+      item.classList.remove("is-selected");
+    }
+
+    elements.currentPreview.classList.add("is-selected");
+    selectedOption = undefined;
+    elements.promoteButton.disabled = true;
+    previewCurrentAsset({
+      scene: options.scene,
+      manifest,
+      assetId: selectedTargetAssetId,
+      src: activeVersion.file,
+      onPreview: options.onPreview
+    });
+    setStatus(elements, "Previewing active version.", "info");
+  });
+
+  elements.currentPreview.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+
+    event.preventDefault();
+    elements.currentPreview.click();
   });
 
   elements.regenerateButton.addEventListener("click", async () => {
@@ -233,7 +268,8 @@ export function installAiAssetDesigner(
     window.location.reload();
   });
 
-  elements.currentAnimationButton.addEventListener("click", () => {
+  elements.currentAnimationButton.addEventListener("click", (event) => {
+    event.stopPropagation();
     const asset = manifest.assets[selectedTargetAssetId];
     const activeVersion = asset.versions[asset.activeVersion];
 
@@ -313,6 +349,8 @@ function createDesignerElements(
 
   const currentPreview = document.createElement("div");
   currentPreview.className = "ai-game-assets-designer__current";
+  currentPreview.setAttribute("role", "button");
+  currentPreview.tabIndex = 0;
   const currentImage = document.createElement("img");
   currentImage.className = "ai-game-assets-designer__current-image";
   const currentAnimation = document.createElement("div");
@@ -416,6 +454,7 @@ function renderOptions(options: {
         item.classList.remove("is-selected");
       }
 
+      options.elements.currentPreview.classList.remove("is-selected");
       card.classList.add("is-selected");
       previewOption({
         scene: options.scene,
@@ -481,28 +520,60 @@ function previewOption(options: {
   onPreview(assetId: string, textureKey: string): void;
 }): void {
   const textureKey = `ai-preview:${options.assetId}:${options.option.index}:${Date.now()}`;
+  previewImageSource({
+    scene: options.scene,
+    manifest: options.manifest,
+    assetId: options.assetId,
+    src: options.option.dataUrl,
+    textureKey,
+    onPreview: options.onPreview
+  });
+}
+
+function previewCurrentAsset(options: {
+  scene: AiAssetDesignerSceneLike;
+  manifest: AiAssetManifest;
+  assetId: string;
+  src: string;
+  onPreview(assetId: string, textureKey: string): void;
+}): void {
+  const textureKey = `ai-current-preview:${options.assetId}:${Date.now()}`;
+  previewImageSource({
+    ...options,
+    textureKey
+  });
+}
+
+function previewImageSource(options: {
+  scene: AiAssetDesignerSceneLike;
+  manifest: AiAssetManifest;
+  assetId: string;
+  src: string;
+  textureKey: string;
+  onPreview(assetId: string, textureKey: string): void;
+}): void {
   const image = new Image();
 
   image.onload = () => {
-    if (options.scene.textures.exists(textureKey)) {
-      options.scene.textures.remove(textureKey);
+    if (options.scene.textures.exists(options.textureKey)) {
+      options.scene.textures.remove(options.textureKey);
     }
 
     const asset = options.manifest.assets[options.assetId];
     if (asset.frameGrid && options.scene.textures.addSpriteSheet) {
-      options.scene.textures.addSpriteSheet(textureKey, image, {
+      options.scene.textures.addSpriteSheet(options.textureKey, image, {
         frameWidth: asset.frameGrid.frameWidth,
         frameHeight: asset.frameGrid.frameHeight,
         margin: asset.frameGrid.margin,
         spacing: asset.frameGrid.spacing
       });
     } else {
-      options.scene.textures.addImage(textureKey, image);
+      options.scene.textures.addImage(options.textureKey, image);
     }
 
-    options.onPreview(options.assetId, textureKey);
+    options.onPreview(options.assetId, options.textureKey);
   };
-  image.src = options.option.dataUrl;
+  image.src = options.src;
 }
 
 function startSpritesheetPreview(options: {
@@ -717,6 +788,14 @@ function ensureDesignerStyles(): void {
   border-radius: 6px;
   background: #0f1218;
   overflow: hidden;
+  cursor: pointer;
+}
+.ai-game-assets-designer__current.is-selected {
+  border-color: #6ed3ff;
+}
+.ai-game-assets-designer__current:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
 }
 .ai-game-assets-designer__current-image {
   max-width: 100%;
