@@ -38,7 +38,7 @@ export type AiAssetDesignerOptions = {
   previewDisplaySize?:
     | Record<string, AiAssetPreviewDisplaySize>
     | ((assetId: string, asset: AiAssetDefinition) => AiAssetPreviewDisplaySize | undefined);
-  onPreview(assetId: string, textureKey: string): void;
+  onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
   onManifestUpdated?(manifest: AiAssetManifest): void;
 };
 
@@ -132,13 +132,13 @@ export function installAiAssetDesigner(
     stopCurrentAnimationPreview?.();
     stopCurrentAnimationPreview = undefined;
     elements.promptInput.value = activeVersion?.prompt ?? asset.prompt;
-    elements.widthInput.value = String(asset.dimensions.width);
-    elements.heightInput.value = String(asset.dimensions.height);
+    elements.widthInput.value = String(asset.frameGrid?.frameWidth ?? asset.dimensions.width);
+    elements.heightInput.value = String(asset.frameGrid?.frameHeight ?? asset.dimensions.height);
     elements.frameCountInput.value = String(
       asset.frameGrid?.frameCount ??
       (asset.frameGrid ? asset.frameGrid.columns * asset.frameGrid.rows : 1)
     );
-    elements.frameCountField.hidden = !asset.frameGrid;
+    elements.frameCountField.hidden = asset.kind === "image" || !asset.frameGrid;
     elements.versionLabel.textContent = `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
     elements.currentImage.src = activeVersion?.file ?? "";
     elements.currentImage.alt = `${readableAssetName(assetId)} active version`;
@@ -462,7 +462,7 @@ function renderOptions(options: {
   manifest: AiAssetManifest;
   assetId: string;
   designerOptions: AiAssetDesignerOptions;
-  onPreview(assetId: string, textureKey: string): void;
+  onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
   onSelected(option: GeneratedDebugOption): void;
 }): void {
   options.elements.options.innerHTML = "";
@@ -550,7 +550,7 @@ function previewOption(options: {
   manifest: AiAssetManifest;
   assetId: string;
   option: GeneratedDebugOption;
-  onPreview(assetId: string, textureKey: string): void;
+  onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
 }): void {
   const textureKey = `ai-preview:${options.assetId}:${options.option.index}:${Date.now()}`;
   previewImageSource({
@@ -572,7 +572,7 @@ function previewCurrentAsset(options: {
   manifest: AiAssetManifest;
   assetId: string;
   src: string;
-  onPreview(assetId: string, textureKey: string): void;
+  onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
 }): void {
   const textureKey = `ai-current-preview:${options.assetId}:${Date.now()}`;
   previewImageSource({
@@ -588,7 +588,7 @@ function previewImageSource(options: {
   src: string;
   textureKey: string;
   assetOverride?: AiAssetDefinition;
-  onPreview(assetId: string, textureKey: string): void;
+  onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
 }): void {
   const image = new Image();
 
@@ -609,7 +609,7 @@ function previewImageSource(options: {
       options.scene.textures.addImage(options.textureKey, image);
     }
 
-    options.onPreview(options.assetId, options.textureKey);
+    options.onPreview(options.assetId, options.textureKey, asset);
   };
   image.src = options.src;
 }
@@ -667,8 +667,14 @@ function generationOverridesFromInputs(
   frameCount?: number;
 } {
   const dimensions = {
-    width: positiveIntegerInput(elements.widthInput, asset.dimensions.width),
-    height: positiveIntegerInput(elements.heightInput, asset.dimensions.height)
+    width: positiveIntegerInput(
+      elements.widthInput,
+      asset.frameGrid?.frameWidth ?? asset.dimensions.width
+    ),
+    height: positiveIntegerInput(
+      elements.heightInput,
+      asset.frameGrid?.frameHeight ?? asset.dimensions.height
+    )
   };
 
   if (!asset.frameGrid) {

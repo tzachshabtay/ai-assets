@@ -189,19 +189,27 @@ function applyGenerationOverrides(
     frameCount?: number;
   }
 ): AiAssetDefinition {
-  const dimensions = sanitizeDimensions(overrides.dimensions) ?? asset.dimensions;
-
   if (!asset.frameGrid) {
+    const dimensions = sanitizeDimensions(overrides.dimensions) ?? asset.dimensions;
+
     return {
       ...asset,
       dimensions
     };
   }
 
+  const frameDimensions = sanitizeDimensions(overrides.dimensions) ?? {
+    width: asset.frameGrid.frameWidth,
+    height: asset.frameGrid.frameHeight
+  };
   const frameCount = sanitizePositiveInteger(overrides.frameCount) ??
     asset.frameGrid.frameCount ??
     asset.frameGrid.columns * asset.frameGrid.rows;
-  const frameGrid = createFrameGrid(asset.frameGrid, dimensions, frameCount);
+  const frameGrid = createFrameGrid(asset.frameGrid, frameDimensions, frameCount);
+  const dimensions = {
+    width: frameGrid.frameWidth * frameGrid.columns,
+    height: frameGrid.frameHeight * frameGrid.rows
+  };
 
   return {
     ...asset,
@@ -216,7 +224,7 @@ function applyGenerationOverrides(
 
 function createFrameGrid(
   baseFrameGrid: AiAssetFrameGrid,
-  dimensions: AiAssetDimensions,
+  frameDimensions: AiAssetDimensions,
   frameCount: number
 ): AiAssetFrameGrid {
   const columns = Math.min(frameCount, Math.ceil(Math.sqrt(frameCount)));
@@ -227,8 +235,8 @@ function createFrameGrid(
     frameCount,
     columns,
     rows,
-    frameWidth: Math.max(1, Math.floor(dimensions.width / columns)),
-    frameHeight: Math.max(1, Math.floor(dimensions.height / rows))
+    frameWidth: frameDimensions.width,
+    frameHeight: frameDimensions.height
   };
 }
 

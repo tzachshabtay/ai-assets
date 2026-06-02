@@ -6,7 +6,7 @@ import {
   installAiAssetDesigner,
   loadAiAssets,
 } from "@ai-game-assets/phaser";
-import type { AiAssetManifest } from "@ai-game-assets/core";
+import type { AiAssetDefinition, AiAssetManifest } from "@ai-game-assets/core";
 
 const assetApi =
   new URLSearchParams(window.location.search).get("assetApi") ??
@@ -17,7 +17,7 @@ type DemoScene = Phaser.Scene & {
   aiRuntime?: AiAssetRuntime;
   hero?: Phaser.GameObjects.Image;
   invaders?: Phaser.GameObjects.Sprite[];
-  applyAssetTexture?: (assetId: string, textureKey: string) => void;
+  applyAssetTexture?: (assetId: string, textureKey: string, asset: AiAssetDefinition) => void;
 };
 
 let manifest: AiAssetManifest;
@@ -33,7 +33,7 @@ function startGame(assetManifest: AiAssetManifest): void {
     aiRuntime?: AiAssetRuntime;
     hero?: Phaser.GameObjects.Image;
     invaders: Phaser.GameObjects.Sprite[] = [];
-    applyAssetTexture?: (assetId: string, textureKey: string) => void;
+    applyAssetTexture?: (assetId: string, textureKey: string, asset: AiAssetDefinition) => void;
 
     private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
     private fireKey?: Phaser.Input.Keyboard.Key;
@@ -45,6 +45,7 @@ function startGame(assetManifest: AiAssetManifest): void {
     private score = 0;
     private scoreText?: Phaser.GameObjects.Text;
     private statusText?: Phaser.GameObjects.Text;
+    private invaderAnimationSizes = new Map<string, { width: number; height: number }>();
 
     constructor() {
       super("space-invaders");
@@ -78,24 +79,27 @@ function startGame(assetManifest: AiAssetManifest): void {
       });
 
       this.hero = this.add.image(320, 570, this.aiRuntime.key("hero.ship"));
-      this.hero.setDisplaySize(54, 54);
+      this.applyDisplaySize(this.hero, assetManifest.assets["hero.ship"]);
       this.spawnInvaders();
 
-      this.applyAssetTexture = (assetId, textureKey) => {
+      this.applyAssetTexture = (assetId, textureKey, asset) => {
         if (assetId === "hero.ship" && this.hero) {
           this.hero.setTexture(textureKey);
-          this.hero.setDisplaySize(54, 54);
+          this.applyDisplaySize(this.hero, asset);
         }
 
         if (assetId === "invader.scout") {
           for (const invader of this.invaders ?? []) {
             invader.setTexture(textureKey);
-            invader.setDisplaySize(42, 42);
+            this.applyDisplaySize(invader, asset);
           }
         }
 
         if (assetId.startsWith("invader.scout.")) {
-          this.recreateAiAnimations(assetId, textureKey);
+          this.recreateAiAnimations(assetId, textureKey, asset);
+          for (const invader of this.invaders ?? []) {
+            this.applyDisplaySize(invader, asset);
+          }
         }
       };
 
@@ -111,8 +115,8 @@ function startGame(assetManifest: AiAssetManifest): void {
           "invader.scout.shooting": { width: 42, height: 42 },
           "invader.scout.destroyed": { width: 42, height: 42 }
         },
-        onPreview: (assetId, textureKey) => {
-          this.applyAssetTexture?.(assetId, textureKey);
+        onPreview: (assetId, textureKey, asset) => {
+          this.applyAssetTexture?.(assetId, textureKey, asset);
         }
       });
     }
@@ -174,9 +178,13 @@ function startGame(assetManifest: AiAssetManifest): void {
       if (time - this.lastInvaderShotAt > 780) {
         this.lastInvaderShotAt = time;
         const shooter = Phaser.Utils.Array.GetRandom(this.invaders) as Phaser.GameObjects.Sprite;
+        this.applyInvaderAnimationSize(shooter, "invader.scout.shooting");
         shooter.play("invader.scout.shooting");
         shooter.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-          if (shooter.active) shooter.play("invader.scout.idle");
+          if (shooter.active) {
+            this.applyInvaderAnimationSize(shooter, "invader.scout.idle");
+            shooter.play("invader.scout.idle");
+          }
         });
         this.invaderBullets.push(this.add.rectangle(shooter.x, shooter.y + 30, 5, 16, 0xfca5a5));
       }
@@ -191,6 +199,7 @@ function startGame(assetManifest: AiAssetManifest): void {
             bullet.destroy();
             this.bullets = this.bullets.filter((candidate) => candidate !== bullet);
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
+            this.applyInvaderAnimationSize(invader, "invader.scout.destroyed");
             invader.play("invader.scout.destroyed");
             invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
@@ -226,7 +235,7 @@ function startGame(assetManifest: AiAssetManifest): void {
             118 + row * 58,
             this.aiRuntime.key("invader.scout.idle")
           );
-          invader.setDisplaySize(42, 42);
+          this.applyInvaderAnimationSize(invader, "invader.scout.idle");
           invader.play("invader.scout.idle");
           this.invaders.push(invader);
         }
@@ -244,11 +253,15 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.statusText?.setText(`${message} New wave incoming.`);
     }
 
-    private recreateAiAnimations(assetId: string, textureKey: string): string[] {
-      const asset = assetManifest.assets[assetId];
+    private recreateAiAnimations(
+      assetId: string,
+      textureKey: string,
+      asset = assetManifest.assets[assetId]
+    ): string[] {
       const animationKeys: string[] = [];
 
       for (const animation of asset?.animations ?? []) {
+        this.invaderAnimationSizes.set(animation.key, this.displaySizeForAsset(asset));
         this.anims.remove(animation.key);
         this.anims.create({
           key: animation.key,
@@ -262,6 +275,33 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
 
       return animationKeys;
+    }
+
+    private applyInvaderAnimationSize(
+      invader: Phaser.GameObjects.Sprite,
+      animationKey: string
+    ): void {
+      const size = this.invaderAnimationSizes.get(animationKey) ??
+        this.displaySizeForAsset(assetManifest.assets[animationKey]);
+      invader.setDisplaySize(size.width, size.height);
+    }
+
+    private applyDisplaySize(
+      target: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite,
+      asset: AiAssetDefinition | undefined
+    ): void {
+      const size = this.displaySizeForAsset(asset);
+      target.setDisplaySize(size.width, size.height);
+    }
+
+    private displaySizeForAsset(asset: AiAssetDefinition | undefined): {
+      width: number;
+      height: number;
+    } {
+      return {
+        width: asset?.frameGrid?.frameWidth ?? asset?.dimensions.width ?? 42,
+        height: asset?.frameGrid?.frameHeight ?? asset?.dimensions.height ?? 42
+      };
     }
   }
 
