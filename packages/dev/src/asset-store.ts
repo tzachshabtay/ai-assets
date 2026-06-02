@@ -85,6 +85,9 @@ export async function saveGeneratedOption(
     ? {
         ...updatedAsset,
         prompt: version.prompt,
+        dimensions: input.option.dimensions ?? updatedAsset.dimensions,
+        frameGrid: input.option.frameGrid ?? updatedAsset.frameGrid,
+        animations: input.option.animations ?? updatedAsset.animations,
         settings: {
           ...updatedAsset.settings,
           ...version.settings

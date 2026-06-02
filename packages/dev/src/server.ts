@@ -1,5 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { resolveAiAsset, type AiAssetManifest } from "@ai-game-assets/core";
+import {
+  resolveAiAsset,
+  type AiAssetDefinition,
+  type AiAssetDimensions,
+  type AiAssetFrameGrid,
+  type AiAssetManifest
+} from "@ai-game-assets/core";
 import type { AiImageProvider } from "./provider.js";
 import {
   type AssetStoreOptions,
@@ -67,9 +73,14 @@ async function routeRequest(
       assetId: string;
       prompt?: string;
       count?: number;
+      dimensions?: AiAssetDimensions;
+      frameCount?: number;
     }>(request);
     const manifest = await readManifest(options.manifestPath);
-    const asset = getAsset(manifest, body.assetId);
+    const asset = applyGenerationOverrides(getAsset(manifest, body.assetId), {
+      dimensions: body.dimensions,
+      frameCount: body.frameCount
+    });
     const generated = await options.provider.generate({
       asset,
       prompt: body.prompt,
@@ -84,6 +95,9 @@ async function routeRequest(
         prompt: option.prompt,
         model: option.model,
         revisedPrompt: option.revisedPrompt,
+        dimensions: option.dimensions,
+        frameGrid: option.frameGrid,
+        animations: option.animations,
         dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
       }))
     });
@@ -98,13 +112,19 @@ async function routeRequest(
       prompt: string;
       model?: string;
       revisedPrompt?: string;
+      dimensions?: AiAssetDimensions;
+      frameGrid?: AiAssetFrameGrid;
+      animations?: AiAssetDefinition["animations"];
       activate?: boolean;
       notes?: string;
     }>(request);
     const option = optionFromDataUrl(body.dataUrl, {
       prompt: body.prompt,
       model: body.model,
-      revisedPrompt: body.revisedPrompt
+      revisedPrompt: body.revisedPrompt,
+      dimensions: body.dimensions,
+      frameGrid: body.frameGrid,
+      animations: body.animations
     });
     const result = await saveGeneratedOption(options, {
       assetId: body.assetId,
@@ -162,6 +182,72 @@ function getAsset(manifest: AiAssetManifest, assetId: string) {
   return asset;
 }
 
+function applyGenerationOverrides(
+  asset: AiAssetDefinition,
+  overrides: {
+    dimensions?: AiAssetDimensions;
+    frameCount?: number;
+  }
+): AiAssetDefinition {
+  const dimensions = sanitizeDimensions(overrides.dimensions) ?? asset.dimensions;
+
+  if (!asset.frameGrid) {
+    return {
+      ...asset,
+      dimensions
+    };
+  }
+
+  const frameCount = sanitizePositiveInteger(overrides.frameCount) ??
+    asset.frameGrid.frameCount ??
+    asset.frameGrid.columns * asset.frameGrid.rows;
+  const frameGrid = createFrameGrid(asset.frameGrid, dimensions, frameCount);
+
+  return {
+    ...asset,
+    dimensions,
+    frameGrid,
+    animations: asset.animations?.map((animation) => ({
+      ...animation,
+      frames: Array.from({ length: frameCount }, (_, index) => index)
+    }))
+  };
+}
+
+function createFrameGrid(
+  baseFrameGrid: AiAssetFrameGrid,
+  dimensions: AiAssetDimensions,
+  frameCount: number
+): AiAssetFrameGrid {
+  const columns = Math.min(frameCount, Math.ceil(Math.sqrt(frameCount)));
+  const rows = Math.ceil(frameCount / columns);
+
+  return {
+    ...baseFrameGrid,
+    frameCount,
+    columns,
+    rows,
+    frameWidth: Math.max(1, Math.floor(dimensions.width / columns)),
+    frameHeight: Math.max(1, Math.floor(dimensions.height / rows))
+  };
+}
+
+function sanitizeDimensions(dimensions: AiAssetDimensions | undefined): AiAssetDimensions | undefined {
+  const width = sanitizePositiveInteger(dimensions?.width);
+  const height = sanitizePositiveInteger(dimensions?.height);
+
+  if (!width || !height) return undefined;
+
+  return { width, height };
+}
+
+function sanitizePositiveInteger(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isFinite(value)) return undefined;
+
+  return Math.max(1, Math.floor(value));
+}
+
 async function readJson<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
 
@@ -174,7 +260,14 @@ async function readJson<T>(request: IncomingMessage): Promise<T> {
 
 function optionFromDataUrl(
   dataUrl: string,
-  metadata: { prompt: string; model?: string; revisedPrompt?: string }
+  metadata: {
+    prompt: string;
+    model?: string;
+    revisedPrompt?: string;
+    dimensions?: AiAssetDimensions;
+    frameGrid?: AiAssetFrameGrid;
+    animations?: AiAssetDefinition["animations"];
+  }
 ) {
   const match = /^data:(.+);base64,(.+)$/.exec(dataUrl);
 
@@ -187,7 +280,10 @@ function optionFromDataUrl(
     mimeType: match[1],
     prompt: metadata.prompt,
     model: metadata.model,
-    revisedPrompt: metadata.revisedPrompt
+    revisedPrompt: metadata.revisedPrompt,
+    dimensions: metadata.dimensions,
+    frameGrid: metadata.frameGrid,
+    animations: metadata.animations
   };
 }
 

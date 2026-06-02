@@ -61,6 +61,10 @@ type DesignerElements = {
   assetSelect: HTMLSelectElement;
   animationSelect: HTMLSelectElement;
   animationField: HTMLLabelElement;
+  widthInput: HTMLInputElement;
+  heightInput: HTMLInputElement;
+  frameCountInput: HTMLInputElement;
+  frameCountField: HTMLLabelElement;
   promptInput: HTMLTextAreaElement;
   currentImage: HTMLImageElement;
   currentAnimation: HTMLDivElement;
@@ -128,6 +132,13 @@ export function installAiAssetDesigner(
     stopCurrentAnimationPreview?.();
     stopCurrentAnimationPreview = undefined;
     elements.promptInput.value = activeVersion?.prompt ?? asset.prompt;
+    elements.widthInput.value = String(asset.dimensions.width);
+    elements.heightInput.value = String(asset.dimensions.height);
+    elements.frameCountInput.value = String(
+      asset.frameGrid?.frameCount ??
+      (asset.frameGrid ? asset.frameGrid.columns * asset.frameGrid.rows : 1)
+    );
+    elements.frameCountField.hidden = !asset.frameGrid;
     elements.versionLabel.textContent = `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
     elements.currentImage.src = activeVersion?.file ?? "";
     elements.currentImage.alt = `${readableAssetName(assetId)} active version`;
@@ -206,7 +217,8 @@ export function installAiAssetDesigner(
       const generated = await client.generate({
         assetId: selectedTargetAssetId,
         prompt: elements.promptInput.value,
-        count: options.optionCount ?? 3
+        count: options.optionCount ?? 3,
+        ...generationOverridesFromInputs(elements, manifest.assets[selectedTargetAssetId])
       });
 
       renderOptions({
@@ -246,6 +258,9 @@ export function installAiAssetDesigner(
         prompt: selectedOption.prompt,
         model: selectedOption.model,
         revisedPrompt: selectedOption.revisedPrompt,
+        dimensions: selectedOption.dimensions,
+        frameGrid: selectedOption.frameGrid,
+        animations: selectedOption.animations,
         activate: true,
         notes: "Promoted from the AI asset designer."
       });
@@ -347,6 +362,17 @@ function createDesignerElements(
   promptInput.className = "ai-game-assets-designer__prompt";
   promptInput.rows = 6;
 
+  const widthInput = numericInput();
+  const heightInput = numericInput();
+  const frameCountInput = numericInput();
+  const dimensionGrid = document.createElement("div");
+  dimensionGrid.className = "ai-game-assets-designer__dimensions";
+  dimensionGrid.append(
+    labelWrap("Width", widthInput),
+    labelWrap("Height", heightInput)
+  );
+  const frameCountField = labelWrap("Frames", frameCountInput);
+
   const currentPreview = document.createElement("div");
   currentPreview.className = "ai-game-assets-designer__current";
   currentPreview.setAttribute("role", "button");
@@ -393,6 +419,8 @@ function createDesignerElements(
     title,
     labelWrap("Asset", assetSelect),
     animationField,
+    dimensionGrid,
+    frameCountField,
     labelWrap("Current", currentPreview),
     labelWrap("Prompt", promptInput),
     actions,
@@ -409,6 +437,10 @@ function createDesignerElements(
     assetSelect,
     animationSelect,
     animationField,
+    widthInput,
+    heightInput,
+    frameCountInput,
+    frameCountField,
     promptInput,
     currentImage,
     currentAnimation,
@@ -437,6 +469,7 @@ function renderOptions(options: {
   const asset = options.manifest.assets[options.assetId];
 
   for (const option of options.generated) {
+    const optionAsset = assetWithGeneratedGeometry(asset, option);
     const card = document.createElement("div");
     card.className = "ai-game-assets-designer__option";
 
@@ -469,7 +502,7 @@ function renderOptions(options: {
 
     card.append(selectButton);
 
-    if (asset.frameGrid) {
+    if (optionAsset.frameGrid) {
       const animationStage = document.createElement("div");
       animationStage.className = "ai-game-assets-designer__option-animation";
       animationStage.hidden = true;
@@ -496,11 +529,11 @@ function renderOptions(options: {
         stopAnimation = startSpritesheetPreview({
           element: animationStage,
           src: option.dataUrl,
-          asset,
+          asset: optionAsset,
           displaySize: resolvePreviewDisplaySize(
             options.designerOptions,
             options.assetId,
-            asset
+            optionAsset
           )
         });
       });
@@ -526,6 +559,10 @@ function previewOption(options: {
     assetId: options.assetId,
     src: options.option.dataUrl,
     textureKey,
+    assetOverride: assetWithGeneratedGeometry(
+      options.manifest.assets[options.assetId],
+      options.option
+    ),
     onPreview: options.onPreview
   });
 }
@@ -550,6 +587,7 @@ function previewImageSource(options: {
   assetId: string;
   src: string;
   textureKey: string;
+  assetOverride?: AiAssetDefinition;
   onPreview(assetId: string, textureKey: string): void;
 }): void {
   const image = new Image();
@@ -559,7 +597,7 @@ function previewImageSource(options: {
       options.scene.textures.remove(options.textureKey);
     }
 
-    const asset = options.manifest.assets[options.assetId];
+    const asset = options.assetOverride ?? options.manifest.assets[options.assetId];
     if (asset.frameGrid && options.scene.textures.addSpriteSheet) {
       options.scene.textures.addSpriteSheet(options.textureKey, image, {
         frameWidth: asset.frameGrid.frameWidth,
@@ -619,6 +657,51 @@ function startSpritesheetPreview(options: {
     window.clearInterval(interval);
     options.element.removeAttribute("style");
   };
+}
+
+function generationOverridesFromInputs(
+  elements: DesignerElements,
+  asset: AiAssetDefinition
+): {
+  dimensions: { width: number; height: number };
+  frameCount?: number;
+} {
+  const dimensions = {
+    width: positiveIntegerInput(elements.widthInput, asset.dimensions.width),
+    height: positiveIntegerInput(elements.heightInput, asset.dimensions.height)
+  };
+
+  if (!asset.frameGrid) {
+    return { dimensions };
+  }
+
+  return {
+    dimensions,
+    frameCount: positiveIntegerInput(
+      elements.frameCountInput,
+      asset.frameGrid.frameCount ?? asset.frameGrid.columns * asset.frameGrid.rows
+    )
+  };
+}
+
+function assetWithGeneratedGeometry(
+  asset: AiAssetDefinition,
+  option: GeneratedDebugOption
+): AiAssetDefinition {
+  return {
+    ...asset,
+    dimensions: option.dimensions ?? asset.dimensions,
+    frameGrid: option.frameGrid ?? asset.frameGrid,
+    animations: option.animations ?? asset.animations
+  };
+}
+
+function positiveIntegerInput(input: HTMLInputElement, fallback: number): number {
+  const value = Number(input.value);
+
+  if (!Number.isFinite(value)) return fallback;
+
+  return Math.max(1, Math.floor(value));
 }
 
 function resolvePreviewDisplaySize(
@@ -691,6 +774,16 @@ function labelWrap(labelText: string, control: HTMLElement): HTMLLabelElement {
   span.textContent = labelText;
   label.append(span, control);
   return label;
+}
+
+function numericInput(): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.step = "1";
+  input.inputMode = "numeric";
+
+  return input;
 }
 
 function readableAssetName(assetId: string): string {
@@ -769,6 +862,7 @@ function ensureDesignerStyles(): void {
   font-size: 13px;
 }
 .ai-game-assets-designer__field select,
+.ai-game-assets-designer__field input,
 .ai-game-assets-designer__field textarea {
   width: 100%;
   border: 1px solid #3a4352;
@@ -779,6 +873,14 @@ function ensureDesignerStyles(): void {
   font: inherit;
 }
 .ai-game-assets-designer__field textarea { resize: vertical; }
+.ai-game-assets-designer__dimensions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ai-game-assets-designer__dimensions .ai-game-assets-designer__field {
+  margin-bottom: 12px;
+}
 .ai-game-assets-designer__current {
   min-height: 96px;
   display: grid;

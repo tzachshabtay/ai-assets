@@ -16,7 +16,7 @@ export const assets = defineAiAssets(
       "quality": "low",
       "format": "png"
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780369898360",
     "versions": {
       "default": {
         "name": "default",
@@ -24,6 +24,21 @@ export const assets = defineAiAssets(
         "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
         "createdAt": "2026-05-30T00:00:00.000Z",
         "model": "starter-asset"
+      },
+      "promoted-1780369898360": {
+        "name": "promoted-1780369898360",
+        "file": "/assets/hero.ship.promoted-1780369898360.png",
+        "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
+        "createdAt": "2026-06-02T03:11:38.392Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png"
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },

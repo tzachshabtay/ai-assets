@@ -2,6 +2,11 @@ export type GenerateDebugOptionsRequest = {
   assetId: string;
   prompt?: string;
   count?: number;
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+  frameCount?: number;
 };
 
 export type GeneratedDebugOption = {
@@ -11,6 +16,26 @@ export type GeneratedDebugOption = {
   prompt: string;
   model?: string;
   revisedPrompt?: string;
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+  frameGrid?: {
+    frameCount?: number;
+    frameWidth: number;
+    frameHeight: number;
+    columns: number;
+    rows: number;
+    margin?: number;
+    spacing?: number;
+  };
+  animations?: Array<{
+    key: string;
+    frames: number[];
+    frameRate: number;
+    repeat?: number;
+    prompt?: string;
+  }>;
 };
 
 export type SaveDebugOptionRequest = {
@@ -20,6 +45,12 @@ export type SaveDebugOptionRequest = {
   prompt: string;
   model?: string;
   revisedPrompt?: string;
+  dimensions?: {
+    width: number;
+    height: number;
+  };
+  frameGrid?: GeneratedDebugOption["frameGrid"];
+  animations?: GeneratedDebugOption["animations"];
   activate?: boolean;
   notes?: string;
 };

@@ -1,4 +1,10 @@
-import type { AiAssetDefinition, AiAssetGenerationSettings } from "@ai-game-assets/core";
+import type {
+  AiAssetAnimation,
+  AiAssetDefinition,
+  AiAssetDimensions,
+  AiAssetFrameGrid,
+  AiAssetGenerationSettings
+} from "@ai-game-assets/core";
 import { randomUUID } from "node:crypto";
 import { PNG } from "pngjs";
 
@@ -36,6 +42,9 @@ export type GeneratedAssetOption = {
   model?: string;
   revisedPrompt?: string;
   settings?: AiAssetGenerationSettings;
+  dimensions?: AiAssetDimensions;
+  frameGrid?: AiAssetFrameGrid;
+  animations?: AiAssetAnimation[];
 };
 
 export type AiImageProvider = {
@@ -122,20 +131,27 @@ export function createOpenAiImageProvider(
             throw new Error("OpenAI image generation response did not include b64_json.");
           }
           const image = Buffer.from(item.b64_json, "base64");
-
-          generated.push({
-            image: shouldPostprocessTransparency(request, {
-            prompt,
-            model,
-            outputFormat,
-            requestedBackground
-          })
+          const processedImage = resizePngToDimensions(
+            shouldPostprocessTransparency(request, {
+              prompt,
+              model,
+              outputFormat,
+              requestedBackground
+            })
               ? removeChromaBackground(image, chromaKey)
               : image,
+            request.asset.dimensions
+          );
+
+          generated.push({
+            image: processedImage,
             mimeType: mimeTypeFromOutputFormat(outputFormat),
             prompt,
             model,
             revisedPrompt: item.revised_prompt,
+            dimensions: request.asset.dimensions,
+            frameGrid: request.asset.frameGrid,
+            animations: request.asset.animations,
             settings: {
               ...request.asset.settings,
               ...request.settings,
@@ -189,10 +205,10 @@ function gameAssetPrompt(
     const rowLabel = request.asset.frameGrid.rows === 1 ? "row" : "rows";
     const columnLabel = request.asset.frameGrid.columns === 1 ? "column" : "columns";
     lines.push(
-      `Spritesheet contract: exactly ${frameCount} animation frames arranged as a fixed grid of ${request.asset.frameGrid.columns} ${columnLabel} and ${request.asset.frameGrid.rows} ${rowLabel}.`,
+      `Spritesheet contract: exactly ${frameCount} animation frames arranged in the first ${frameCount} cells of a fixed grid with ${request.asset.frameGrid.columns} ${columnLabel} and ${request.asset.frameGrid.rows} ${rowLabel}.`,
       `The final image must be one ${request.asset.dimensions.width}x${request.asset.dimensions.height} spritesheet, not separate images and not a different grid.`,
-      `Use one frame per grid cell, ordered left-to-right then top-to-bottom.`,
-      `Each cell is exactly ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}; do not merge cells, crop cells, add extra frames, or change the grid layout.`,
+      `Use one frame per grid cell, ordered left-to-right then top-to-bottom. If the grid has more cells than ${frameCount}, leave the extra trailing cells fully transparent and empty.`,
+      `Each cell is exactly ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}; do not merge cells, crop cells, add extra frames beyond ${frameCount}, or change the grid layout.`,
       `Cell rectangles are: ${gridCellRectangles(request)}.`,
       `Frame centers must be at these cell centers: ${gridCellCenters(request)}.`,
       "Each grid cell must contain exactly one complete frame of the subject. Do not place a nested spritesheet, turnaround sheet, contact sheet, labels, thumbnails, or multiple mini-poses inside any single cell.",
@@ -591,6 +607,42 @@ function removeChromaBackground(image: Uint8Array, chromaKey: RgbColor): Buffer 
   featherChromaEdges(png, transparent, chromaKey);
 
   return PNG.sync.write(png);
+}
+
+function resizePngToDimensions(image: Uint8Array, dimensions: AiAssetDimensions): Buffer {
+  const source = PNG.sync.read(Buffer.from(image));
+
+  if (source.width === dimensions.width && source.height === dimensions.height) {
+    return Buffer.from(image);
+  }
+
+  const target = new PNG({
+    width: dimensions.width,
+    height: dimensions.height
+  });
+
+  for (let y = 0; y < dimensions.height; y += 1) {
+    const sourceY = Math.min(
+      source.height - 1,
+      Math.floor((y / dimensions.height) * source.height)
+    );
+
+    for (let x = 0; x < dimensions.width; x += 1) {
+      const sourceX = Math.min(
+        source.width - 1,
+        Math.floor((x / dimensions.width) * source.width)
+      );
+      const sourceOffset = (sourceY * source.width + sourceX) * 4;
+      const targetOffset = (y * dimensions.width + x) * 4;
+
+      target.data[targetOffset] = source.data[sourceOffset] ?? 0;
+      target.data[targetOffset + 1] = source.data[sourceOffset + 1] ?? 0;
+      target.data[targetOffset + 2] = source.data[sourceOffset + 2] ?? 0;
+      target.data[targetOffset + 3] = source.data[sourceOffset + 3] ?? 0;
+    }
+  }
+
+  return PNG.sync.write(target);
 }
 
 function featherChromaEdges(
