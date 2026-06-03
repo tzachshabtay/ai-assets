@@ -145,13 +145,13 @@
       "kind": "spritesheet",
       "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
       "dimensions": {
-        "width": 1024,
-        "height": 1024
+        "width": 128,
+        "height": 128
       },
       "frameGrid": {
         "frameCount": 4,
-        "frameWidth": 512,
-        "frameHeight": 512,
+        "frameWidth": 64,
+        "frameHeight": 64,
         "columns": 2,
         "rows": 2
       },
@@ -177,7 +177,7 @@
           "invader.scout"
         ]
       },
-      "activeVersion": "promoted-1780365798285",
+      "activeVersion": "promoted-1780447725139",
       "versions": {
         "default": {
           "name": "default",
@@ -238,6 +238,24 @@
             ]
           },
           "parentVersion": "promoted-1780250818107",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780447725139": {
+          "name": "promoted-1780447725139",
+          "file": "/assets/invader.scout.idle.promoted-1780447725139.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-06-03T00:48:45.159Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.scout"
+            ]
+          },
+          "parentVersion": "promoted-1780365798285",
           "notes": "Promoted from the AI asset designer."
         }
       }
