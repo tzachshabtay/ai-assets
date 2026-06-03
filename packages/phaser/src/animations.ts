@@ -25,11 +25,18 @@ export function createAiAnimations(
   });
 
   for (const animation of animations) {
+    const frames = scene.anims.generateFrameNumbers(textureKey, {
+      frames: animation.frames
+    });
+
     scene.anims.create({
       key: animation.key,
-      frames: scene.anims.generateFrameNumbers(textureKey, {
-        frames: animation.frames
-      }),
+      frames: Array.isArray(frames)
+        ? frames.map((frame, index) => ({
+            ...frame,
+            duration: animation.frameTimings?.[index]?.delayMs
+          }))
+        : frames,
       frameRate: animation.frameRate,
       repeat: animation.repeat ?? -1
     });

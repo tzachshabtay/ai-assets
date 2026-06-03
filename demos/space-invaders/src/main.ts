@@ -6,7 +6,11 @@ import {
   installAiAssetDesigner,
   loadAiAssets,
 } from "@ai-game-assets/phaser";
-import type { AiAssetDefinition, AiAssetManifest } from "@ai-game-assets/core";
+import type {
+  AiAssetAnimation,
+  AiAssetDefinition,
+  AiAssetManifest
+} from "@ai-game-assets/core";
 
 const assetApi =
   new URLSearchParams(window.location.search).get("assetApi") ??
@@ -46,7 +50,12 @@ function startGame(assetManifest: AiAssetManifest): void {
     private scoreText?: Phaser.GameObjects.Text;
     private statusText?: Phaser.GameObjects.Text;
     private invaderAnimationSizes = new Map<string, { width: number; height: number }>();
+    private invaderAnimations = new Map<string, AiAssetAnimation>();
     private invaderAnimationKeys = new WeakMap<Phaser.GameObjects.Sprite, string>();
+    private invaderFrameOffsetHandlers = new WeakMap<
+      Phaser.GameObjects.Sprite,
+      (...args: unknown[]) => void
+    >();
 
     constructor() {
       super("space-invaders");
@@ -116,6 +125,9 @@ function startGame(assetManifest: AiAssetManifest): void {
         manifest: assetManifest,
         client: debugClient,
         assetIds: ["hero.ship", "invader.scout"],
+        onManifestUpdated: (updatedManifest) => {
+          manifest = updatedManifest;
+        },
         previewDisplaySize: {
           "hero.ship": { width: 54, height: 54 },
           "invader.scout": { width: 42, height: 42 },
@@ -187,12 +199,12 @@ function startGame(assetManifest: AiAssetManifest): void {
         this.lastInvaderShotAt = time;
         const shooter = Phaser.Utils.Array.GetRandom(this.invaders) as Phaser.GameObjects.Sprite;
         this.playInvaderAnimation(shooter, "invader.scout.shooting");
+        this.scheduleInvaderLaser(shooter, "invader.scout.shooting");
         shooter.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
           if (shooter.active) {
             this.playInvaderAnimation(shooter, "invader.scout.idle");
           }
         });
-        this.invaderBullets.push(this.add.rectangle(shooter.x, shooter.y + 30, 5, 16, 0xfca5a5));
       }
     }
 
@@ -268,9 +280,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         this.anims.remove(animation.key);
         this.anims.create({
           key: animation.key,
-          frames: this.anims.generateFrameNumbers(textureKey, {
-            frames: animation.frames
-          }),
+          frames: this.animationFramesWithTiming(textureKey, animation),
           frameRate: animation.frameRate,
           repeat: animation.repeat ?? -1
         });
@@ -287,6 +297,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       for (const animation of asset?.animations ?? []) {
         this.invaderAnimationSizes.set(animation.key, size);
+        this.invaderAnimations.set(animation.key, animation);
       }
     }
 
@@ -294,9 +305,24 @@ function startGame(assetManifest: AiAssetManifest): void {
       invader: Phaser.GameObjects.Sprite,
       animationKey: string
     ): void {
+      const existingHandler = this.invaderFrameOffsetHandlers.get(invader);
+
+      if (existingHandler) {
+        invader.off(Phaser.Animations.Events.ANIMATION_UPDATE, existingHandler);
+      }
+
       this.invaderAnimationKeys.set(invader, animationKey);
       invader.play(animationKey);
       this.applyInvaderAnimationSize(invader, animationKey);
+      this.applyInvaderFrameOffset(invader, animationKey, 0);
+
+      const handler = (...args: unknown[]) => {
+        const frame = args[1] as { index?: number } | undefined;
+        this.applyInvaderFrameOffset(invader, animationKey, Math.max(0, (frame?.index ?? 1) - 1));
+      };
+
+      this.invaderFrameOffsetHandlers.set(invader, handler);
+      invader.on(Phaser.Animations.Events.ANIMATION_UPDATE, handler);
     }
 
     private applyInvaderAnimationSize(
@@ -306,6 +332,70 @@ function startGame(assetManifest: AiAssetManifest): void {
       const size = this.invaderAnimationSizes.get(animationKey) ??
         this.displaySizeForAsset(assetManifest.assets[animationKey]);
       invader.setDisplaySize(size.width, size.height);
+    }
+
+    private scheduleInvaderLaser(
+      shooter: Phaser.GameObjects.Sprite,
+      animationKey: string
+    ): void {
+      const delayMs = this.delayUntilTaggedFrame(animationKey, "shoot");
+
+      this.time.delayedCall(delayMs, () => {
+        if (!shooter.active || this.invaderAnimationKeys.get(shooter) !== animationKey) return;
+
+        this.invaderBullets.push(this.add.rectangle(shooter.x, shooter.y + 30, 5, 16, 0xfca5a5));
+      });
+    }
+
+    private delayUntilTaggedFrame(animationKey: string, tag: string): number {
+      const animation = this.animationForKey(animationKey);
+
+      if (!animation) return 0;
+
+      const defaultDelay = Math.round(1000 / animation.frameRate);
+      const tagIndex = animation.frameTimings?.findIndex((timing) => timing.tag === tag) ?? -1;
+      const targetIndex = tagIndex >= 0 ? tagIndex : animation.frames.length;
+
+      return animation.frames
+        .slice(0, targetIndex)
+        .reduce((total, _frame, index) => (
+          total + (animation.frameTimings?.[index]?.delayMs ?? defaultDelay)
+        ), 0);
+    }
+
+    private applyInvaderFrameOffset(
+      invader: Phaser.GameObjects.Sprite,
+      animationKey: string,
+      frameSlot: number
+    ): void {
+      const timing = this.animationForKey(animationKey)?.frameTimings?.[frameSlot];
+      const size = this.invaderAnimationSizes.get(animationKey) ??
+        this.displaySizeForAsset(assetManifest.assets[animationKey]);
+      const offsetX = timing?.offsetX ?? 0;
+      const offsetY = timing?.offsetY ?? 0;
+
+      invader.setOrigin(
+        0.5 - offsetX / Math.max(1, size.width),
+        0.5 - offsetY / Math.max(1, size.height)
+      );
+    }
+
+    private animationFramesWithTiming(
+      textureKey: string,
+      animation: AiAssetAnimation
+    ): Phaser.Types.Animations.AnimationFrame[] {
+      return this.anims.generateFrameNumbers(textureKey, {
+        frames: animation.frames
+      }).map((frame, index) => ({
+        ...frame,
+        duration: animation.frameTimings?.[index]?.delayMs
+      }));
+    }
+
+    private animationForKey(animationKey: string): AiAssetAnimation | undefined {
+      return this.invaderAnimations.get(animationKey) ??
+        assetManifest.assets[animationKey]?.animations
+        ?.find((animation) => animation.key === animationKey);
     }
 
     private applyDisplaySize(

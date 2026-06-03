@@ -65,6 +65,17 @@ export function assertAsset(asset: AiAssetDefinition): void {
     assertNonEmpty(linkedAnimation.assetId, `${asset.id}.linkedAnimationAssets.${key}.assetId`);
   }
 
+  for (const animation of asset.animations ?? []) {
+    assertNonEmpty(animation.key, `${asset.id}.animations.key`);
+    assertPositiveInteger(animation.frameRate, `${asset.id}.animations.${animation.key}.frameRate`);
+
+    for (const timing of animation.frameTimings ?? []) {
+      if (timing.delayMs !== undefined) {
+        assertPositiveInteger(timing.delayMs, `${asset.id}.animations.${animation.key}.frameTimings.delayMs`);
+      }
+    }
+  }
+
   for (const [versionName, version] of Object.entries(asset.versions)) {
     assertVersion(asset.id, versionName, version);
   }

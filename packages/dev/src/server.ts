@@ -217,7 +217,10 @@ function applyGenerationOverrides(
     frameGrid,
     animations: asset.animations?.map((animation) => ({
       ...animation,
-      frames: Array.from({ length: frameCount }, (_, index) => index)
+      frames: Array.from({ length: frameCount }, (_, index) => index),
+      frameTimings: animation.frameTimings
+        ? Array.from({ length: frameCount }, (_, index) => animation.frameTimings?.[index] ?? {})
+        : undefined
     }))
   };
 }

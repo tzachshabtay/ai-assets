@@ -266,15 +266,15 @@ export const assets = defineAiAssets(
     "kind": "spritesheet",
     "prompt": "shooting animation",
     "dimensions": {
-      "width": 1024,
-      "height": 1024
+      "width": 192,
+      "height": 192
     },
     "frameGrid": {
-      "frameCount": 4,
-      "frameWidth": 512,
-      "frameHeight": 512,
-      "columns": 2,
-      "rows": 2
+      "frameCount": 8,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "columns": 3,
+      "rows": 3
     },
     "animations": [
       {
@@ -283,10 +283,57 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7
         ],
         "frameRate": 10,
-        "repeat": 0
+        "repeat": 0,
+        "frameTimings": [
+          {
+            "delayMs": 100,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          {
+            "delayMs": 100,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          {
+            "delayMs": 100,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          {
+            "delayMs": 140,
+            "offsetX": 2,
+            "offsetY": -1,
+            "tag": "shoot"
+          },
+          {
+            "delayMs": 100,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          {
+            "delayMs": 100,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          {
+            "delayMs": 100,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          {
+            "delayMs": 100,
+            "offsetX": 0,
+            "offsetY": 0
+          }
+        ]
       }
     ],
     "settings": {
@@ -298,7 +345,7 @@ export const assets = defineAiAssets(
         "invader.scout"
       ]
     },
-    "activeVersion": "promoted-1780365025144",
+    "activeVersion": "promoted-1780454683156",
     "versions": {
       "default": {
         "name": "default",
@@ -342,6 +389,42 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "generated-shooting-1780239052135",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780450422695": {
+        "name": "promoted-1780450422695",
+        "file": "/assets/invader.scout.shooting.promoted-1780450422695.png",
+        "prompt": "shooting animation",
+        "createdAt": "2026-06-03T01:33:42.714Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.scout"
+          ]
+        },
+        "parentVersion": "promoted-1780365025144",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780454683156": {
+        "name": "promoted-1780454683156",
+        "file": "/assets/invader.scout.shooting.promoted-1780454683156.png",
+        "prompt": "shooting animation",
+        "createdAt": "2026-06-03T02:44:43.169Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.scout"
+          ]
+        },
+        "parentVersion": "promoted-1780450422695",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -350,15 +433,15 @@ export const assets = defineAiAssets(
     "kind": "spritesheet",
     "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
     "dimensions": {
-      "width": 1024,
-      "height": 1024
+      "width": 192,
+      "height": 192
     },
     "frameGrid": {
-      "frameCount": 4,
-      "frameWidth": 512,
-      "frameHeight": 512,
-      "columns": 2,
-      "rows": 2
+      "frameCount": 8,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "columns": 3,
+      "rows": 3
     },
     "animations": [
       {
@@ -367,7 +450,11 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7
         ],
         "frameRate": 12,
         "repeat": 0
@@ -382,7 +469,7 @@ export const assets = defineAiAssets(
         "invader.scout"
       ]
     },
-    "activeVersion": "promoted-1780365215588",
+    "activeVersion": "promoted-1780450920237",
     "versions": {
       "default": {
         "name": "default",
@@ -425,6 +512,24 @@ export const assets = defineAiAssets(
           ]
         },
         "parentVersion": "generated-destroyed-1780239070336",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780450920237": {
+        "name": "promoted-1780450920237",
+        "file": "/assets/invader.scout.destroyed.promoted-1780450920237.png",
+        "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+        "createdAt": "2026-06-03T01:42:00.310Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.scout"
+          ]
+        },
+        "parentVersion": "promoted-1780365215588",
         "notes": "Promoted from the AI asset designer."
       }
     }

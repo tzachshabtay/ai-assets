@@ -35,6 +35,12 @@ export type GeneratedDebugOption = {
     frameRate: number;
     repeat?: number;
     prompt?: string;
+    frameTimings?: Array<{
+      delayMs?: number;
+      offsetX?: number;
+      offsetY?: number;
+      tag?: string;
+    }>;
   }>;
 };
 

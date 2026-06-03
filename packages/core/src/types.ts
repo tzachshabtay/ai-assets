@@ -27,6 +27,14 @@ export type AiAssetAnimation = {
   frameRate: number;
   repeat?: number;
   prompt?: string;
+  frameTimings?: AiAssetAnimationFrameTiming[];
+};
+
+export type AiAssetAnimationFrameTiming = {
+  delayMs?: number;
+  offsetX?: number;
+  offsetY?: number;
+  tag?: string;
 };
 
 export type AiAssetLinkedAnimation = {

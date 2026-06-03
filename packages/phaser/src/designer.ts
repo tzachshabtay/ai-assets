@@ -1,4 +1,9 @@
-import type { AiAssetDefinition, AiAssetManifest } from "@ai-game-assets/core";
+import type {
+  AiAssetAnimation,
+  AiAssetAnimationFrameTiming,
+  AiAssetDefinition,
+  AiAssetManifest
+} from "@ai-game-assets/core";
 import { AiAssetDebugClient, type GeneratedDebugOption } from "./debug-client.js";
 
 type AiAssetTextureFrameConfig = {
@@ -89,6 +94,7 @@ export function installAiAssetDesigner(
   let selectedTargetAssetId = selectedAssetId;
   let selectedOption: GeneratedDebugOption | undefined;
   let stopCurrentAnimationPreview: (() => void) | undefined;
+  let editedCurrentOption: GeneratedDebugOption | undefined;
 
   if (!selectedAssetId) {
     throw new Error("AI asset designer requires at least one asset.");
@@ -150,12 +156,13 @@ export function installAiAssetDesigner(
     elements.currentAnimation.hidden = true;
     elements.currentImage.hidden = false;
     elements.currentAnimationButton.hidden = !activeVersion?.file || !asset.frameGrid;
-    elements.currentAnimationButton.textContent = "Animate";
+    elements.currentAnimationButton.textContent = "Edit...";
     elements.currentPreview.classList.add("is-selected");
     elements.options.innerHTML = "";
     setStatus(elements, "", "idle");
     elements.promoteButton.disabled = true;
     selectedOption = undefined;
+    editedCurrentOption = undefined;
   };
 
   const syncAsset = (assetId: string) => {
@@ -188,8 +195,8 @@ export function installAiAssetDesigner(
     }
 
     elements.currentPreview.classList.add("is-selected");
-    selectedOption = undefined;
-    elements.promoteButton.disabled = true;
+    selectedOption = editedCurrentOption;
+    elements.promoteButton.disabled = !selectedOption;
     previewCurrentAsset({
       scene: options.scene,
       manifest,
@@ -290,23 +297,44 @@ export function installAiAssetDesigner(
 
     if (!asset.frameGrid || !activeVersion?.file) return;
 
-    if (stopCurrentAnimationPreview) {
-      stopCurrentAnimationPreview();
-      stopCurrentAnimationPreview = undefined;
-      elements.currentAnimation.hidden = true;
-      elements.currentImage.hidden = false;
-      elements.currentAnimationButton.textContent = "Animate";
-      return;
-    }
-
-    elements.currentImage.hidden = true;
-    elements.currentAnimation.hidden = false;
-    elements.currentAnimationButton.textContent = "Stop";
-    stopCurrentAnimationPreview = startSpritesheetPreview({
-      element: elements.currentAnimation,
-      src: activeVersion.file,
+    void openAnimationEditor({
+      root: elements.root,
       asset,
-      displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset)
+      assetId: selectedTargetAssetId,
+      src: editedCurrentOption?.dataUrl ?? activeVersion.file,
+      displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset),
+      initialAnimations: editedCurrentOption?.animations ?? asset.animations,
+      onConfirm: async (animations) => {
+        const dataUrl = editedCurrentOption?.dataUrl ?? await imageSourceToDataUrl(activeVersion.file);
+        const optionAsset = {
+          ...asset,
+          animations
+        };
+
+        editedCurrentOption = {
+          index: -1,
+          dataUrl,
+          mimeType: mimeTypeFromDataUrl(dataUrl),
+          prompt: activeVersion.prompt ?? asset.prompt,
+          model: activeVersion.model,
+          revisedPrompt: activeVersion.revisedPrompt,
+          dimensions: asset.dimensions,
+          frameGrid: asset.frameGrid,
+          animations
+        };
+        selectedOption = editedCurrentOption;
+        elements.promoteButton.disabled = false;
+        previewImageSource({
+          scene: options.scene,
+          manifest,
+          assetId: selectedTargetAssetId,
+          src: dataUrl,
+          textureKey: `ai-current-edit:${selectedTargetAssetId}:${Date.now()}`,
+          assetOverride: optionAsset,
+          onPreview: options.onPreview
+        });
+        setStatus(elements, "Animation edits applied. Promote to save them to code.", "success");
+      }
     });
   });
 
@@ -633,12 +661,17 @@ function startSpritesheetPreview(options: {
       (_, index) => index
     );
   const frameRate = options.asset.animations?.[0]?.frameRate ?? 8;
+  const frameTimings = options.asset.animations?.[0]?.frameTimings ?? [];
   let frameCursor = 0;
+  let timeout: number | undefined;
 
   const renderFrame = () => {
     const frame = frames[frameCursor % frames.length] ?? 0;
+    const timing = frameTimings[frameCursor % frames.length];
     const column = frame % frameGrid.columns;
     const row = Math.floor(frame / frameGrid.columns);
+    const offsetX = timing?.offsetX ?? 0;
+    const offsetY = timing?.offsetY ?? 0;
 
     options.element.style.width = `${options.displaySize.width}px`;
     options.element.style.height = `${options.displaySize.height}px`;
@@ -646,17 +679,225 @@ function startSpritesheetPreview(options: {
     options.element.style.backgroundSize =
       `${frameGrid.columns * options.displaySize.width}px ${frameGrid.rows * options.displaySize.height}px`;
     options.element.style.backgroundPosition =
-      `-${column * options.displaySize.width}px -${row * options.displaySize.height}px`;
+      `${-(column * options.displaySize.width) + offsetX}px ${-(row * options.displaySize.height) + offsetY}px`;
     frameCursor += 1;
+    timeout = window.setTimeout(renderFrame, timing?.delayMs ?? 1000 / frameRate);
   };
 
   renderFrame();
-  const interval = window.setInterval(renderFrame, 1000 / frameRate);
 
   return () => {
-    window.clearInterval(interval);
+    if (timeout !== undefined) {
+      window.clearTimeout(timeout);
+    }
     options.element.removeAttribute("style");
   };
+}
+
+async function openAnimationEditor(options: {
+  root: HTMLElement;
+  asset: AiAssetDefinition;
+  assetId: string;
+  src: string;
+  displaySize: AiAssetPreviewDisplaySize;
+  initialAnimations?: AiAssetAnimation[];
+  onConfirm(animations: AiAssetAnimation[]): void | Promise<void>;
+}): Promise<void> {
+  const frameGrid = options.asset.frameGrid;
+  const baseAnimation = options.initialAnimations?.[0] ?? options.asset.animations?.[0];
+
+  if (!frameGrid || !baseAnimation) return;
+
+  const dialog = document.createElement("div");
+  dialog.className = "ai-game-assets-designer__modal";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", `Edit ${readableAssetName(options.assetId)} animation`);
+
+  const card = document.createElement("div");
+  card.className = "ai-game-assets-designer__modal-card";
+
+  const title = document.createElement("div");
+  title.className = "ai-game-assets-designer__modal-title";
+  title.textContent = `Edit ${readableAssetName(options.assetId)}`;
+
+  const stage = document.createElement("div");
+  stage.className = "ai-game-assets-designer__modal-stage";
+
+  const strip = document.createElement("div");
+  strip.className = "ai-game-assets-designer__frame-strip";
+
+  const delayInput = numericInput();
+  delayInput.min = "1";
+  const offsetXInput = signedNumberInput();
+  const offsetYInput = signedNumberInput();
+  const tagInput = document.createElement("input");
+  tagInput.type = "text";
+  tagInput.placeholder = "shoot";
+
+  const fields = document.createElement("div");
+  fields.className = "ai-game-assets-designer__frame-fields";
+  fields.append(
+    labelWrap("Delay ms", delayInput),
+    labelWrap("Offset X", offsetXInput),
+    labelWrap("Offset Y", offsetYInput),
+    labelWrap("Tag", tagInput)
+  );
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.textContent = "Cancel";
+
+  const confirmButton = document.createElement("button");
+  confirmButton.type = "button";
+  confirmButton.textContent = "Confirm";
+
+  const actions = document.createElement("div");
+  actions.className = "ai-game-assets-designer__modal-actions";
+  actions.append(cancelButton, confirmButton);
+
+  card.append(title, stage, strip, fields, actions);
+  dialog.append(card);
+  options.root.append(dialog);
+
+  let selectedFrameSlot = 0;
+  let stopPreview: (() => void) | undefined;
+  const frameTimings = baseAnimation.frames.map((_, index) => ({
+    ...baseAnimation.frameTimings?.[index]
+  }));
+
+  const animationFromTimings = (): AiAssetAnimation => ({
+    ...baseAnimation,
+    frameTimings: frameTimings.map((timing) => ({
+      delayMs: positiveIntegerValue(timing.delayMs, Math.round(1000 / baseAnimation.frameRate)),
+      offsetX: integerValue(timing.offsetX, 0),
+      offsetY: integerValue(timing.offsetY, 0),
+      tag: timing.tag?.trim() || undefined
+    }))
+  });
+
+  const previewAsset = (): AiAssetDefinition => ({
+    ...options.asset,
+    animations: [animationFromTimings()]
+  });
+
+  const restartPreview = () => {
+    stopPreview?.();
+    stopPreview = startSpritesheetPreview({
+      element: stage,
+      src: options.src,
+      asset: previewAsset(),
+      displaySize: options.displaySize
+    });
+  };
+
+  const syncInputs = () => {
+    const timing = frameTimings[selectedFrameSlot] ?? {};
+    delayInput.value = String(
+      positiveIntegerValue(timing.delayMs, Math.round(1000 / baseAnimation.frameRate))
+    );
+    offsetXInput.value = String(integerValue(timing.offsetX, 0));
+    offsetYInput.value = String(integerValue(timing.offsetY, 0));
+    tagInput.value = timing.tag ?? "";
+
+    for (const button of strip.querySelectorAll("button")) {
+      button.classList.toggle(
+        "is-selected",
+        Number((button as HTMLButtonElement).dataset.frameSlot) === selectedFrameSlot
+      );
+    }
+  };
+
+  const renderStrip = () => {
+    strip.innerHTML = "";
+
+    baseAnimation.frames.forEach((frame, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.frameSlot = String(index);
+      button.className = "ai-game-assets-designer__frame-thumb";
+      button.setAttribute("aria-label", `Frame ${index + 1}`);
+      setFrameBackground(button, {
+        src: options.src,
+        frame,
+        frameGrid,
+        displaySize: { width: 48, height: 48 },
+        timing: frameTimings[index]
+      });
+      button.addEventListener("click", () => {
+        selectedFrameSlot = index;
+        syncInputs();
+      });
+      strip.append(button);
+    });
+  };
+
+  const updateSelectedTiming = () => {
+    frameTimings[selectedFrameSlot] = {
+      delayMs: positiveIntegerInput(delayInput, Math.round(1000 / baseAnimation.frameRate)),
+      offsetX: integerInput(offsetXInput, 0),
+      offsetY: integerInput(offsetYInput, 0),
+      tag: tagInput.value.trim() || undefined
+    };
+    const selectedButton = strip.querySelector<HTMLButtonElement>(
+      `button[data-frame-slot="${selectedFrameSlot}"]`
+    );
+
+    if (selectedButton) {
+      setFrameBackground(selectedButton, {
+        src: options.src,
+        frame: baseAnimation.frames[selectedFrameSlot] ?? 0,
+        frameGrid,
+        displaySize: { width: 48, height: 48 },
+        timing: frameTimings[selectedFrameSlot]
+      });
+    }
+    restartPreview();
+  };
+
+  delayInput.addEventListener("input", updateSelectedTiming);
+  offsetXInput.addEventListener("input", updateSelectedTiming);
+  offsetYInput.addEventListener("input", updateSelectedTiming);
+  tagInput.addEventListener("input", updateSelectedTiming);
+
+  const close = () => {
+    stopPreview?.();
+    dialog.remove();
+  };
+
+  cancelButton.addEventListener("click", close);
+  confirmButton.addEventListener("click", async () => {
+    await options.onConfirm([animationFromTimings()]);
+    close();
+  });
+
+  renderStrip();
+  syncInputs();
+  restartPreview();
+}
+
+function setFrameBackground(
+  element: HTMLElement,
+  options: {
+    src: string;
+    frame: number;
+    frameGrid: NonNullable<AiAssetDefinition["frameGrid"]>;
+    displaySize: AiAssetPreviewDisplaySize;
+    timing?: AiAssetAnimationFrameTiming;
+  }
+): void {
+  const column = options.frame % options.frameGrid.columns;
+  const row = Math.floor(options.frame / options.frameGrid.columns);
+  const offsetX = options.timing?.offsetX ?? 0;
+  const offsetY = options.timing?.offsetY ?? 0;
+
+  element.style.width = `${options.displaySize.width}px`;
+  element.style.height = `${options.displaySize.height}px`;
+  element.style.backgroundImage = `url("${cssUrl(options.src)}")`;
+  element.style.backgroundSize =
+    `${options.frameGrid.columns * options.displaySize.width}px ${options.frameGrid.rows * options.displaySize.height}px`;
+  element.style.backgroundPosition =
+    `${-(column * options.displaySize.width) + offsetX}px ${-(row * options.displaySize.height) + offsetY}px`;
 }
 
 function generationOverridesFromInputs(
@@ -708,6 +949,26 @@ function positiveIntegerInput(input: HTMLInputElement, fallback: number): number
   if (!Number.isFinite(value)) return fallback;
 
   return Math.max(1, Math.floor(value));
+}
+
+function integerInput(input: HTMLInputElement, fallback: number): number {
+  const value = Number(input.value);
+
+  if (!Number.isFinite(value)) return fallback;
+
+  return Math.trunc(value);
+}
+
+function positiveIntegerValue(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+
+  return Math.max(1, Math.floor(value as number));
+}
+
+function integerValue(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+
+  return Math.trunc(value as number);
 }
 
 function resolvePreviewDisplaySize(
@@ -790,6 +1051,57 @@ function numericInput(): HTMLInputElement {
   input.inputMode = "numeric";
 
   return input;
+}
+
+function signedNumberInput(): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "1";
+  input.inputMode = "numeric";
+
+  return input;
+}
+
+async function imageSourceToDataUrl(src: string): Promise<string> {
+  if (src.startsWith("data:")) return src;
+
+  const response = await fetch(src);
+
+  if (!response.ok) {
+    throw new Error(`Could not load current animation image (${response.status}).`);
+  }
+
+  const responseBlob = await response.blob();
+  const blob = responseBlob.type === "application/octet-stream"
+    ? responseBlob.slice(0, responseBlob.size, mimeTypeFromFileName(src))
+    : responseBlob;
+
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Could not convert current animation image to a data URL."));
+      }
+    });
+    reader.addEventListener("error", () => {
+      reject(reader.error ?? new Error("Could not read current animation image."));
+    });
+    reader.readAsDataURL(blob);
+  });
+}
+
+function mimeTypeFromDataUrl(dataUrl: string): string {
+  return /^data:([^;,]+)/.exec(dataUrl)?.[1] ?? "image/png";
+}
+
+function mimeTypeFromFileName(fileName: string): string {
+  if (/\.png(?:$|[?#])/i.test(fileName)) return "image/png";
+  if (/\.webp(?:$|[?#])/i.test(fileName)) return "image/webp";
+  if (/\.jpe?g(?:$|[?#])/i.test(fileName)) return "image/jpeg";
+  if (/\.svg(?:$|[?#])/i.test(fileName)) return "image/svg+xml";
+  return "image/png";
 }
 
 function readableAssetName(assetId: string): string {
@@ -1009,6 +1321,75 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__option .ai-game-assets-designer__animate-button {
   width: 100%;
+}
+.ai-game-assets-designer__modal {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(6, 8, 12, 0.62);
+}
+.ai-game-assets-designer__modal-card {
+  width: min(520px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border: 1px solid #384251;
+  border-radius: 8px;
+  background: #141820;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+  padding: 14px;
+}
+.ai-game-assets-designer__modal-title {
+  margin-bottom: 12px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.ai-game-assets-designer__modal-stage {
+  margin: 0 auto 14px;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+}
+.ai-game-assets-designer__frame-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 0 12px;
+}
+.ai-game-assets-designer__frame-thumb {
+  flex: 0 0 auto;
+  border: 2px solid #384251;
+  border-radius: 6px;
+  background-color: #0f1218;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+.ai-game-assets-designer__frame-thumb.is-selected {
+  border-color: #6ed3ff;
+}
+.ai-game-assets-designer__frame-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.ai-game-assets-designer__frame-fields .ai-game-assets-designer__field {
+  margin-bottom: 0;
+}
+.ai-game-assets-designer__modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+.ai-game-assets-designer__modal-actions button {
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #273142;
+  color: #fff;
+  padding: 9px 11px;
+  font: inherit;
+  cursor: pointer;
 }
 `;
   document.head.append(style);

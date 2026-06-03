@@ -1,5 +1,6 @@
 export type {
   AiAssetAnimation,
+  AiAssetAnimationFrameTiming,
   AiAssetBackground,
   AiAssetDefinition,
   AiAssetDimensions,
