@@ -831,6 +831,7 @@ function ensureDesignerStyles(): void {
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 .ai-game-assets-designer * { box-sizing: border-box; }
+.ai-game-assets-designer [hidden] { display: none !important; }
 .ai-game-assets-designer__toggle {
   width: 42px;
   height: 42px;
