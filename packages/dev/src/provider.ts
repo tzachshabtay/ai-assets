@@ -78,11 +78,7 @@ export function createOpenAiImageProvider(
       const requestedFormat =
         request.settings?.format ?? request.asset.settings?.format ?? "png";
       const outputFormat = normalizeOutputFormat(requestedFormat);
-      const requestedBackground =
-        request.settings?.background ??
-        request.asset.settings?.background ??
-        options.background ??
-        "transparent";
+      const requestedBackground = resolveRequestedBackground(request, options);
       const background = normalizeBackgroundForModel(model, requestedBackground);
       const chromaKey = selectChromaKey(request);
 
@@ -541,6 +537,21 @@ function shouldRequestRgbaPng(
   );
 }
 
+function resolveRequestedBackground(
+  request: GenerateAssetRequest,
+  options: OpenAiImageProviderOptions
+): AiAssetGenerationSettings["background"] {
+  const requested =
+    request.settings?.background ??
+    request.asset.settings?.background;
+
+  if (requested && requested !== "auto") {
+    return requested;
+  }
+
+  return options.background ?? "transparent";
+}
+
 function shouldPostprocessTransparency(
   request: GenerateAssetRequest,
   context: {
@@ -638,8 +649,15 @@ function detectBackgroundRemoval(
 }
 
 function hasRequestedChromaKey(png: PNG, chromaKey: RgbColor): boolean {
+  const edgeStats = sampleImageEdges(png, (index) => (
+    isChromaPixel(png, index, 90, chromaKey) ||
+    isKeyTintedPixel(rgbAt(png, index), chromaKey, 0.8)
+  ));
+
+  if (edgeStats.matches / edgeStats.total >= 0.18) return true;
+
   let matches = 0;
-  const threshold = Math.max(64, Math.floor(png.width * png.height * 0.0005));
+  const threshold = Math.max(256, Math.floor(png.width * png.height * 0.005));
 
   for (let index = 0; index < png.width * png.height; index += 1) {
     if (
@@ -656,44 +674,45 @@ function hasRequestedChromaKey(png: PNG, chromaKey: RgbColor): boolean {
 }
 
 function detectNeutralEdgeMatte(png: PNG): RgbColor | undefined {
-  const edgeBins = new Map<string, ColorBin>();
   let edgePixelCount = 0;
-  const sample = (x: number, y: number) => {
-    const color = rgbAt(png, y * png.width + x);
-    const max = Math.max(color.red, color.green, color.blue);
-    const min = Math.min(color.red, color.green, color.blue);
-    const saturation = max === 0 ? 0 : (max - min) / max;
-    const luminance = relativeLuminance(color.red, color.green, color.blue);
+  let neutralEdgePixelCount = 0;
+  let redTotal = 0;
+  let greenTotal = 0;
+  let blueTotal = 0;
 
+  sampleImageEdges(png, (index) => {
+    const color = rgbAt(png, index);
     edgePixelCount += 1;
 
-    if (saturation <= 0.18 && luminance >= 92) {
-      addColorBin(edgeBins, color.red, color.green, color.blue);
+    if (isNeutralMatteCandidate(color)) {
+      neutralEdgePixelCount += 1;
+      redTotal += color.red;
+      greenTotal += color.green;
+      blueTotal += color.blue;
     }
-  };
 
-  for (let x = 0; x < png.width; x += 1) {
-    sample(x, 0);
-    sample(x, png.height - 1);
-  }
+    return false;
+  });
 
-  for (let y = 1; y < png.height - 1; y += 1) {
-    sample(0, y);
-    sample(png.width - 1, y);
-  }
-
-  const [dominantBin] = [...edgeBins.values()]
-    .sort((left, right) => right.count - left.count);
-
-  if (!dominantBin || dominantBin.count / edgePixelCount < 0.35) {
+  if (
+    neutralEdgePixelCount === 0 ||
+    neutralEdgePixelCount / edgePixelCount < 0.65 ||
+    neutralCornerCount(png) < 3
+  ) {
     return undefined;
   }
 
-  return {
-    red: Math.round(dominantBin.redTotal / dominantBin.count),
-    green: Math.round(dominantBin.greenTotal / dominantBin.count),
-    blue: Math.round(dominantBin.blueTotal / dominantBin.count)
+  const matteColor = {
+    red: Math.round(redTotal / neutralEdgePixelCount),
+    green: Math.round(greenTotal / neutralEdgePixelCount),
+    blue: Math.round(blueTotal / neutralEdgePixelCount)
   };
+
+  const matteStats = sampleImageEdges(png, (index) => (
+    isNeutralMattePixel(rgbAt(png, index), matteColor)
+  ));
+
+  return matteStats.matches / matteStats.total >= 0.55 ? matteColor : undefined;
 }
 
 function resizePngToDimensions(image: Uint8Array, dimensions: AiAssetDimensions): Buffer {
@@ -862,6 +881,51 @@ function isNeutralMattePixel(color: RgbColor, matteColor: RgbColor): boolean {
     Math.abs(luminance - matteLuminance) <= 70 &&
     colorDistance(color, matteColor) <= 92
   );
+}
+
+function isNeutralMatteCandidate(color: RgbColor): boolean {
+  const max = Math.max(color.red, color.green, color.blue);
+  const min = Math.min(color.red, color.green, color.blue);
+  const saturation = max === 0 ? 0 : (max - min) / max;
+  const luminance = relativeLuminance(color.red, color.green, color.blue);
+
+  return saturation <= 0.22 && luminance >= 75;
+}
+
+function neutralCornerCount(png: PNG): number {
+  return [
+    { x: 0, y: 0 },
+    { x: png.width - 1, y: 0 },
+    { x: 0, y: png.height - 1 },
+    { x: png.width - 1, y: png.height - 1 }
+  ].filter(({ x, y }) => isNeutralMatteCandidate(rgbAt(png, y * png.width + x))).length;
+}
+
+function sampleImageEdges(
+  png: PNG,
+  predicate: (index: number) => boolean
+): { total: number; matches: number } {
+  let total = 0;
+  let matches = 0;
+  const sample = (x: number, y: number) => {
+    total += 1;
+
+    if (predicate(y * png.width + x)) {
+      matches += 1;
+    }
+  };
+
+  for (let x = 0; x < png.width; x += 1) {
+    sample(x, 0);
+    sample(x, png.height - 1);
+  }
+
+  for (let y = 1; y < png.height - 1; y += 1) {
+    sample(0, y);
+    sample(png.width - 1, y);
+  }
+
+  return { total, matches };
 }
 
 function rgbAt(png: PNG, index: number): RgbColor {
