@@ -61,10 +61,6 @@ export const assets = defineAiAssets(
         "label": "Idle",
         "assetId": "hero.ship.idle"
       },
-      "moving": {
-        "label": "Moving",
-        "assetId": "hero.ship.moving"
-      },
       "shooting": {
         "label": "Shooting",
         "assetId": "hero.ship.shooting"
@@ -72,6 +68,10 @@ export const assets = defineAiAssets(
       "hit": {
         "label": "Getting hit",
         "assetId": "hero.ship.hit"
+      },
+      "moving-left": {
+        "label": "Moving left",
+        "assetId": "hero.ship.moving-left"
       }
     }
   },
@@ -575,13 +575,13 @@ export const assets = defineAiAssets(
     "kind": "spritesheet",
     "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
     "dimensions": {
-      "width": 128,
-      "height": 128
+      "width": 256,
+      "height": 256
     },
     "frameGrid": {
       "frameCount": 4,
-      "frameWidth": 64,
-      "frameHeight": 64,
+      "frameWidth": 128,
+      "frameHeight": 128,
       "columns": 2,
       "rows": 2
     },
@@ -607,7 +607,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780535677815",
     "versions": {
       "default": {
         "name": "default",
@@ -615,69 +615,57 @@ export const assets = defineAiAssets(
         "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
         "createdAt": "2026-06-03T00:00:00.000Z",
         "model": "starter-asset"
-      }
-    }
-  },
-  "hero.ship.moving": {
-    "id": "hero.ship.moving",
-    "kind": "spritesheet",
-    "prompt": "Hero starfighter moving animation. Slight banking tilt, bright rear jets, energetic thrust, same ship identity, transparent background.",
-    "dimensions": {
-      "width": 128,
-      "height": 128
-    },
-    "frameGrid": {
-      "frameCount": 4,
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "columns": 2,
-      "rows": 2
-    },
-    "animations": [
-      {
-        "key": "hero.ship.moving",
-        "frames": [
-          0,
-          1,
-          2,
-          3
-        ],
-        "frameRate": 10,
-        "repeat": -1
-      }
-    ],
-    "settings": {
-      "model": "gpt-image-2",
-      "background": "auto",
-      "quality": "low",
-      "format": "png",
-      "referenceAssetIds": [
-        "hero.ship"
-      ]
-    },
-    "activeVersion": "default",
-    "versions": {
-      "default": {
-        "name": "default",
-        "file": "/assets/hero.ship.moving.default.svg",
-        "prompt": "Hero starfighter moving animation. Slight banking tilt, bright rear jets, energetic thrust, same ship identity, transparent background.",
-        "createdAt": "2026-06-03T00:00:00.000Z",
-        "model": "starter-asset"
+      },
+      "promoted-1780535453778": {
+        "name": "promoted-1780535453778",
+        "file": "/assets/hero.ship.idle.promoted-1780535453778.png",
+        "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+        "createdAt": "2026-06-04T01:10:53.810Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780535677815": {
+        "name": "promoted-1780535677815",
+        "file": "/assets/hero.ship.idle.promoted-1780535677815.png",
+        "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+        "createdAt": "2026-06-04T01:14:37.836Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "promoted-1780535453778",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "hero.ship.shooting": {
     "id": "hero.ship.shooting",
     "kind": "spritesheet",
-    "prompt": "Hero starfighter shooting animation. Weapon charge, muzzle flash from nose cannon, recoil recovery, same ship identity, transparent background.",
+    "prompt": "Hero starfighter shooting animation (without the actual laser being shot). Weapon charge, muzzle flash from the cannon at the top, recoil recovery, same ship identity, transparent background.",
     "dimensions": {
-      "width": 128,
-      "height": 128
+      "width": 256,
+      "height": 256
     },
     "frameGrid": {
       "frameCount": 4,
-      "frameWidth": 64,
-      "frameHeight": 64,
+      "frameWidth": 128,
+      "frameHeight": 128,
       "columns": 2,
       "rows": 2
     },
@@ -718,7 +706,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780536687601",
     "versions": {
       "default": {
         "name": "default",
@@ -726,6 +714,24 @@ export const assets = defineAiAssets(
         "prompt": "Hero starfighter shooting animation. Weapon charge, muzzle flash from nose cannon, recoil recovery, same ship identity, transparent background.",
         "createdAt": "2026-06-03T00:00:00.000Z",
         "model": "starter-asset"
+      },
+      "promoted-1780536687601": {
+        "name": "promoted-1780536687601",
+        "file": "/assets/hero.ship.shooting.promoted-1780536687601.png",
+        "prompt": "Hero starfighter shooting animation (without the actual laser being shot). Weapon charge, muzzle flash from the cannon at the top, recoil recovery, same ship identity, transparent background.",
+        "createdAt": "2026-06-04T01:31:27.616Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -734,14 +740,14 @@ export const assets = defineAiAssets(
     "kind": "spritesheet",
     "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
     "dimensions": {
-      "width": 128,
-      "height": 128
+      "width": 384,
+      "height": 256
     },
     "frameGrid": {
-      "frameCount": 4,
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "columns": 2,
+      "frameCount": 6,
+      "frameWidth": 128,
+      "frameHeight": 128,
+      "columns": 3,
       "rows": 2
     },
     "animations": [
@@ -751,7 +757,9 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5
         ],
         "frameRate": 12,
         "repeat": 0
@@ -766,7 +774,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780536958079",
     "versions": {
       "default": {
         "name": "default",
@@ -774,6 +782,148 @@ export const assets = defineAiAssets(
         "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
         "createdAt": "2026-06-03T00:00:00.000Z",
         "model": "starter-asset"
+      },
+      "promoted-1780536958079": {
+        "name": "promoted-1780536958079",
+        "file": "/assets/hero.ship.hit.promoted-1780536958079.png",
+        "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+        "createdAt": "2026-06-04T01:35:58.108Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
+      }
+    }
+  },
+  "hero.ship.moving-left": {
+    "id": "hero.ship.moving-left",
+    "kind": "spritesheet",
+    "prompt": "Hero starfighter moving left animation. Slight banking tilt to the left, bright rear jets, energetic thrust, same ship identity, transparent background.",
+    "dimensions": {
+      "width": 256,
+      "height": 256
+    },
+    "frameGrid": {
+      "frameCount": 4,
+      "frameWidth": 128,
+      "frameHeight": 128,
+      "columns": 2,
+      "rows": 2
+    },
+    "animations": [
+      {
+        "key": "hero.ship.moving-left",
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "frameRate": 10,
+        "repeat": -1,
+        "frameTimings": [
+          {
+            "delayMs": 50,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          {
+            "delayMs": 50,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          {
+            "delayMs": 50,
+            "offsetX": 0,
+            "offsetY": 0
+          },
+          {
+            "delayMs": 2000,
+            "offsetX": 0,
+            "offsetY": 0
+          }
+        ]
+      }
+    ],
+    "settings": {
+      "model": "gpt-image-2",
+      "background": "auto",
+      "quality": "low",
+      "format": "png",
+      "referenceAssetIds": [
+        "hero.ship"
+      ]
+    },
+    "activeVersion": "promoted-1780537093274",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/hero.ship.moving-left.default.svg",
+        "prompt": "Hero starfighter moving left animation. Slight banking tilt to the left, bright rear jets, energetic thrust, same ship identity, transparent background.",
+        "createdAt": "2026-06-03T00:00:00.000Z",
+        "model": "starter-asset"
+      },
+      "promoted-1780536121815": {
+        "name": "promoted-1780536121815",
+        "file": "/assets/hero.ship.moving.promoted-1780536121815.png",
+        "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+        "createdAt": "2026-06-04T01:22:01.877Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780536722820": {
+        "name": "promoted-1780536722820",
+        "file": "/assets/hero.ship.moving.promoted-1780536722820.png",
+        "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+        "createdAt": "2026-06-04T01:32:02.832Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "promoted-1780536121815",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780537093274": {
+        "name": "promoted-1780537093274",
+        "file": "/assets/hero.ship.moving.promoted-1780537093274.png",
+        "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+        "createdAt": "2026-06-04T01:38:13.316Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "promoted-1780536722820",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   }

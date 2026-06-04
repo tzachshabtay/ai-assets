@@ -73,14 +73,14 @@ function startGame(assetManifest: AiAssetManifest): void {
       sceneRef = this;
       this.aiRuntime = new AiAssetRuntime(this, assetManifest);
       createAiAnimations(this, assetManifest, "hero.ship.idle");
-      createAiAnimations(this, assetManifest, "hero.ship.moving");
+      createAiAnimations(this, assetManifest, "hero.ship.moving-left");
       createAiAnimations(this, assetManifest, "hero.ship.shooting");
       createAiAnimations(this, assetManifest, "hero.ship.hit");
       createAiAnimations(this, assetManifest, "invader.scout.idle");
       createAiAnimations(this, assetManifest, "invader.scout.shooting");
       createAiAnimations(this, assetManifest, "invader.scout.destroyed");
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.idle"]);
-      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.moving"]);
+      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.moving-left"]);
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.shooting"]);
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.hit"]);
       this.registerInvaderAnimationSize(assetManifest.assets["invader.scout.idle"]);
@@ -152,7 +152,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         previewDisplaySize: {
           "hero.ship": { width: 54, height: 54 },
           "hero.ship.idle": { width: 54, height: 54 },
-          "hero.ship.moving": { width: 54, height: 54 },
+          "hero.ship.moving-left": { width: 54, height: 54 },
           "hero.ship.shooting": { width: 54, height: 54 },
           "hero.ship.hit": { width: 54, height: 54 },
           "invader.scout": { width: 42, height: 42 },
@@ -193,7 +193,8 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
 
       if (this.time.now >= this.heroLockedUntil) {
-        this.playHeroAnimation(isMoving ? "hero.ship.moving" : "hero.ship.idle");
+        this.hero.setFlipX(isMovingRight && !isMovingLeft);
+        this.playHeroAnimation(isMoving ? "hero.ship.moving-left" : "hero.ship.idle");
       }
     }
 
@@ -369,6 +370,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     private playHeroActionAnimation(animationKey: string): void {
       if (this.hero) {
+        this.hero.setFlipX(false);
         this.heroAnimationKey = animationKey;
         this.hero.play(animationKey, true);
         this.applyHeroAnimationSize(animationKey);
