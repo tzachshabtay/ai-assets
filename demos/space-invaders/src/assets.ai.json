@@ -54,6 +54,24 @@
           "parentVersion": "promoted-1780369898360",
           "notes": "Promoted from the AI asset designer."
         }
+      },
+      "linkedAnimationAssets": {
+        "idle": {
+          "label": "Idle",
+          "assetId": "hero.ship.idle"
+        },
+        "moving": {
+          "label": "Moving",
+          "assetId": "hero.ship.moving"
+        },
+        "shooting": {
+          "label": "Shooting",
+          "assetId": "hero.ship.shooting"
+        },
+        "hit": {
+          "label": "Getting hit",
+          "assetId": "hero.ship.hit"
+        }
       }
     },
     "invader.scout": {
@@ -307,20 +325,20 @@
               "offsetY": 0
             },
             {
-              "delayMs": 140,
+              "delayMs": 100,
               "offsetX": 2,
-              "offsetY": -1,
+              "offsetY": -1
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0,
               "tag": "shoot"
-            },
-            {
-              "delayMs": 100,
-              "offsetX": 0,
-              "offsetY": 0
-            },
-            {
-              "delayMs": 100,
-              "offsetX": 0,
-              "offsetY": 0
             },
             {
               "delayMs": 100,
@@ -344,7 +362,7 @@
           "invader.scout"
         ]
       },
-      "activeVersion": "promoted-1780454683156",
+      "activeVersion": "promoted-1780456444685",
       "versions": {
         "default": {
           "name": "default",
@@ -423,6 +441,24 @@
             ]
           },
           "parentVersion": "promoted-1780450422695",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780456444685": {
+          "name": "promoted-1780456444685",
+          "file": "/assets/invader.scout.shooting.promoted-1780456444685.png",
+          "prompt": "shooting animation",
+          "createdAt": "2026-06-03T03:14:04.703Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.scout"
+            ]
+          },
+          "parentVersion": "promoted-1780454683156",
           "notes": "Promoted from the AI asset designer."
         }
       }
@@ -530,6 +566,213 @@
           },
           "parentVersion": "promoted-1780365215588",
           "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
+    "hero.ship.idle": {
+      "id": "hero.ship.idle",
+      "kind": "spritesheet",
+      "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+      "dimensions": {
+        "width": 128,
+        "height": 128
+      },
+      "frameGrid": {
+        "frameCount": 4,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 2,
+        "rows": 2
+      },
+      "animations": [
+        {
+          "key": "hero.ship.idle",
+          "frames": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frameRate": 6,
+          "repeat": -1
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "activeVersion": "default",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/hero.ship.idle.default.svg",
+          "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+          "createdAt": "2026-06-03T00:00:00.000Z",
+          "model": "starter-asset"
+        }
+      }
+    },
+    "hero.ship.moving": {
+      "id": "hero.ship.moving",
+      "kind": "spritesheet",
+      "prompt": "Hero starfighter moving animation. Slight banking tilt, bright rear jets, energetic thrust, same ship identity, transparent background.",
+      "dimensions": {
+        "width": 128,
+        "height": 128
+      },
+      "frameGrid": {
+        "frameCount": 4,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 2,
+        "rows": 2
+      },
+      "animations": [
+        {
+          "key": "hero.ship.moving",
+          "frames": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frameRate": 10,
+          "repeat": -1
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "activeVersion": "default",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/hero.ship.moving.default.svg",
+          "prompt": "Hero starfighter moving animation. Slight banking tilt, bright rear jets, energetic thrust, same ship identity, transparent background.",
+          "createdAt": "2026-06-03T00:00:00.000Z",
+          "model": "starter-asset"
+        }
+      }
+    },
+    "hero.ship.shooting": {
+      "id": "hero.ship.shooting",
+      "kind": "spritesheet",
+      "prompt": "Hero starfighter shooting animation. Weapon charge, muzzle flash from nose cannon, recoil recovery, same ship identity, transparent background.",
+      "dimensions": {
+        "width": 128,
+        "height": 128
+      },
+      "frameGrid": {
+        "frameCount": 4,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 2,
+        "rows": 2
+      },
+      "animations": [
+        {
+          "key": "hero.ship.shooting",
+          "frames": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frameRate": 12,
+          "repeat": 0,
+          "frameTimings": [
+            {
+              "delayMs": 70
+            },
+            {
+              "delayMs": 70,
+              "tag": "shoot"
+            },
+            {
+              "delayMs": 90
+            },
+            {
+              "delayMs": 90
+            }
+          ]
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "activeVersion": "default",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/hero.ship.shooting.default.svg",
+          "prompt": "Hero starfighter shooting animation. Weapon charge, muzzle flash from nose cannon, recoil recovery, same ship identity, transparent background.",
+          "createdAt": "2026-06-03T00:00:00.000Z",
+          "model": "starter-asset"
+        }
+      }
+    },
+    "hero.ship.hit": {
+      "id": "hero.ship.hit",
+      "kind": "spritesheet",
+      "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+      "dimensions": {
+        "width": 128,
+        "height": 128
+      },
+      "frameGrid": {
+        "frameCount": 4,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 2,
+        "rows": 2
+      },
+      "animations": [
+        {
+          "key": "hero.ship.hit",
+          "frames": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frameRate": 12,
+          "repeat": 0
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "activeVersion": "default",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/hero.ship.hit.default.svg",
+          "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+          "createdAt": "2026-06-03T00:00:00.000Z",
+          "model": "starter-asset"
         }
       }
     }

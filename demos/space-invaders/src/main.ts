@@ -19,7 +19,7 @@ const debugClient = new AiAssetDebugClient(assetApi);
 
 type DemoScene = Phaser.Scene & {
   aiRuntime?: AiAssetRuntime;
-  hero?: Phaser.GameObjects.Image;
+  hero?: Phaser.GameObjects.Sprite;
   invaders?: Phaser.GameObjects.Sprite[];
   applyAssetTexture?: (assetId: string, textureKey: string, asset: AiAssetDefinition) => void;
 };
@@ -35,7 +35,7 @@ async function boot(): Promise<void> {
 function startGame(assetManifest: AiAssetManifest): void {
   class SpaceInvadersScene extends Phaser.Scene {
     aiRuntime?: AiAssetRuntime;
-    hero?: Phaser.GameObjects.Image;
+    hero?: Phaser.GameObjects.Sprite;
     invaders: Phaser.GameObjects.Sprite[] = [];
     applyAssetTexture?: (assetId: string, textureKey: string, asset: AiAssetDefinition) => void;
 
@@ -49,6 +49,10 @@ function startGame(assetManifest: AiAssetManifest): void {
     private score = 0;
     private scoreText?: Phaser.GameObjects.Text;
     private statusText?: Phaser.GameObjects.Text;
+    private heroAnimationSizes = new Map<string, { width: number; height: number }>();
+    private heroAnimations = new Map<string, AiAssetAnimation>();
+    private heroAnimationKey?: string;
+    private heroLockedUntil = 0;
     private invaderAnimationSizes = new Map<string, { width: number; height: number }>();
     private invaderAnimations = new Map<string, AiAssetAnimation>();
     private invaderAnimationKeys = new WeakMap<Phaser.GameObjects.Sprite, string>();
@@ -68,9 +72,17 @@ function startGame(assetManifest: AiAssetManifest): void {
     create() {
       sceneRef = this;
       this.aiRuntime = new AiAssetRuntime(this, assetManifest);
+      createAiAnimations(this, assetManifest, "hero.ship.idle");
+      createAiAnimations(this, assetManifest, "hero.ship.moving");
+      createAiAnimations(this, assetManifest, "hero.ship.shooting");
+      createAiAnimations(this, assetManifest, "hero.ship.hit");
       createAiAnimations(this, assetManifest, "invader.scout.idle");
       createAiAnimations(this, assetManifest, "invader.scout.shooting");
       createAiAnimations(this, assetManifest, "invader.scout.destroyed");
+      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.idle"]);
+      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.moving"]);
+      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.shooting"]);
+      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.hit"]);
       this.registerInvaderAnimationSize(assetManifest.assets["invader.scout.idle"]);
       this.registerInvaderAnimationSize(assetManifest.assets["invader.scout.shooting"]);
       this.registerInvaderAnimationSize(assetManifest.assets["invader.scout.destroyed"]);
@@ -91,14 +103,23 @@ function startGame(assetManifest: AiAssetManifest): void {
         fontSize: "15px"
       });
 
-      this.hero = this.add.image(320, 570, this.aiRuntime.key("hero.ship"));
-      this.applyDisplaySize(this.hero, assetManifest.assets["hero.ship"]);
+      this.hero = this.add.sprite(320, 570, this.aiRuntime.key("hero.ship.idle"));
+      this.playHeroAnimation("hero.ship.idle");
       this.spawnInvaders();
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
         if (assetId === "hero.ship" && this.hero) {
+          this.heroAnimationKey = undefined;
           this.hero.setTexture(textureKey);
           this.applyDisplaySize(this.hero, asset);
+        }
+
+        if (assetId.startsWith("hero.ship.")) {
+          this.recreateHeroAnimations(assetId, textureKey, asset);
+
+          if (this.heroAnimationKey === assetId) {
+            this.playHeroAnimation(assetId, true);
+          }
         }
 
         if (assetId === "invader.scout") {
@@ -109,7 +130,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         }
 
         if (assetId.startsWith("invader.scout.")) {
-          this.recreateAiAnimations(assetId, textureKey, asset);
+          this.recreateInvaderAnimations(assetId, textureKey, asset);
           for (const invader of this.invaders ?? []) {
             const currentAnimationKey = this.invaderAnimationKeys.get(invader);
 
@@ -130,6 +151,10 @@ function startGame(assetManifest: AiAssetManifest): void {
         },
         previewDisplaySize: {
           "hero.ship": { width: 54, height: 54 },
+          "hero.ship.idle": { width: 54, height: 54 },
+          "hero.ship.moving": { width: 54, height: 54 },
+          "hero.ship.shooting": { width: 54, height: 54 },
+          "hero.ship.hit": { width: 54, height: 54 },
           "invader.scout": { width: 42, height: 42 },
           "invader.scout.idle": { width: 42, height: 42 },
           "invader.scout.shooting": { width: 42, height: 42 },
@@ -153,13 +178,22 @@ function startGame(assetManifest: AiAssetManifest): void {
       if (this.input.keyboard && !this.input.keyboard.enabled) return;
 
       const speed = 280 * (delta / 1000);
-      if (this.cursors.left.isDown) this.hero.x -= speed;
-      if (this.cursors.right.isDown) this.hero.x += speed;
+      const isMovingLeft = this.cursors.left.isDown;
+      const isMovingRight = this.cursors.right.isDown;
+      const isMoving = isMovingLeft || isMovingRight;
+
+      if (isMovingLeft) this.hero.x -= speed;
+      if (isMovingRight) this.hero.x += speed;
       this.hero.x = Phaser.Math.Clamp(this.hero.x, 32, 608);
 
       if (this.fireKey?.isDown && this.time.now - this.lastShotAt > 220) {
         this.lastShotAt = this.time.now;
-        this.bullets.push(this.add.rectangle(this.hero.x, this.hero.y - 35, 4, 18, 0x6ed3ff));
+        this.playHeroActionAnimation("hero.ship.shooting");
+        this.scheduleHeroLaser("hero.ship.shooting");
+      }
+
+      if (this.time.now >= this.heroLockedUntil) {
+        this.playHeroAnimation(isMoving ? "hero.ship.moving" : "hero.ship.idle");
       }
     }
 
@@ -231,6 +265,7 @@ function startGame(assetManifest: AiAssetManifest): void {
           bullet.destroy();
           this.invaderBullets = this.invaderBullets.filter((candidate) => candidate !== bullet);
           this.statusText?.setText("Hit. The ship holds.");
+          this.playHeroActionAnimation("hero.ship.hit");
         }
       }
 
@@ -269,7 +304,30 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.statusText?.setText(`${message} New wave incoming.`);
     }
 
-    private recreateAiAnimations(
+    private recreateHeroAnimations(
+      assetId: string,
+      textureKey: string,
+      asset = assetManifest.assets[assetId]
+    ): string[] {
+      const animationKeys: string[] = [];
+
+      for (const animation of asset?.animations ?? []) {
+        this.anims.remove(animation.key);
+        this.anims.create({
+          key: animation.key,
+          frames: this.animationFramesWithTiming(textureKey, animation),
+          frameRate: animation.frameRate,
+          repeat: animation.repeat ?? -1
+        });
+        animationKeys.push(animation.key);
+      }
+
+      this.registerHeroAnimationSize(asset);
+
+      return animationKeys;
+    }
+
+    private recreateInvaderAnimations(
       assetId: string,
       textureKey: string,
       asset = assetManifest.assets[assetId]
@@ -290,6 +348,60 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.registerInvaderAnimationSize(asset);
 
       return animationKeys;
+    }
+
+    private registerHeroAnimationSize(asset: AiAssetDefinition | undefined): void {
+      const size = this.displaySizeForAsset(asset);
+
+      for (const animation of asset?.animations ?? []) {
+        this.heroAnimationSizes.set(animation.key, size);
+        this.heroAnimations.set(animation.key, animation);
+      }
+    }
+
+    private playHeroAnimation(animationKey: string, forceRestart = false): void {
+      if (!this.hero || (!forceRestart && this.heroAnimationKey === animationKey)) return;
+
+      this.heroAnimationKey = animationKey;
+      this.hero.play(animationKey);
+      this.applyHeroAnimationSize(animationKey);
+    }
+
+    private playHeroActionAnimation(animationKey: string): void {
+      if (this.hero) {
+        this.heroAnimationKey = animationKey;
+        this.hero.play(animationKey, true);
+        this.applyHeroAnimationSize(animationKey);
+      }
+      this.heroLockedUntil = this.time.now + this.animationDuration(animationKey);
+
+      this.hero?.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+        if (this.time.now >= this.heroLockedUntil) {
+          this.playHeroAnimation("hero.ship.idle");
+        }
+      });
+    }
+
+    private applyHeroAnimationSize(animationKey: string): void {
+      if (!this.hero) return;
+
+      const size = this.heroAnimationSizes.get(animationKey) ??
+        this.displaySizeForAsset(assetManifest.assets[animationKey]);
+      this.hero.setDisplaySize(size.width, size.height);
+      this.hero.setOrigin(0.5, 0.5);
+    }
+
+    private scheduleHeroLaser(animationKey: string): void {
+      if (!this.hero) return;
+
+      const shooter = this.hero;
+      const delayMs = this.delayUntilTaggedFrame(animationKey, "shoot");
+
+      this.time.delayedCall(delayMs, () => {
+        if (!shooter.active || this.heroAnimationKey !== animationKey) return;
+
+        this.bullets.push(this.add.rectangle(shooter.x, shooter.y - 35, 4, 18, 0x6ed3ff));
+      });
     }
 
     private registerInvaderAnimationSize(asset: AiAssetDefinition | undefined): void {
@@ -363,6 +475,18 @@ function startGame(assetManifest: AiAssetManifest): void {
         ), 0);
     }
 
+    private animationDuration(animationKey: string): number {
+      const animation = this.animationForKey(animationKey);
+
+      if (!animation) return 0;
+
+      const defaultDelay = Math.round(1000 / animation.frameRate);
+
+      return animation.frames.reduce((total, _frame, index) => (
+        total + (animation.frameTimings?.[index]?.delayMs ?? defaultDelay)
+      ), 0);
+    }
+
     private applyInvaderFrameOffset(
       invader: Phaser.GameObjects.Sprite,
       animationKey: string,
@@ -393,7 +517,8 @@ function startGame(assetManifest: AiAssetManifest): void {
     }
 
     private animationForKey(animationKey: string): AiAssetAnimation | undefined {
-      return this.invaderAnimations.get(animationKey) ??
+      return this.heroAnimations.get(animationKey) ??
+        this.invaderAnimations.get(animationKey) ??
         assetManifest.assets[animationKey]?.animations
         ?.find((animation) => animation.key === animationKey);
     }

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect width="128" height="128" fill="none"/>
+  <defs>
+    <g id="ship-left">
+      <g transform="rotate(-8 32 32)">
+        <path d="M32 7 45 50 32 43 19 50Z" fill="#4cc9f0" stroke="#e6fbff" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M32 19 38 41 32 37 26 41Z" fill="#13314a"/>
+        <circle cx="32" cy="31" r="5" fill="#fff4a3"/>
+      </g>
+      <path d="M23 51 27 61 31 51Z" fill="#fb7185"/>
+      <path d="M37 51 41 61 45 51Z" fill="#fb7185"/>
+      <path d="M26 54 29 64 32 54Z" fill="#facc15"/>
+      <path d="M34 54 37 64 40 54Z" fill="#facc15"/>
+    </g>
+    <g id="ship-right">
+      <g transform="rotate(8 32 32)">
+        <path d="M32 7 45 50 32 43 19 50Z" fill="#4cc9f0" stroke="#e6fbff" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M32 19 38 41 32 37 26 41Z" fill="#13314a"/>
+        <circle cx="32" cy="31" r="5" fill="#fff4a3"/>
+      </g>
+      <path d="M19 51 23 62 27 51Z" fill="#fb7185"/>
+      <path d="M35 51 39 62 43 51Z" fill="#fb7185"/>
+      <path d="M22 54 25 64 28 54Z" fill="#facc15"/>
+      <path d="M32 54 35 64 38 54Z" fill="#facc15"/>
+    </g>
+  </defs>
+  <use href="#ship-left" x="0" y="0"/>
+  <use href="#ship-right" x="64" y="0"/>
+  <use href="#ship-left" x="0" y="64"/>
+  <use href="#ship-right" x="64" y="64"/>
+</svg>
