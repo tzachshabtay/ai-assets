@@ -16,7 +16,7 @@ export const assets = defineAiAssets(
       "quality": "low",
       "format": "png"
     },
-    "activeVersion": "promoted-1780445988143",
+    "activeVersion": "promoted-1780541852813",
     "versions": {
       "default": {
         "name": "default",
@@ -53,6 +53,21 @@ export const assets = defineAiAssets(
           "format": "png"
         },
         "parentVersion": "promoted-1780369898360",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780541852813": {
+        "name": "promoted-1780541852813",
+        "file": "/assets/hero.ship.promoted-1780541852813.png",
+        "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
+        "createdAt": "2026-06-04T02:57:32.834Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png"
+        },
+        "parentVersion": "promoted-1780445988143",
         "notes": "Promoted from the AI asset designer."
       }
     },
@@ -103,7 +118,7 @@ export const assets = defineAiAssets(
         "assetId": "invader.scout.destroyed"
       }
     },
-    "activeVersion": "promoted-1780250792117",
+    "activeVersion": "promoted-1780541957309",
     "versions": {
       "default": {
         "name": "default",
@@ -156,6 +171,21 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780250659533",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780541957309": {
+        "name": "promoted-1780541957309",
+        "file": "/assets/invader.scout.promoted-1780541957309.png",
+        "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background. red color.",
+        "createdAt": "2026-06-04T02:59:17.322Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png"
+        },
+        "parentVersion": "promoted-1780250792117",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -196,7 +226,7 @@ export const assets = defineAiAssets(
         "invader.scout"
       ]
     },
-    "activeVersion": "promoted-1780447725139",
+    "activeVersion": "promoted-1780542126752",
     "versions": {
       "default": {
         "name": "default",
@@ -276,13 +306,31 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780365798285",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780542126752": {
+        "name": "promoted-1780542126752",
+        "file": "/assets/invader.scout.idle.promoted-1780542126752.png",
+        "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+        "createdAt": "2026-06-04T03:02:06.779Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.scout"
+          ]
+        },
+        "parentVersion": "promoted-1780447725139",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.scout.shooting": {
     "id": "invader.scout.shooting",
     "kind": "spritesheet",
-    "prompt": "shooting animation",
+    "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
     "dimensions": {
       "width": 192,
       "height": 192
@@ -363,7 +411,7 @@ export const assets = defineAiAssets(
         "invader.scout"
       ]
     },
-    "activeVersion": "promoted-1780456444685",
+    "activeVersion": "promoted-1780542418532",
     "versions": {
       "default": {
         "name": "default",
@@ -461,6 +509,24 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780454683156",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780542418532": {
+        "name": "promoted-1780542418532",
+        "file": "/assets/invader.scout.shooting.promoted-1780542418532.png",
+        "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
+        "createdAt": "2026-06-04T03:06:58.549Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.scout"
+          ]
+        },
+        "parentVersion": "promoted-1780456444685",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -505,7 +571,7 @@ export const assets = defineAiAssets(
         "invader.scout"
       ]
     },
-    "activeVersion": "promoted-1780450920237",
+    "activeVersion": "promoted-1780542613732",
     "versions": {
       "default": {
         "name": "default",
@@ -567,6 +633,24 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780365215588",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780542613732": {
+        "name": "promoted-1780542613732",
+        "file": "/assets/invader.scout.destroyed.promoted-1780542613732.png",
+        "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+        "createdAt": "2026-06-04T03:10:13.745Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.scout"
+          ]
+        },
+        "parentVersion": "promoted-1780450920237",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -607,7 +691,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "promoted-1780535677815",
+    "activeVersion": "promoted-1780542772694",
     "versions": {
       "default": {
         "name": "default",
@@ -650,6 +734,24 @@ export const assets = defineAiAssets(
           ]
         },
         "parentVersion": "promoted-1780535453778",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780542772694": {
+        "name": "promoted-1780542772694",
+        "file": "/assets/hero.ship.idle.promoted-1780542772694.png",
+        "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+        "createdAt": "2026-06-04T03:12:52.714Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "promoted-1780535677815",
         "notes": "Promoted from the AI asset designer."
       }
     }
@@ -706,7 +808,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "promoted-1780536687601",
+    "activeVersion": "promoted-1780542959748",
     "versions": {
       "default": {
         "name": "default",
@@ -731,6 +833,24 @@ export const assets = defineAiAssets(
           ]
         },
         "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780542959748": {
+        "name": "promoted-1780542959748",
+        "file": "/assets/hero.ship.shooting.promoted-1780542959748.png",
+        "prompt": "Hero starfighter shooting animation (without the actual laser being shot). Weapon charge, muzzle flash from the cannon at the top, recoil recovery, same ship identity, transparent background.",
+        "createdAt": "2026-06-04T03:15:59.799Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "promoted-1780536687601",
         "notes": "Promoted from the AI asset designer."
       }
     }
@@ -774,7 +894,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "promoted-1780536958079",
+    "activeVersion": "promoted-1780543095703",
     "versions": {
       "default": {
         "name": "default",
@@ -800,13 +920,31 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "default",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780543095703": {
+        "name": "promoted-1780543095703",
+        "file": "/assets/hero.ship.hit.promoted-1780543095703.png",
+        "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+        "createdAt": "2026-06-04T03:18:15.725Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "promoted-1780536958079",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "hero.ship.moving-left": {
     "id": "hero.ship.moving-left",
     "kind": "spritesheet",
-    "prompt": "Hero starfighter moving left animation. Slight banking tilt to the left, bright rear jets, energetic thrust, same ship identity, transparent background.",
+    "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
     "dimensions": {
       "width": 256,
       "height": 256
@@ -862,7 +1000,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "promoted-1780537093274",
+    "activeVersion": "promoted-1780543214092",
     "versions": {
       "default": {
         "name": "default",
@@ -924,8 +1062,62 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780536722820",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780543214092": {
+        "name": "promoted-1780543214092",
+        "file": "/assets/hero.ship.moving-left.promoted-1780543214092.png",
+        "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+        "createdAt": "2026-06-04T03:20:14.110Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "promoted-1780537093274",
+        "notes": "Promoted from the AI asset designer."
       }
     }
+  },
+  "background.space": {
+    "id": "background.space",
+    "kind": "image",
+    "prompt": "Full-screen background for a 2D space invaders game. Deep outer space, distant stars and planets, readable but subdued behind gameplay, no text, no ships, no enemies.",
+    "dimensions": {
+      "width": 640,
+      "height": 640
+    },
+    "settings": {
+      "model": "gpt-image-2",
+      "background": "opaque",
+      "quality": "low",
+      "format": "png"
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/background.space.default.svg",
+        "prompt": "Full-screen background for a 2D space invaders game. Deep outer space, distant stars and planets, readable but subdued behind gameplay, no text, no ships, no enemies.",
+        "createdAt": "2026-06-03T00:00:00.000Z",
+        "model": "starter-asset"
+      }
+    }
+  }
+}, {
+  "styleGuide": {
+    "prompt": "Hand-painted 1990s cartoon adventure game background, exaggerated perspective, whimsical architecture, bright saturated colors, smooth ink outlines, highly expressive shapes, playful visual humor, stylized proportions, curved and distorted geometry, detailed environmental storytelling, clean cel-animation aesthetic, retro PC adventure game art, professionally illustrated, high detail, colorful and cheerful atmosphere.",
+    "images": [
+      {
+        "name": "style.png",
+        "file": "/assets/style-guide.1780542427743.1.png",
+        "mimeType": "image/png"
+      }
+    ]
   }
 }
 );

@@ -19,6 +19,7 @@ const debugClient = new AiAssetDebugClient(assetApi);
 
 type DemoScene = Phaser.Scene & {
   aiRuntime?: AiAssetRuntime;
+  background?: Phaser.GameObjects.Image;
   hero?: Phaser.GameObjects.Sprite;
   invaders?: Phaser.GameObjects.Sprite[];
   applyAssetTexture?: (assetId: string, textureKey: string, asset: AiAssetDefinition) => void;
@@ -35,6 +36,7 @@ async function boot(): Promise<void> {
 function startGame(assetManifest: AiAssetManifest): void {
   class SpaceInvadersScene extends Phaser.Scene {
     aiRuntime?: AiAssetRuntime;
+    background?: Phaser.GameObjects.Image;
     hero?: Phaser.GameObjects.Sprite;
     invaders: Phaser.GameObjects.Sprite[] = [];
     applyAssetTexture?: (assetId: string, textureKey: string, asset: AiAssetDefinition) => void;
@@ -89,7 +91,9 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.cursors = this.input.keyboard?.createCursorKeys();
       this.fireKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-      this.add.rectangle(320, 320, 640, 640, 0x10131a);
+      this.add.rectangle(320, 320, 640, 640, 0x10131a).setDepth(-100);
+      this.background = this.add.image(320, 320, this.aiRuntime.key("background.space"));
+      this.background.setDisplaySize(640, 640).setDepth(-90);
       this.add.text(18, 14, "AI Assets Invaders", {
         color: "#f8fafc",
         fontSize: "20px"
@@ -108,6 +112,11 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.spawnInvaders();
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
+        if (assetId === "background.space" && this.background) {
+          this.background.setTexture(textureKey);
+          this.background.setDisplaySize(640, 640);
+        }
+
         if (assetId === "hero.ship" && this.hero) {
           this.heroAnimationKey = undefined;
           this.hero.setTexture(textureKey);
@@ -145,7 +154,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         scene: this,
         manifest: assetManifest,
         client: debugClient,
-        assetIds: ["hero.ship", "invader.scout"],
+        assetIds: ["hero.ship", "invader.scout", "background.space"],
         onManifestUpdated: (updatedManifest) => {
           manifest = updatedManifest;
         },
@@ -158,7 +167,8 @@ function startGame(assetManifest: AiAssetManifest): void {
           "invader.scout": { width: 42, height: 42 },
           "invader.scout.idle": { width: 42, height: 42 },
           "invader.scout.shooting": { width: 42, height: 42 },
-          "invader.scout.destroyed": { width: 42, height: 42 }
+          "invader.scout.destroyed": { width: 42, height: 42 },
+          "background.space": { width: 180, height: 180 }
         },
         onPreview: (assetId, textureKey, asset) => {
           this.applyAssetTexture?.(assetId, textureKey, asset);

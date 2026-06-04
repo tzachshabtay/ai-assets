@@ -191,15 +191,19 @@ function gameAssetPrompt(
     "",
     "Create this as a clean 2D game asset sprite.",
     `Asset kind: ${request.asset.kind}.`,
-    `Target canvas: ${request.asset.dimensions.width}x${request.asset.dimensions.height}.`,
-    "Use a transparent background, centered subject, no text, no watermark, no cast shadow, no floor shadow, no ground plane, no reflection. Keep the sprite readable through its shape and pose; do not darken or recolor the character to create contrast."
+    `Target canvas: ${request.asset.dimensions.width}x${request.asset.dimensions.height}.`
   ];
 
   if (shouldRequestRgbaPng(request, context)) {
     lines.push(
+      "Use a transparent background, centered subject, no text, no watermark, no cast shadow, no floor shadow, no ground plane, no reflection. Keep the sprite readable through its shape and pose; do not darken or recolor the character to create contrast.",
       "Clean it into a real RGBA PNG: the final game asset needs actual alpha transparency, not white, black, gray, checkerboard, or any matte color.",
       `For local transparency processing, render every background and empty padding pixel as the flat chroma-key color ${hexColor(context.chromaKey)}. Do not use that exact chroma-key color inside the game asset itself.`,
       "Keep the asset edges crisp against the chroma-key background so it can be removed cleanly."
+    );
+  } else {
+    lines.push(
+      "Fill the entire canvas edge-to-edge with an opaque image. Do not use transparency, empty padding, borders, text, or watermarks."
     );
   }
 
@@ -221,11 +225,18 @@ function gameAssetPrompt(
       "The grid layout is mandatory even if the animation would look nicer in another arrangement."
     );
   } else {
-    lines.push(
-      "Single-image asset contract: create exactly one complete sprite on the canvas.",
-      "Do not create a spritesheet, turnaround sheet, contact sheet, sequence, grid, multiple poses, multiple variants, panels, labels, or frame divisions.",
-      "Keep the full subject visible with transparent padding on all sides. The subject must not touch the canvas edges and must not be cropped."
-    );
+    if (shouldRequestRgbaPng(request, context)) {
+      lines.push(
+        "Single-image asset contract: create exactly one complete sprite on the canvas.",
+        "Do not create a spritesheet, turnaround sheet, contact sheet, sequence, grid, multiple poses, multiple variants, panels, labels, or frame divisions.",
+        "Keep the full subject visible with transparent padding on all sides. The subject must not touch the canvas edges and must not be cropped."
+      );
+    } else {
+      lines.push(
+        "Single-image background contract: create exactly one continuous scene covering the complete canvas.",
+        "Do not create a spritesheet, contact sheet, sequence, grid, panels, labels, frame divisions, or isolated cutout sprite."
+      );
+    }
   }
 
   if (request.references?.length) {
