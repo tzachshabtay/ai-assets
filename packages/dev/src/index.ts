@@ -11,12 +11,14 @@ export { createOpenAiImageProvider } from "./provider.js";
 export type {
   AssetStoreOptions,
   SaveGeneratedOptionInput,
-  SaveGeneratedOptionResult
+  SaveGeneratedOptionResult,
+  SaveStyleGuideInput
 } from "./asset-store.js";
 
 export {
   readManifest,
   saveGeneratedOption,
+  saveStyleGuide,
   writeManifestModule,
   writeManifest
 } from "./asset-store.js";

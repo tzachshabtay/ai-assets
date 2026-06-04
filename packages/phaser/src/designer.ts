@@ -4,7 +4,11 @@ import type {
   AiAssetDefinition,
   AiAssetManifest
 } from "@ai-game-assets/core";
-import { AiAssetDebugClient, type GeneratedDebugOption } from "./debug-client.js";
+import {
+  AiAssetDebugClient,
+  type DebugStyleGuideDraft,
+  type GeneratedDebugOption
+} from "./debug-client.js";
 
 type AiAssetTextureFrameConfig = {
   frameWidth: number;
@@ -63,6 +67,7 @@ type DesignerElements = {
   root: HTMLDivElement;
   toggle: HTMLButtonElement;
   panel: HTMLDivElement;
+  styleButton: HTMLButtonElement;
   assetSelect: HTMLSelectElement;
   animationSelect: HTMLSelectElement;
   animationField: HTMLLabelElement;
@@ -83,6 +88,14 @@ type DesignerElements = {
   status: HTMLDivElement;
 };
 
+type StyleGuideDraft = {
+  prompt: string;
+  images: Array<{
+    name: string;
+    src: string;
+  }>;
+};
+
 export function installAiAssetDesigner(
   options: AiAssetDesignerOptions
 ): AiAssetDesigner {
@@ -95,6 +108,7 @@ export function installAiAssetDesigner(
   let selectedOption: GeneratedDebugOption | undefined;
   let stopCurrentAnimationPreview: (() => void) | undefined;
   let editedCurrentOption: GeneratedDebugOption | undefined;
+  let styleGuideDraft = styleGuideDraftFromManifest(manifest);
 
   if (!selectedAssetId) {
     throw new Error("AI asset designer requires at least one asset.");
@@ -225,6 +239,7 @@ export function installAiAssetDesigner(
         assetId: selectedTargetAssetId,
         prompt: elements.promptInput.value,
         count: options.optionCount ?? 3,
+        styleGuide: await styleGuideRequest(styleGuideDraft),
         ...generationOverridesFromInputs(elements, manifest.assets[selectedTargetAssetId])
       });
 
@@ -288,6 +303,35 @@ export function installAiAssetDesigner(
 
   elements.restartButton.addEventListener("click", () => {
     window.location.reload();
+  });
+
+  elements.styleButton.addEventListener("click", () => {
+    void openStyleGuideEditor({
+      root: elements.root,
+      initial: styleGuideDraft,
+      onConfirm(draft) {
+        styleGuideDraft = draft;
+        setStatus(
+          elements,
+          hasStyleGuide(draft)
+            ? "Style guide applied to future generations."
+            : "Style guide cleared for future generations.",
+          "success"
+        );
+      },
+      async onPromote(draft) {
+        try {
+          await client.promoteStyle(await styleGuideRequest(draft));
+          styleGuideDraft = draft;
+          manifest = await client.getManifest();
+          options.onManifestUpdated?.(manifest);
+          setStatus(elements, "Style guide promoted to project storage.", "success");
+        } catch (error) {
+          setStatus(elements, `Style promotion failed. ${errorMessage(error)}`, "error");
+          throw error;
+        }
+      }
+    });
   });
 
   elements.currentAnimationButton.addEventListener("click", (event) => {
@@ -370,6 +414,13 @@ function createDesignerElements(
   const title = document.createElement("div");
   title.className = "ai-game-assets-designer__title";
   title.textContent = options.title ?? "AI Asset Designer";
+  const styleButton = document.createElement("button");
+  styleButton.type = "button";
+  styleButton.className = "ai-game-assets-designer__style-button";
+  styleButton.textContent = "Define style...";
+  const header = document.createElement("div");
+  header.className = "ai-game-assets-designer__header";
+  header.append(title, styleButton);
 
   const assetSelect = document.createElement("select");
   assetSelect.className = "ai-game-assets-designer__select";
@@ -444,7 +495,7 @@ function createDesignerElements(
   status.className = "ai-game-assets-designer__status";
 
   panel.append(
-    title,
+    header,
     labelWrap("Asset", assetSelect),
     animationField,
     dimensionGrid,
@@ -462,6 +513,7 @@ function createDesignerElements(
     root,
     toggle,
     panel,
+    styleButton,
     assetSelect,
     animationSelect,
     animationField,
@@ -692,6 +744,149 @@ function startSpritesheetPreview(options: {
     }
     options.element.removeAttribute("style");
   };
+}
+
+async function openStyleGuideEditor(options: {
+  root: HTMLElement;
+  initial: StyleGuideDraft;
+  onConfirm(draft: StyleGuideDraft): void;
+  onPromote(draft: StyleGuideDraft): void | Promise<void>;
+}): Promise<void> {
+  const dialog = document.createElement("div");
+  dialog.className = "ai-game-assets-designer__modal";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", "Define style guide");
+
+  const card = document.createElement("div");
+  card.className = "ai-game-assets-designer__modal-card";
+  const title = document.createElement("div");
+  title.className = "ai-game-assets-designer__modal-title";
+  title.textContent = "Style guide";
+
+  const promptInput = document.createElement("textarea");
+  promptInput.rows = 5;
+  promptInput.value = options.initial.prompt;
+  const promptField = labelWrap("Style prompt", promptInput);
+
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = "image/png,image/jpeg,image/webp";
+  fileInput.multiple = true;
+  fileInput.hidden = true;
+  const uploadButton = document.createElement("button");
+  uploadButton.type = "button";
+  uploadButton.textContent = "Upload images";
+
+  const dropZone = document.createElement("div");
+  dropZone.className = "ai-game-assets-designer__style-drop";
+  dropZone.tabIndex = 0;
+  dropZone.textContent = "Drop style reference images here";
+
+  const imageList = document.createElement("div");
+  imageList.className = "ai-game-assets-designer__style-images";
+  let images = options.initial.images.map((image) => ({ ...image }));
+
+  const renderImages = () => {
+    imageList.innerHTML = "";
+
+    for (const [index, image] of images.entries()) {
+      const item = document.createElement("div");
+      item.className = "ai-game-assets-designer__style-image";
+      const preview = document.createElement("img");
+      preview.src = image.src;
+      preview.alt = image.name;
+      const name = document.createElement("span");
+      name.textContent = image.name;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.setAttribute("aria-label", `Remove ${image.name}`);
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => {
+        images = images.filter((_, candidateIndex) => candidateIndex !== index);
+        renderImages();
+      });
+      item.append(preview, name, remove);
+      imageList.append(item);
+    }
+  };
+
+  const addFiles = async (files: FileList | File[]) => {
+    const loaded = await Promise.all(
+      Array.from(files)
+        .filter((file) => file.type.startsWith("image/"))
+        .map(async (file) => ({
+          name: file.name,
+          src: await fileToDataUrl(file)
+        }))
+    );
+    images.push(...loaded);
+    renderImages();
+  };
+
+  uploadButton.addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files) void addFiles(fileInput.files);
+    fileInput.value = "";
+  });
+  dropZone.addEventListener("dragover", (event) => {
+    event.preventDefault();
+    dropZone.classList.add("is-dragging");
+  });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("is-dragging"));
+  dropZone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    dropZone.classList.remove("is-dragging");
+
+    if (event.dataTransfer?.files) {
+      void addFiles(event.dataTransfer.files);
+    }
+  });
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.textContent = "Cancel";
+  const confirmButton = document.createElement("button");
+  confirmButton.type = "button";
+  confirmButton.textContent = "Confirm";
+  const promoteButton = document.createElement("button");
+  promoteButton.type = "button";
+  promoteButton.textContent = "Promote style";
+  const actions = document.createElement("div");
+  actions.className = "ai-game-assets-designer__modal-actions";
+  actions.append(cancelButton, promoteButton, confirmButton);
+
+  const draft = (): StyleGuideDraft => ({
+    prompt: promptInput.value.trim(),
+    images: images.map((image) => ({ ...image }))
+  });
+  const close = () => dialog.remove();
+
+  cancelButton.addEventListener("click", close);
+  confirmButton.addEventListener("click", () => {
+    options.onConfirm(draft());
+    close();
+  });
+  promoteButton.addEventListener("click", async () => {
+    promoteButton.disabled = true;
+
+    try {
+      const current = draft();
+      options.onConfirm(current);
+      await options.onPromote(current);
+      close();
+    } catch {
+      // The caller reports promotion errors in the designer status area.
+    } finally {
+      promoteButton.disabled = false;
+    }
+  });
+
+  card.append(title, promptField, dropZone, uploadButton, fileInput, imageList, actions);
+  dialog.append(card);
+  options.root.append(dialog);
+  renderImages();
+  promptInput.focus();
 }
 
 async function openAnimationEditor(options: {
@@ -1092,6 +1287,47 @@ async function imageSourceToDataUrl(src: string): Promise<string> {
   });
 }
 
+function styleGuideDraftFromManifest(manifest: AiAssetManifest): StyleGuideDraft {
+  return {
+    prompt: manifest.styleGuide?.prompt ?? "",
+    images: (manifest.styleGuide?.images ?? []).map((image) => ({
+      name: image.name,
+      src: image.file
+    }))
+  };
+}
+
+function hasStyleGuide(styleGuide: StyleGuideDraft): boolean {
+  return Boolean(styleGuide.prompt.trim() || styleGuide.images.length);
+}
+
+async function styleGuideRequest(styleGuide: StyleGuideDraft): Promise<DebugStyleGuideDraft> {
+  return {
+    prompt: styleGuide.prompt.trim() || undefined,
+    images: await Promise.all(styleGuide.images.map(async (image) => ({
+      name: image.name,
+      dataUrl: await imageSourceToDataUrl(image.src)
+    })))
+  };
+}
+
+function fileToDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+      } else {
+        reject(new Error("Could not read style reference image."));
+      }
+    });
+    reader.addEventListener("error", () => {
+      reject(reader.error ?? new Error("Could not read style reference image."));
+    });
+    reader.readAsDataURL(file);
+  });
+}
+
 function mimeTypeFromDataUrl(dataUrl: string): string {
   return /^data:([^;,]+)/.exec(dataUrl)?.[1] ?? "image/png";
 }
@@ -1168,10 +1404,26 @@ function ensureDesignerStyles(): void {
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
 }
 .ai-game-assets-designer[data-open="true"] .ai-game-assets-designer__panel { display: block; }
-.ai-game-assets-designer__title {
+.ai-game-assets-designer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 12px;
+}
+.ai-game-assets-designer__title {
   font-weight: 700;
   font-size: 15px;
+}
+.ai-game-assets-designer__style-button {
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #273142;
+  color: #fff;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
 }
 .ai-game-assets-designer__field {
   display: grid;
@@ -1389,6 +1641,60 @@ function ensureDesignerStyles(): void {
   color: #fff;
   padding: 9px 11px;
   font: inherit;
+  cursor: pointer;
+}
+.ai-game-assets-designer__style-drop {
+  display: grid;
+  place-items: center;
+  min-height: 90px;
+  margin-bottom: 10px;
+  border: 1px dashed #58657a;
+  border-radius: 6px;
+  background: #0f1218;
+  color: #b9c1cf;
+  font-size: 13px;
+}
+.ai-game-assets-designer__style-drop.is-dragging {
+  border-color: #6ed3ff;
+  color: #dbeafe;
+}
+.ai-game-assets-designer__style-drop + button {
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #273142;
+  color: #fff;
+  padding: 8px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+.ai-game-assets-designer__style-images {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ai-game-assets-designer__style-image {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid #384251;
+  border-radius: 6px;
+  background: #0f1218;
+  font-size: 12px;
+}
+.ai-game-assets-designer__style-image img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+.ai-game-assets-designer__style-image span {
+  overflow-wrap: anywhere;
+}
+.ai-game-assets-designer__style-image button {
+  border: 0;
+  background: transparent;
+  color: #fca5a5;
   cursor: pointer;
 }
 `;

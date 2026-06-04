@@ -2,6 +2,7 @@ import type {
   AiAssetDefinition,
   AiAssetManifest,
   AiAssetSelection,
+  AiAssetStyleGuide,
   AiAssetVersion,
   ResolvedAiAsset
 } from "./types.js";
@@ -12,11 +13,13 @@ export function defineAiAsset(asset: AiAssetDefinition): AiAssetDefinition {
 }
 
 export function defineAiAssets(
-  assets: Record<string, AiAssetDefinition>
+  assets: Record<string, AiAssetDefinition>,
+  options: { styleGuide?: AiAssetStyleGuide } = {}
 ): AiAssetManifest {
   const manifest: AiAssetManifest = {
     schemaVersion: 1,
-    assets
+    assets,
+    styleGuide: options.styleGuide
   };
 
   assertManifest(manifest);
@@ -34,6 +37,15 @@ export function assertManifest(manifest: AiAssetManifest): void {
     }
 
     assertAsset(asset);
+  }
+
+  if (manifest.styleGuide?.prompt !== undefined && !manifest.styleGuide.prompt.trim()) {
+    throw new Error("styleGuide.prompt must be non-empty when provided.");
+  }
+
+  for (const [index, image] of (manifest.styleGuide?.images ?? []).entries()) {
+    assertNonEmpty(image.name, `styleGuide.images.${index}.name`);
+    assertNonEmpty(image.file, `styleGuide.images.${index}.file`);
   }
 }
 

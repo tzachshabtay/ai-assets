@@ -4,13 +4,15 @@ import {
   type AiAssetDefinition,
   type AiAssetDimensions,
   type AiAssetFrameGrid,
-  type AiAssetManifest
+  type AiAssetManifest,
+  type AiAssetStyleGuide
 } from "@ai-game-assets/core";
 import type { AiImageProvider } from "./provider.js";
 import {
   type AssetStoreOptions,
   readManifest,
-  saveGeneratedOption
+  saveGeneratedOption,
+  saveStyleGuide
 } from "./asset-store.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -75,6 +77,7 @@ async function routeRequest(
       count?: number;
       dimensions?: AiAssetDimensions;
       frameCount?: number;
+      styleGuide?: DebugStyleGuide;
     }>(request);
     const manifest = await readManifest(options.manifestPath);
     const asset = applyGenerationOverrides(getAsset(manifest, body.assetId), {
@@ -85,7 +88,13 @@ async function routeRequest(
       asset,
       prompt: body.prompt,
       count: body.count,
-      references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds)
+      references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds),
+      stylePrompt: body.styleGuide
+        ? body.styleGuide.prompt?.trim() || undefined
+        : manifest.styleGuide?.prompt,
+      styleReferences: body.styleGuide
+        ? referencesFromDataUrls(body.styleGuide.images)
+        : await getStyleReferenceImages(options, manifest.styleGuide)
     });
 
     sendJson(response, 200, {
@@ -101,6 +110,21 @@ async function routeRequest(
         dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
       }))
     });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/__ai-assets/style") {
+    const body = await readJson<DebugStyleGuide>(request);
+    const manifest = await saveStyleGuide(options, {
+      prompt: body.prompt,
+      images: referencesFromDataUrls(body.images).map((reference) => ({
+        name: reference.fileName,
+        mimeType: reference.mimeType,
+        image: reference.image
+      }))
+    });
+
+    sendJson(response, 200, { styleGuide: manifest.styleGuide });
     return;
   }
 
@@ -144,6 +168,14 @@ async function routeRequest(
   sendJson(response, 404, { error: "Not found" });
 }
 
+type DebugStyleGuide = {
+  prompt?: string;
+  images?: Array<{
+    name: string;
+    dataUrl: string;
+  }>;
+};
+
 async function getReferenceImages(
   options: AiAssetDevServerOptions,
   manifest: AiAssetManifest,
@@ -162,6 +194,37 @@ async function getReferenceImages(
       fileName
     };
   }));
+}
+
+async function getStyleReferenceImages(
+  options: AiAssetDevServerOptions,
+  styleGuide: AiAssetStyleGuide | undefined
+) {
+  return Promise.all((styleGuide?.images ?? []).map(async (image) => {
+    const fileName = path.basename(image.file);
+
+    return {
+      image: await readFile(path.join(options.assetsDir, fileName)),
+      mimeType: image.mimeType ?? mimeTypeFromFile(fileName),
+      fileName: image.name
+    };
+  }));
+}
+
+function referencesFromDataUrls(images: DebugStyleGuide["images"] = []) {
+  return images.map((image) => {
+    const match = /^data:(.+);base64,(.+)$/.exec(image.dataUrl);
+
+    if (!match) {
+      throw new Error(`Style image "${image.name}" is not a base64 data URL.`);
+    }
+
+    return {
+      image: Buffer.from(match[2], "base64"),
+      mimeType: match[1],
+      fileName: image.name
+    };
+  });
 }
 
 function mimeTypeFromFile(fileName: string): string {

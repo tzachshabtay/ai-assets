@@ -42,6 +42,17 @@ export type AiAssetLinkedAnimation = {
   assetId: string;
 };
 
+export type AiAssetStyleGuideImage = {
+  name: string;
+  file: string;
+  mimeType?: string;
+};
+
+export type AiAssetStyleGuide = {
+  prompt?: string;
+  images?: AiAssetStyleGuideImage[];
+};
+
 export type AiAssetGenerationSettings = {
   model?: string;
   size?: string;
@@ -83,6 +94,7 @@ export type AiAssetDefinition = {
 export type AiAssetManifest = {
   schemaVersion: 1;
   assets: Record<string, AiAssetDefinition>;
+  styleGuide?: AiAssetStyleGuide;
 };
 
 export type AiAssetSelection = {

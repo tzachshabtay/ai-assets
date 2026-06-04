@@ -11,6 +11,8 @@ export type {
   AiAssetManifest,
   AiAssetQuality,
   AiAssetSelection,
+  AiAssetStyleGuide,
+  AiAssetStyleGuideImage,
   AiAssetVersion,
   ResolvedAiAsset
 } from "./types.js";

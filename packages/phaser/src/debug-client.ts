@@ -7,6 +7,15 @@ export type GenerateDebugOptionsRequest = {
     height: number;
   };
   frameCount?: number;
+  styleGuide?: DebugStyleGuideDraft;
+};
+
+export type DebugStyleGuideDraft = {
+  prompt?: string;
+  images: Array<{
+    name: string;
+    dataUrl: string;
+  }>;
 };
 
 export type GeneratedDebugOption = {
@@ -107,6 +116,21 @@ export class AiAssetDebugClient {
         "Content-Type": "application/json"
       },
       body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+  }
+
+  async promoteStyle(styleGuide: DebugStyleGuideDraft): Promise<void> {
+    const url = `${this.endpoint}/__ai-assets/style`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(styleGuide)
     });
 
     if (!response.ok) {

@@ -27,6 +27,8 @@ export type GenerateAssetRequest = {
   count?: number;
   settings?: AiAssetGenerationSettings;
   references?: GenerateAssetReference[];
+  stylePrompt?: string;
+  styleReferences?: GenerateAssetReference[];
 };
 
 export type GenerateAssetReference = {
@@ -81,6 +83,13 @@ export function createOpenAiImageProvider(
       const requestedBackground = resolveRequestedBackground(request, options);
       const background = normalizeBackgroundForModel(model, requestedBackground);
       const chromaKey = selectChromaKey(request);
+      const allReferences = [
+        ...(request.references ?? []),
+        ...(request.styleReferences ?? []).map((reference, index) => ({
+          ...reference,
+          fileName: `style-reference-${index + 1}-${reference.fileName}`
+        }))
+      ];
 
       const count = request.count ?? 1;
       const requestBodies = Array.from({ length: count }, (_, index) => ({
@@ -109,8 +118,8 @@ export function createOpenAiImageProvider(
       const generated: GeneratedAssetOption[] = [];
 
       for (const requestBody of requestBodies) {
-        const response = request.references?.length
-          ? await createImageEdit(apiKey, requestBody, request.references)
+        const response = allReferences.length
+          ? await createImageEdit(apiKey, requestBody, allReferences)
           : await createImageGeneration(apiKey, requestBody);
 
         if (!response.ok) {
@@ -221,9 +230,18 @@ function gameAssetPrompt(
 
   if (request.references?.length) {
     lines.push(
-      "The generated asset must depict the same exact character as the provided reference image. Preserve the silhouette, body proportions, face or head shape, colors, materials, markings, costume, and distinctive details. Do not redesign the character, change species, swap materials, alter the palette, or simplify it into a different character.",
+      "The generated asset must depict the same exact character as the provided character reference image. Character reference filenames do not begin with style-reference-. Preserve the silhouette, body proportions, face or head shape, colors, materials, markings, costume, and distinctive details. Do not redesign the character, change species, swap materials, alter the palette, or simplify it into a different character.",
       ...referenceLockPromptLines(request.references),
       "For animation spritesheets, every frame must show that same exact character performing only the requested motion or state change."
+    );
+  }
+
+  if (request.stylePrompt || request.styleReferences?.length) {
+    lines.push(
+      "Style guide: apply the following visual language consistently without copying the subject matter, characters, composition, or objects from the style reference images.",
+      request.stylePrompt?.trim() || "Match the visual style shown by the style reference images.",
+      "Style reference image filenames begin with style-reference-.",
+      "Use the style references only for rendering style: line quality, shape language, palette character, shading, material treatment, texture, and level of detail. The asset prompt and character references still determine what the asset depicts."
     );
   }
 
@@ -242,7 +260,8 @@ function createVariationSeed(index: number): string {
 }
 
 function selectChromaKey(request: GenerateAssetRequest): RgbColor {
-  const samples = request.references?.flatMap((reference) => referenceColorSamples(reference)) ?? [];
+  const samples = [...(request.references ?? []), ...(request.styleReferences ?? [])]
+    .flatMap((reference) => referenceColorSamples(reference));
 
   if (!samples.length) {
     const prompt = `${request.prompt ?? ""} ${request.asset.prompt}`.toLowerCase();

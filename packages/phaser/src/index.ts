@@ -17,6 +17,7 @@ export { aiTextureKey } from "./keys.js";
 
 export type {
   GenerateDebugOptionsRequest,
+  DebugStyleGuideDraft,
   GeneratedDebugOption,
   SaveDebugOptionRequest
 } from "./debug-client.js";

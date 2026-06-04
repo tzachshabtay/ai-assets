@@ -3,6 +3,7 @@ import {
   assertManifest,
   createAiAssetVersion,
   type AiAssetManifest,
+  type AiAssetStyleGuide,
   type AiAssetVersion,
   type GeneratedAssetOption
 } from "./internal.js";
@@ -28,6 +29,15 @@ export type SaveGeneratedOptionResult = {
   manifest: AiAssetManifest;
   version: AiAssetVersion;
   filePath: string;
+};
+
+export type SaveStyleGuideInput = {
+  prompt?: string;
+  images: Array<{
+    name: string;
+    mimeType: string;
+    image: Uint8Array;
+  }>;
 };
 
 export async function readManifest(manifestPath: string): Promise<AiAssetManifest> {
@@ -108,11 +118,51 @@ export async function saveGeneratedOption(
   };
 }
 
+export async function saveStyleGuide(
+  options: AssetStoreOptions,
+  input: SaveStyleGuideInput
+): Promise<AiAssetManifest> {
+  const manifest = await readManifest(options.manifestPath);
+  const timestamp = Date.now();
+  const images: NonNullable<AiAssetStyleGuide["images"]> = [];
+
+  await mkdir(options.assetsDir, { recursive: true });
+
+  for (const [index, image] of input.images.entries()) {
+    const extension = extensionFromMimeType(image.mimeType);
+    const fileName = `style-guide.${timestamp}.${index + 1}.${extension}`;
+    const filePath = path.join(options.assetsDir, fileName);
+    const publicFile =
+      options.publicPathPrefix ? `${options.publicPathPrefix}/${fileName}` : fileName;
+
+    await writeFile(filePath, image.image);
+    images.push({
+      name: image.name,
+      file: publicFile,
+      mimeType: image.mimeType
+    });
+  }
+
+  const prompt = input.prompt?.trim() || undefined;
+  manifest.styleGuide = prompt || images.length ? { prompt, images } : undefined;
+  await writeManifest(options.manifestPath, manifest);
+
+  if (options.manifestModulePath) {
+    await writeManifestModule(options.manifestModulePath, manifest);
+  }
+
+  return manifest;
+}
+
 export async function writeManifestModule(
   modulePath: string,
   manifest: AiAssetManifest
 ): Promise<void> {
   await mkdir(path.dirname(modulePath), { recursive: true });
+  const styleGuideArgument = manifest.styleGuide
+    ? [`, ${JSON.stringify({ styleGuide: manifest.styleGuide }, null, 2)}`]
+    : [];
+
   await writeFile(
     modulePath,
     [
@@ -120,6 +170,7 @@ export async function writeManifestModule(
       "",
       "export const assets = defineAiAssets(",
       `${JSON.stringify(manifest.assets, null, 2)}`,
+      ...styleGuideArgument,
       ");",
       ""
     ].join("\n")
