@@ -55,6 +55,7 @@ function startGame(assetManifest: AiAssetManifest): void {
     private heroAnimations = new Map<string, AiAssetAnimation>();
     private heroAnimationKey?: string;
     private heroLockedUntil = 0;
+    private heroFrameTransformHandler?: (...args: unknown[]) => void;
     private invaderAnimationSizes = new Map<string, { width: number; height: number }>();
     private invaderAnimations = new Map<string, AiAssetAnimation>();
     private invaderAnimationKeys = new WeakMap<Phaser.GameObjects.Sprite, string>();
@@ -373,17 +374,21 @@ function startGame(assetManifest: AiAssetManifest): void {
     private playHeroAnimation(animationKey: string, forceRestart = false): void {
       if (!this.hero || (!forceRestart && this.heroAnimationKey === animationKey)) return;
 
+      this.detachHeroFrameTransformHandler();
       this.heroAnimationKey = animationKey;
       this.hero.play(animationKey);
-      this.applyHeroAnimationSize(animationKey);
+      this.applyHeroFrameTransform(animationKey, 0);
+      this.attachHeroFrameTransformHandler(animationKey);
     }
 
     private playHeroActionAnimation(animationKey: string): void {
       if (this.hero) {
+        this.detachHeroFrameTransformHandler();
         this.hero.setFlipX(false);
         this.heroAnimationKey = animationKey;
         this.hero.play(animationKey, true);
-        this.applyHeroAnimationSize(animationKey);
+        this.applyHeroFrameTransform(animationKey, 0);
+        this.attachHeroFrameTransformHandler(animationKey);
       }
       this.heroLockedUntil = this.time.now + this.animationDuration(animationKey);
 
@@ -392,15 +397,6 @@ function startGame(assetManifest: AiAssetManifest): void {
           this.playHeroAnimation("hero.ship.idle");
         }
       });
-    }
-
-    private applyHeroAnimationSize(animationKey: string): void {
-      if (!this.hero) return;
-
-      const size = this.heroAnimationSizes.get(animationKey) ??
-        this.displaySizeForAsset(assetManifest.assets[animationKey]);
-      this.hero.setDisplaySize(size.width, size.height);
-      this.hero.setOrigin(0.5, 0.5);
     }
 
     private scheduleHeroLaser(animationKey: string): void {
@@ -414,6 +410,24 @@ function startGame(assetManifest: AiAssetManifest): void {
 
         this.bullets.push(this.add.rectangle(shooter.x, shooter.y - 35, 4, 18, 0x6ed3ff));
       });
+    }
+
+    private attachHeroFrameTransformHandler(animationKey: string): void {
+      if (!this.hero) return;
+
+      this.heroFrameTransformHandler = (...args: unknown[]) => {
+        const frame = args[1] as { index?: number } | undefined;
+        this.applyHeroFrameTransform(animationKey, Math.max(0, (frame?.index ?? 1) - 1));
+      };
+      this.hero.on(Phaser.Animations.Events.ANIMATION_UPDATE, this.heroFrameTransformHandler);
+    }
+
+    private detachHeroFrameTransformHandler(): void {
+      if (this.hero && this.heroFrameTransformHandler) {
+        this.hero.off(Phaser.Animations.Events.ANIMATION_UPDATE, this.heroFrameTransformHandler);
+      }
+
+      this.heroFrameTransformHandler = undefined;
     }
 
     private registerInvaderAnimationSize(asset: AiAssetDefinition | undefined): void {
@@ -438,11 +452,11 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.invaderAnimationKeys.set(invader, animationKey);
       invader.play(animationKey);
       this.applyInvaderAnimationSize(invader, animationKey);
-      this.applyInvaderFrameOffset(invader, animationKey, 0);
+      this.applyInvaderFrameTransform(invader, animationKey, 0);
 
       const handler = (...args: unknown[]) => {
         const frame = args[1] as { index?: number } | undefined;
-        this.applyInvaderFrameOffset(invader, animationKey, Math.max(0, (frame?.index ?? 1) - 1));
+        this.applyInvaderFrameTransform(invader, animationKey, Math.max(0, (frame?.index ?? 1) - 1));
       };
 
       this.invaderFrameOffsetHandlers.set(invader, handler);
@@ -456,6 +470,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       const size = this.invaderAnimationSizes.get(animationKey) ??
         this.displaySizeForAsset(assetManifest.assets[animationKey]);
       invader.setDisplaySize(size.width, size.height);
+      invader.setRotation(0);
     }
 
     private scheduleInvaderLaser(
@@ -499,21 +514,43 @@ function startGame(assetManifest: AiAssetManifest): void {
       ), 0);
     }
 
-    private applyInvaderFrameOffset(
+    private applyHeroFrameTransform(animationKey: string, frameSlot: number): void {
+      if (!this.hero) return;
+
+      const size = this.heroAnimationSizes.get(animationKey) ??
+        this.displaySizeForAsset(assetManifest.assets[animationKey]);
+      this.applyFrameTransform(this.hero, animationKey, frameSlot, size);
+    }
+
+    private applyInvaderFrameTransform(
       invader: Phaser.GameObjects.Sprite,
       animationKey: string,
       frameSlot: number
     ): void {
-      const timing = this.animationForKey(animationKey)?.frameTimings?.[frameSlot];
       const size = this.invaderAnimationSizes.get(animationKey) ??
         this.displaySizeForAsset(assetManifest.assets[animationKey]);
+      this.applyFrameTransform(invader, animationKey, frameSlot, size);
+    }
+
+    private applyFrameTransform(
+      sprite: Phaser.GameObjects.Sprite,
+      animationKey: string,
+      frameSlot: number,
+      size: { width: number; height: number }
+    ): void {
+      const timing = this.animationForKey(animationKey)?.frameTimings?.[frameSlot];
       const offsetX = timing?.offsetX ?? 0;
       const offsetY = timing?.offsetY ?? 0;
+      const scaleX = timing?.scaleX ?? 1;
+      const scaleY = timing?.scaleY ?? 1;
+      const rotation = timing?.rotation ?? 0;
 
-      invader.setOrigin(
+      sprite.setDisplaySize(size.width * scaleX, size.height * scaleY);
+      sprite.setOrigin(
         0.5 - offsetX / Math.max(1, size.width),
         0.5 - offsetY / Math.max(1, size.height)
       );
+      sprite.setRotation(Phaser.Math.DegToRad(rotation));
     }
 
     private animationFramesWithTiming(

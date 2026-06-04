@@ -48,6 +48,9 @@ export type GeneratedDebugOption = {
       delayMs?: number;
       offsetX?: number;
       offsetY?: number;
+      scaleX?: number;
+      scaleY?: number;
+      rotation?: number;
       tag?: string;
     }>;
   }>;

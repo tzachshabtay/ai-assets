@@ -724,6 +724,9 @@ function startSpritesheetPreview(options: {
     const row = Math.floor(frame / frameGrid.columns);
     const offsetX = timing?.offsetX ?? 0;
     const offsetY = timing?.offsetY ?? 0;
+    const scaleX = timing?.scaleX ?? 1;
+    const scaleY = timing?.scaleY ?? 1;
+    const rotation = timing?.rotation ?? 0;
 
     options.element.style.width = `${options.displaySize.width}px`;
     options.element.style.height = `${options.displaySize.height}px`;
@@ -732,6 +735,8 @@ function startSpritesheetPreview(options: {
       `${frameGrid.columns * options.displaySize.width}px ${frameGrid.rows * options.displaySize.height}px`;
     options.element.style.backgroundPosition =
       `${-(column * options.displaySize.width) + offsetX}px ${-(row * options.displaySize.height) + offsetY}px`;
+    options.element.style.transform = `scale(${scaleX}, ${scaleY}) rotate(${rotation}deg)`;
+    options.element.style.transformOrigin = "center";
     frameCursor += 1;
     timeout = window.setTimeout(renderFrame, timing?.delayMs ?? 1000 / frameRate);
   };
@@ -926,6 +931,9 @@ async function openAnimationEditor(options: {
   delayInput.min = "1";
   const offsetXInput = signedNumberInput();
   const offsetYInput = signedNumberInput();
+  const scaleXInput = decimalInput();
+  const scaleYInput = decimalInput();
+  const rotationInput = signedNumberInput();
   const tagInput = document.createElement("input");
   tagInput.type = "text";
   tagInput.placeholder = "shoot";
@@ -936,6 +944,9 @@ async function openAnimationEditor(options: {
     labelWrap("Delay ms", delayInput),
     labelWrap("Offset X", offsetXInput),
     labelWrap("Offset Y", offsetYInput),
+    labelWrap("Scale X", scaleXInput),
+    labelWrap("Scale Y", scaleYInput),
+    labelWrap("Rotation", rotationInput),
     labelWrap("Tag", tagInput)
   );
 
@@ -967,6 +978,9 @@ async function openAnimationEditor(options: {
       delayMs: positiveIntegerValue(timing.delayMs, Math.round(1000 / baseAnimation.frameRate)),
       offsetX: integerValue(timing.offsetX, 0),
       offsetY: integerValue(timing.offsetY, 0),
+      scaleX: numberValue(timing.scaleX, 1),
+      scaleY: numberValue(timing.scaleY, 1),
+      rotation: numberValue(timing.rotation, 0),
       tag: timing.tag?.trim() || undefined
     }))
   });
@@ -993,6 +1007,9 @@ async function openAnimationEditor(options: {
     );
     offsetXInput.value = String(integerValue(timing.offsetX, 0));
     offsetYInput.value = String(integerValue(timing.offsetY, 0));
+    scaleXInput.value = String(numberValue(timing.scaleX, 1));
+    scaleYInput.value = String(numberValue(timing.scaleY, 1));
+    rotationInput.value = String(numberValue(timing.rotation, 0));
     tagInput.value = timing.tag ?? "";
 
     for (const button of strip.querySelectorAll("button")) {
@@ -1032,6 +1049,9 @@ async function openAnimationEditor(options: {
       delayMs: positiveIntegerInput(delayInput, Math.round(1000 / baseAnimation.frameRate)),
       offsetX: integerInput(offsetXInput, 0),
       offsetY: integerInput(offsetYInput, 0),
+      scaleX: numberInput(scaleXInput, 1),
+      scaleY: numberInput(scaleYInput, 1),
+      rotation: numberInput(rotationInput, 0),
       tag: tagInput.value.trim() || undefined
     };
     const selectedButton = strip.querySelector<HTMLButtonElement>(
@@ -1053,6 +1073,9 @@ async function openAnimationEditor(options: {
   delayInput.addEventListener("input", updateSelectedTiming);
   offsetXInput.addEventListener("input", updateSelectedTiming);
   offsetYInput.addEventListener("input", updateSelectedTiming);
+  scaleXInput.addEventListener("input", updateSelectedTiming);
+  scaleYInput.addEventListener("input", updateSelectedTiming);
+  rotationInput.addEventListener("input", updateSelectedTiming);
   tagInput.addEventListener("input", updateSelectedTiming);
 
   const close = () => {
@@ -1085,6 +1108,9 @@ function setFrameBackground(
   const row = Math.floor(options.frame / options.frameGrid.columns);
   const offsetX = options.timing?.offsetX ?? 0;
   const offsetY = options.timing?.offsetY ?? 0;
+  const scaleX = options.timing?.scaleX ?? 1;
+  const scaleY = options.timing?.scaleY ?? 1;
+  const rotation = options.timing?.rotation ?? 0;
 
   element.style.width = `${options.displaySize.width}px`;
   element.style.height = `${options.displaySize.height}px`;
@@ -1093,6 +1119,8 @@ function setFrameBackground(
     `${options.frameGrid.columns * options.displaySize.width}px ${options.frameGrid.rows * options.displaySize.height}px`;
   element.style.backgroundPosition =
     `${-(column * options.displaySize.width) + offsetX}px ${-(row * options.displaySize.height) + offsetY}px`;
+  element.style.transform = `scale(${scaleX}, ${scaleY}) rotate(${rotation}deg)`;
+  element.style.transformOrigin = "center";
 }
 
 function generationOverridesFromInputs(
@@ -1154,6 +1182,14 @@ function integerInput(input: HTMLInputElement, fallback: number): number {
   return Math.trunc(value);
 }
 
+function numberInput(input: HTMLInputElement, fallback: number): number {
+  const value = Number(input.value);
+
+  if (!Number.isFinite(value)) return fallback;
+
+  return value;
+}
+
 function positiveIntegerValue(value: number | undefined, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
 
@@ -1164,6 +1200,12 @@ function integerValue(value: number | undefined, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
 
   return Math.trunc(value as number);
+}
+
+function numberValue(value: number | undefined, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+
+  return value as number;
 }
 
 function resolvePreviewDisplaySize(
@@ -1253,6 +1295,15 @@ function signedNumberInput(): HTMLInputElement {
   input.type = "number";
   input.step = "1";
   input.inputMode = "numeric";
+
+  return input;
+}
+
+function decimalInput(): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "0.1";
+  input.inputMode = "decimal";
 
   return input;
 }

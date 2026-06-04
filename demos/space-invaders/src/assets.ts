@@ -1086,7 +1086,7 @@ export const assets = defineAiAssets(
   "background.space": {
     "id": "background.space",
     "kind": "image",
-    "prompt": "Full-screen background for a 2D space invaders game. Deep outer space, distant stars and planets, readable but subdued behind gameplay, no text, no ships, no enemies.",
+    "prompt": "Full-screen background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars.",
     "dimensions": {
       "width": 640,
       "height": 640
@@ -1097,7 +1097,7 @@ export const assets = defineAiAssets(
       "quality": "low",
       "format": "png"
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780545088449",
     "versions": {
       "default": {
         "name": "default",
@@ -1105,10 +1105,26 @@ export const assets = defineAiAssets(
         "prompt": "Full-screen background for a 2D space invaders game. Deep outer space, distant stars and planets, readable but subdued behind gameplay, no text, no ships, no enemies.",
         "createdAt": "2026-06-03T00:00:00.000Z",
         "model": "starter-asset"
+      },
+      "promoted-1780545088449": {
+        "name": "promoted-1780545088449",
+        "file": "/assets/background.space.promoted-1780545088449.png",
+        "prompt": "Full-screen background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars.",
+        "createdAt": "2026-06-04T03:51:28.487Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "opaque",
+          "quality": "low",
+          "format": "png"
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   }
-}, {
+}
+, {
   "styleGuide": {
     "prompt": "Hand-painted 1990s cartoon adventure game background, exaggerated perspective, whimsical architecture, bright saturated colors, smooth ink outlines, highly expressive shapes, playful visual humor, stylized proportions, curved and distorted geometry, detailed environmental storytelling, clean cel-animation aesthetic, retro PC adventure game art, professionally illustrated, high detail, colorful and cheerful atmosphere.",
     "images": [
