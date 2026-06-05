@@ -1405,7 +1405,7 @@ function signedNumberInput(): HTMLInputElement {
 function decimalInput(): HTMLInputElement {
   const input = document.createElement("input");
   input.type = "number";
-  input.step = "0.1";
+  input.step = "any";
   input.inputMode = "decimal";
 
   return input;
