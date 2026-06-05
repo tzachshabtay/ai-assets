@@ -206,6 +206,8 @@ function startGame(assetManifest: AiAssetManifest): void {
           this.applyAssetTexture?.(assetId, textureKey, asset);
         }
       });
+
+      void this.ensureMissingFirstDrafts();
     }
 
     update(time: number, delta: number) {
@@ -387,6 +389,71 @@ function startGame(assetManifest: AiAssetManifest): void {
           star.play(star.starAnimationKey);
         }
       }
+    }
+
+    private async ensureMissingFirstDrafts(): Promise<void> {
+      const missingAssetIds = Object.values(assetManifest.assets)
+        .filter((asset) => asset.kind !== "collection" && Object.keys(asset.versions).length === 0)
+        .map((asset) => asset.id);
+
+      if (missingAssetIds.length === 0) return;
+
+      this.statusText?.setText("Generating first drafts...");
+
+      try {
+        const result = await debugClient.ensureFirstDrafts({ assetIds: missingAssetIds });
+        Object.assign(assetManifest.assets, result.manifest.assets);
+        assetManifest.styleGuide = result.manifest.styleGuide;
+        manifest = result.manifest;
+
+        for (const generated of result.generated) {
+          const asset = assetManifest.assets[generated.assetId];
+
+          if (asset) {
+            await this.loadGeneratedAssetTexture(generated.assetId, asset);
+          }
+        }
+
+        this.statusText?.setText("First drafts generated.");
+      } catch (error) {
+        this.statusText?.setText(`First draft failed: ${errorMessage(error)}`);
+      }
+    }
+
+    private loadGeneratedAssetTexture(
+      assetId: string,
+      asset: AiAssetDefinition
+    ): Promise<void> {
+      const version = asset.versions[asset.activeVersion];
+
+      if (!version) return Promise.resolve();
+
+      return new Promise((resolve, reject) => {
+        const image = new Image();
+        const textureKey = this.aiRuntime?.key(assetId) ?? assetId;
+
+        image.onload = () => {
+          if (this.textures.exists(textureKey)) {
+            this.textures.remove(textureKey);
+          }
+
+          if (asset.frameGrid) {
+            this.textures.addSpriteSheet(textureKey, image, {
+              frameWidth: asset.frameGrid.frameWidth,
+              frameHeight: asset.frameGrid.frameHeight,
+              margin: asset.frameGrid.margin,
+              spacing: asset.frameGrid.spacing
+            });
+          } else {
+            this.textures.addImage(textureKey, image);
+          }
+
+          this.applyAssetTexture?.(assetId, textureKey, asset);
+          resolve();
+        };
+        image.onerror = () => reject(new Error(`Could not load generated asset "${assetId}".`));
+        image.src = version.file;
+      });
     }
 
     private resetWave(message: string): void {
@@ -724,8 +791,12 @@ function keepBullet(bullet: Phaser.GameObjects.Rectangle): boolean {
   return false;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 boot().catch((error) => {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = errorMessage(error);
   document.body.insertAdjacentHTML("beforeend", `<pre>${message}</pre>`);
   throw error;
 });

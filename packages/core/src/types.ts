@@ -1,4 +1,4 @@
-export type AiAssetKind = "image" | "spritesheet" | "animation";
+export type AiAssetKind = "image" | "spritesheet" | "animation" | "collection";
 
 export type AiAssetBackground = "transparent" | "opaque" | "auto";
 

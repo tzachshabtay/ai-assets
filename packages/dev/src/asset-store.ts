@@ -83,7 +83,7 @@ export async function saveGeneratedOption(
     model: input.option.model,
     revisedPrompt: input.option.revisedPrompt,
     settings: input.option.settings,
-    parentVersion: asset.activeVersion,
+    parentVersion: asset.activeVersion || undefined,
     notes: input.notes
   });
 

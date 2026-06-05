@@ -15,7 +15,11 @@ export function createAiAnimations(
     throw new Error("The provided Phaser scene does not expose an animation manager.");
   }
 
-  const resolved = resolveAiAsset(manifest, selection);
+  const assetId = typeof selection === "string" ? selection : selection.assetId;
+  const unresolvedAsset = manifest.assets[assetId];
+  const resolved = unresolvedAsset && Object.keys(unresolvedAsset.versions).length === 0
+    ? { asset: unresolvedAsset, versionName: "" }
+    : resolveAiAsset(manifest, selection);
   const animations = resolved.asset.animations ?? [];
   const textureKey = aiTextureKey({
     assetId: resolved.asset.id,

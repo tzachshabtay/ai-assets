@@ -73,6 +73,18 @@ export type SaveDebugOptionRequest = {
   notes?: string;
 };
 
+export type EnsureFirstDraftsRequest = {
+  assetIds?: string[];
+};
+
+export type EnsureFirstDraftsResult = {
+  manifest: AiAssetManifest;
+  generated: Array<{
+    assetId: string;
+    versionName: string;
+  }>;
+};
+
 export class AiAssetDebugClient {
   readonly endpoint: string;
 
@@ -109,6 +121,25 @@ export class AiAssetDebugClient {
     }
 
     return response.json() as Promise<AiAssetManifest>;
+  }
+
+  async ensureFirstDrafts(
+    request: EnsureFirstDraftsRequest = {}
+  ): Promise<EnsureFirstDraftsResult> {
+    const url = `${this.endpoint}/__ai-assets/ensure-first-drafts`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+
+    return response.json() as Promise<EnsureFirstDraftsResult>;
   }
 
   async save(request: SaveDebugOptionRequest): Promise<void> {

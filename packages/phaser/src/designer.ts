@@ -129,10 +129,12 @@ export function installAiAssetDesigner(
     const linkedAnimations = Object.entries(asset.linkedAnimationAssets ?? {});
     elements.animationSelect.innerHTML = "";
 
-    const baseOption = document.createElement("option");
-    baseOption.value = assetId;
-    baseOption.textContent = "Base image";
-    elements.animationSelect.append(baseOption);
+    if (asset.kind !== "collection") {
+      const baseOption = document.createElement("option");
+      baseOption.value = assetId;
+      baseOption.textContent = "Base image";
+      elements.animationSelect.append(baseOption);
+    }
 
     for (const [key, linkedAnimation] of linkedAnimations) {
       const option = document.createElement("option");
@@ -142,7 +144,9 @@ export function installAiAssetDesigner(
     }
 
     elements.animationField.hidden = linkedAnimations.length === 0;
-    selectedTargetAssetId = assetId;
+    selectedTargetAssetId = asset.kind === "collection" && linkedAnimations[0]
+      ? linkedAnimations[0][1].assetId
+      : assetId;
     elements.animationSelect.value = selectedTargetAssetId;
   };
 

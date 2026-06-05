@@ -113,6 +113,51 @@ async function routeRequest(
     return;
   }
 
+  if (request.method === "POST" && url.pathname === "/__ai-assets/ensure-first-drafts") {
+    const body = await readJson<{
+      assetIds?: string[];
+    }>(request);
+    let manifest = await readManifest(options.manifestPath);
+    const requestedAssetIds = new Set(body.assetIds ?? Object.keys(manifest.assets));
+    const generated: Array<{ assetId: string; versionName: string }> = [];
+    let generatedIndex = 0;
+
+    for (const assetId of requestedAssetIds) {
+      const asset = manifest.assets[assetId];
+
+      if (!asset || asset.kind === "collection" || Object.keys(asset.versions).length > 0) {
+        continue;
+      }
+
+      const optionsForAsset = await options.provider.generate({
+        asset,
+        count: 1,
+        references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds),
+        stylePrompt: manifest.styleGuide?.prompt,
+        styleReferences: await getStyleReferenceImages(options, manifest.styleGuide)
+      });
+      const option = optionsForAsset[0];
+
+      if (!option) continue;
+
+      const versionName = `first-draft-${Date.now()}-${generatedIndex + 1}`;
+      const result = await saveGeneratedOption(options, {
+        assetId,
+        versionName,
+        option,
+        activate: true,
+        notes: "Auto-generated first draft for a missing asset."
+      });
+
+      manifest = result.manifest;
+      generated.push({ assetId, versionName });
+      generatedIndex += 1;
+    }
+
+    sendJson(response, 200, { manifest, generated });
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/__ai-assets/style") {
     const body = await readJson<DebugStyleGuide>(request);
     const manifest = await saveStyleGuide(options, {
@@ -184,6 +229,12 @@ async function getReferenceImages(
   if (!referenceAssetIds?.length) return undefined;
 
   return Promise.all(referenceAssetIds.map(async (assetId) => {
+    const asset = manifest.assets[assetId];
+
+    if (!asset || asset.kind === "collection" || Object.keys(asset.versions).length === 0) {
+      return undefined;
+    }
+
     const resolved = resolveAiAsset(manifest, assetId);
     const fileName = path.basename(resolved.version.file);
     const filePath = path.join(options.assetsDir, fileName);
@@ -193,7 +244,7 @@ async function getReferenceImages(
       mimeType: mimeTypeFromFile(fileName),
       fileName
     };
-  }));
+  })).then((references) => references.filter((reference) => reference !== undefined));
 }
 
 async function getStyleReferenceImages(

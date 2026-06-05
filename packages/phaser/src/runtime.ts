@@ -4,6 +4,7 @@ import {
   type AiAssetSelection
 } from "@ai-game-assets/core";
 import { aiTextureKey } from "./keys.js";
+import { aiAssetPlaceholderDataUrl } from "./placeholder.js";
 import type { PhaserImageLike, PhaserSceneLike } from "./phaser-types.js";
 
 export type AiAssetRuntimeOptions = {
@@ -26,6 +27,13 @@ export class AiAssetRuntime {
   }
 
   key(selection: AiAssetSelection | string): string {
+    const assetId = typeof selection === "string" ? selection : selection.assetId;
+    const asset = this.manifest.assets[assetId];
+
+    if (asset && Object.keys(asset.versions).length === 0) {
+      return aiTextureKey({ assetId });
+    }
+
     const resolved = resolveAiAsset(this.manifest, selection);
 
     return aiTextureKey({
@@ -41,6 +49,13 @@ export class AiAssetRuntime {
   }
 
   url(selection: AiAssetSelection | string): string {
+    const assetId = typeof selection === "string" ? selection : selection.assetId;
+    const asset = this.manifest.assets[assetId];
+
+    if (asset && Object.keys(asset.versions).length === 0) {
+      return aiAssetPlaceholderDataUrl(asset);
+    }
+
     const resolved = resolveAiAsset(this.manifest, selection);
 
     if (!this.baseUrl) {

@@ -55,7 +55,17 @@ export function assertAsset(asset: AiAssetDefinition): void {
   assertPositiveInteger(asset.dimensions.width, `${asset.id}.dimensions.width`);
   assertPositiveInteger(asset.dimensions.height, `${asset.id}.dimensions.height`);
 
-  if (!asset.versions[asset.activeVersion]) {
+  if (asset.kind === "collection") {
+    if (Object.keys(asset.versions).length > 0) {
+      throw new Error(`Collection asset "${asset.id}" must not define versions.`);
+    }
+  } else if (Object.keys(asset.versions).length === 0) {
+    if (asset.activeVersion) {
+      throw new Error(
+        `Asset "${asset.id}" with no versions must use an empty activeVersion.`
+      );
+    }
+  } else if (!asset.versions[asset.activeVersion]) {
     throw new Error(
       `Asset "${asset.id}" activeVersion "${asset.activeVersion}" is missing from versions.`
     );

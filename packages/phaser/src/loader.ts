@@ -5,6 +5,7 @@ import {
   type ResolvedAiAsset
 } from "@ai-game-assets/core";
 import { aiTextureKey } from "./keys.js";
+import { aiAssetPlaceholderDataUrl } from "./placeholder.js";
 import type { PhaserSceneLike } from "./phaser-types.js";
 
 export type LoadAiAssetOptions = {
@@ -19,6 +20,49 @@ export function loadAiAsset(
   selection: AiAssetSelection | string,
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset {
+  const assetId = typeof selection === "string" ? selection : selection.assetId;
+  if (manifest.assets[assetId]?.kind === "collection") {
+    throw new Error(`AI asset collection "${assetId}" cannot be loaded as a texture.`);
+  }
+
+  const unresolvedAsset = manifest.assets[assetId];
+  if (unresolvedAsset && Object.keys(unresolvedAsset.versions).length === 0) {
+    const key = options.key ?? aiTextureKey({ assetId });
+    const url = aiAssetPlaceholderDataUrl(unresolvedAsset);
+
+    if (unresolvedAsset.kind === "spritesheet" || unresolvedAsset.kind === "animation") {
+      if (!unresolvedAsset.frameGrid) {
+        throw new Error(`AI asset "${unresolvedAsset.id}" requires frameGrid for spritesheet loading.`);
+      }
+
+      scene.load.spritesheet(key, url, {
+        frameWidth: unresolvedAsset.frameGrid.frameWidth,
+        frameHeight: unresolvedAsset.frameGrid.frameHeight,
+        margin: unresolvedAsset.frameGrid.margin,
+        spacing: unresolvedAsset.frameGrid.spacing
+      });
+    } else if (scene.load.svg) {
+      scene.load.svg(key, url, {
+        width: unresolvedAsset.dimensions.width,
+        height: unresolvedAsset.dimensions.height
+      });
+    } else {
+      scene.load.image(key, url);
+    }
+
+    return {
+      asset: unresolvedAsset,
+      versionName: "",
+      version: {
+        name: "",
+        file: url,
+        prompt: unresolvedAsset.prompt,
+        createdAt: new Date(0).toISOString(),
+        model: "loading-placeholder"
+      }
+    };
+  }
+
   const resolved = resolveAiAsset(
     manifest,
     typeof selection === "string"
@@ -67,9 +111,9 @@ export function loadAiAssets(
   manifest: AiAssetManifest,
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset[] {
-  return Object.keys(manifest.assets).map((assetId) =>
-    loadAiAsset(scene, manifest, assetId, options)
-  );
+  return Object.values(manifest.assets)
+    .filter((asset) => asset.kind !== "collection")
+    .map((asset) => loadAiAsset(scene, manifest, asset.id, options));
 }
 
 function joinUrl(baseUrl: string | undefined, file: string): string {
