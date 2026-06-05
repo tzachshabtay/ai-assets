@@ -882,7 +882,57 @@ export const assets = defineAiAssets(
           5
         ],
         "frameRate": 12,
-        "repeat": 0
+        "repeat": 0,
+        "frameTimings": [
+          {
+            "delayMs": 83,
+            "offsetX": 0,
+            "offsetY": 0,
+            "scaleX": 1,
+            "scaleY": 1.2,
+            "rotation": 0
+          },
+          {
+            "delayMs": 83,
+            "offsetX": 0,
+            "offsetY": 0,
+            "scaleX": 1,
+            "scaleY": 1.2,
+            "rotation": 0
+          },
+          {
+            "delayMs": 83,
+            "offsetX": 0,
+            "offsetY": 0,
+            "scaleX": 1,
+            "scaleY": 1.2,
+            "rotation": 0
+          },
+          {
+            "delayMs": 83,
+            "offsetX": 0,
+            "offsetY": 0,
+            "scaleX": 1,
+            "scaleY": 1.2,
+            "rotation": 0
+          },
+          {
+            "delayMs": 83,
+            "offsetX": 0,
+            "offsetY": 0,
+            "scaleX": 1,
+            "scaleY": 1.2,
+            "rotation": 0
+          },
+          {
+            "delayMs": 83,
+            "offsetX": 0,
+            "offsetY": 0,
+            "scaleX": 1,
+            "scaleY": 1.2,
+            "rotation": 0
+          }
+        ]
       }
     ],
     "settings": {
@@ -894,7 +944,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "promoted-1780543095703",
+    "activeVersion": "promoted-1780625268417",
     "versions": {
       "default": {
         "name": "default",
@@ -938,6 +988,24 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780536958079",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780625268417": {
+        "name": "promoted-1780625268417",
+        "file": "/assets/hero.ship.hit.promoted-1780625268417.png",
+        "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+        "createdAt": "2026-06-05T02:07:48.431Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "promoted-1780543095703",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -971,22 +1039,34 @@ export const assets = defineAiAssets(
           {
             "delayMs": 50,
             "offsetX": 0,
-            "offsetY": 0
+            "offsetY": 0,
+            "scaleX": 1.1,
+            "scaleY": 1.1,
+            "rotation": 0
           },
           {
             "delayMs": 50,
             "offsetX": 0,
-            "offsetY": 0
+            "offsetY": 0,
+            "scaleX": 1.1,
+            "scaleY": 1.1,
+            "rotation": 0
           },
           {
             "delayMs": 50,
             "offsetX": 0,
-            "offsetY": 0
+            "offsetY": 0,
+            "scaleX": 1.1,
+            "scaleY": 1.1,
+            "rotation": 0
           },
           {
             "delayMs": 2000,
             "offsetX": 0,
-            "offsetY": 0
+            "offsetY": 0,
+            "scaleX": 1.1,
+            "scaleY": 1.1,
+            "rotation": 0
           }
         ]
       }
@@ -1000,7 +1080,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "promoted-1780543214092",
+    "activeVersion": "promoted-1780625227073",
     "versions": {
       "default": {
         "name": "default",
@@ -1080,6 +1160,88 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780537093274",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780625227073": {
+        "name": "promoted-1780625227073",
+        "file": "/assets/hero.ship.moving-left.promoted-1780625227073.png",
+        "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+        "createdAt": "2026-06-05T02:07:07.130Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "promoted-1780543214092",
+        "notes": "Promoted from the AI asset designer."
+      }
+    }
+  },
+  "background.stars": {
+    "id": "background.stars",
+    "kind": "spritesheet",
+    "prompt": "Tiny animated star sprites for a 2D space invaders background. A spritesheet with five distinct twinkling star animation rows, transparent background, readable at small size.",
+    "dimensions": {
+      "width": 128,
+      "height": 160
+    },
+    "frameGrid": {
+      "frameWidth": 32,
+      "frameHeight": 32,
+      "columns": 4,
+      "rows": 5,
+      "frameCount": 20
+    },
+    "animations": [
+      {
+        "key": "background.stars.twinkle-white",
+        "frames": [0, 1, 2, 3],
+        "frameRate": 8,
+        "repeat": -1
+      },
+      {
+        "key": "background.stars.blue-pulse",
+        "frames": [4, 5, 6, 7],
+        "frameRate": 7,
+        "repeat": -1
+      },
+      {
+        "key": "background.stars.gold-flare",
+        "frames": [8, 9, 10, 11],
+        "frameRate": 9,
+        "repeat": -1
+      },
+      {
+        "key": "background.stars.violet-blink",
+        "frames": [12, 13, 14, 15],
+        "frameRate": 6,
+        "repeat": -1
+      },
+      {
+        "key": "background.stars.green-shimmer",
+        "frames": [16, 17, 18, 19],
+        "frameRate": 8,
+        "repeat": -1
+      }
+    ],
+    "settings": {
+      "model": "gpt-image-2",
+      "background": "auto",
+      "quality": "low",
+      "format": "png"
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/background.stars.default.svg",
+        "prompt": "Tiny animated star sprites for a 2D space invaders background. A spritesheet with five distinct twinkling star animation rows, transparent background, readable at small size.",
+        "createdAt": "2026-06-05T00:00:00.000Z",
+        "model": "starter-asset"
       }
     }
   },

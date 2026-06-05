@@ -25,6 +25,11 @@ type DemoScene = Phaser.Scene & {
   applyAssetTexture?: (assetId: string, textureKey: string, asset: AiAssetDefinition) => void;
 };
 
+type StarSprite = Phaser.GameObjects.Sprite & {
+  starSpeed: number;
+  starAnimationKey: string;
+};
+
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
 
@@ -63,6 +68,8 @@ function startGame(assetManifest: AiAssetManifest): void {
       Phaser.GameObjects.Sprite,
       (...args: unknown[]) => void
     >();
+    private starSprites: StarSprite[] = [];
+    private starAnimationKeys: string[] = [];
 
     constructor() {
       super("space-invaders");
@@ -79,6 +86,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       createAiAnimations(this, assetManifest, "hero.ship.moving-left");
       createAiAnimations(this, assetManifest, "hero.ship.shooting");
       createAiAnimations(this, assetManifest, "hero.ship.hit");
+      createAiAnimations(this, assetManifest, "background.stars");
       createAiAnimations(this, assetManifest, "invader.scout.idle");
       createAiAnimations(this, assetManifest, "invader.scout.shooting");
       createAiAnimations(this, assetManifest, "invader.scout.destroyed");
@@ -95,6 +103,9 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.add.rectangle(320, 320, 640, 640, 0x10131a).setDepth(-100);
       this.background = this.add.image(320, 320, this.aiRuntime.key("background.space"));
       this.background.setDisplaySize(640, 640).setDepth(-90);
+      this.starAnimationKeys = assetManifest.assets["background.stars"]?.animations
+        ?.map((animation) => animation.key) ?? [];
+      this.spawnStars();
       this.add.text(18, 14, "AI Assets Invaders", {
         color: "#f8fafc",
         fontSize: "20px"
@@ -116,6 +127,11 @@ function startGame(assetManifest: AiAssetManifest): void {
         if (assetId === "background.space" && this.background) {
           this.background.setTexture(textureKey);
           this.background.setDisplaySize(640, 640);
+        }
+
+        if (assetId === "background.stars") {
+          this.recreateStarAnimations(textureKey, asset);
+          this.applyStarTexture(textureKey, asset);
         }
 
         if (assetId === "hero.ship" && this.hero) {
@@ -155,7 +171,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         scene: this,
         manifest: assetManifest,
         client: debugClient,
-        assetIds: ["hero.ship", "invader.scout", "background.space"],
+        assetIds: ["hero.ship", "invader.scout", "background.space", "background.stars"],
         onManifestUpdated: (updatedManifest) => {
           manifest = updatedManifest;
         },
@@ -169,7 +185,8 @@ function startGame(assetManifest: AiAssetManifest): void {
           "invader.scout.idle": { width: 42, height: 42 },
           "invader.scout.shooting": { width: 42, height: 42 },
           "invader.scout.destroyed": { width: 42, height: 42 },
-          "background.space": { width: 180, height: 180 }
+          "background.space": { width: 180, height: 180 },
+          "background.stars": { width: 32, height: 32 }
         },
         onPreview: (assetId, textureKey, asset) => {
           this.applyAssetTexture?.(assetId, textureKey, asset);
@@ -179,6 +196,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     update(time: number, delta: number) {
       this.updateHero(delta);
+      this.updateStars(delta);
       this.updateBullets(delta);
       this.updateInvaders(delta, time);
       this.updateCollisions();
@@ -305,6 +323,57 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
     }
 
+    private spawnStars(): void {
+      if (!this.aiRuntime || this.starAnimationKeys.length === 0) return;
+
+      for (const star of this.starSprites) star.destroy();
+      this.starSprites = [];
+
+      for (let index = 0; index < 56; index += 1) {
+        const star = this.add.sprite(
+          Phaser.Math.Between(0, 640),
+          Phaser.Math.Between(0, 640),
+          this.aiRuntime.key("background.stars")
+        ) as StarSprite;
+        star.starSpeed = Phaser.Math.FloatBetween(8, 42);
+        star.starAnimationKey = Phaser.Utils.Array.GetRandom(this.starAnimationKeys) as string;
+        star.setDepth(-82);
+        star.setAlpha(Phaser.Math.FloatBetween(0.35, 0.9));
+        star.setScale(Phaser.Math.FloatBetween(0.35, 1.25));
+        star.play(star.starAnimationKey);
+        this.starSprites.push(star);
+      }
+    }
+
+    private updateStars(delta: number): void {
+      const deltaSeconds = delta / 1000;
+
+      for (const star of this.starSprites) {
+        star.y += star.starSpeed * deltaSeconds;
+
+        if (star.y > 660) {
+          star.x = Phaser.Math.Between(0, 640);
+          star.y = -20;
+          star.starSpeed = Phaser.Math.FloatBetween(8, 42);
+          star.setAlpha(Phaser.Math.FloatBetween(0.35, 0.9));
+          star.setScale(Phaser.Math.FloatBetween(0.35, 1.25));
+          star.starAnimationKey = Phaser.Utils.Array.GetRandom(this.starAnimationKeys) as string;
+          star.play(star.starAnimationKey);
+        }
+      }
+    }
+
+    private applyStarTexture(textureKey: string, asset: AiAssetDefinition): void {
+      const animationKeys = asset.animations?.map((animation) => animation.key) ?? [];
+      this.starAnimationKeys = animationKeys.length > 0 ? animationKeys : this.starAnimationKeys;
+
+      for (const star of this.starSprites) {
+        star.setTexture(textureKey);
+        star.starAnimationKey = Phaser.Utils.Array.GetRandom(this.starAnimationKeys) as string;
+        star.play(star.starAnimationKey);
+      }
+    }
+
     private resetWave(message: string): void {
       for (const invader of this.invaders) invader.destroy();
       for (const bullet of this.bullets) bullet.destroy();
@@ -358,6 +427,26 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
 
       this.registerInvaderAnimationSize(asset);
+
+      return animationKeys;
+    }
+
+    private recreateStarAnimations(
+      textureKey: string,
+      asset = assetManifest.assets["background.stars"]
+    ): string[] {
+      const animationKeys: string[] = [];
+
+      for (const animation of asset?.animations ?? []) {
+        this.anims.remove(animation.key);
+        this.anims.create({
+          key: animation.key,
+          frames: this.animationFramesWithTiming(textureKey, animation),
+          frameRate: animation.frameRate,
+          repeat: animation.repeat ?? -1
+        });
+        animationKeys.push(animation.key);
+      }
 
       return animationKeys;
     }
@@ -568,6 +657,8 @@ function startGame(assetManifest: AiAssetManifest): void {
     private animationForKey(animationKey: string): AiAssetAnimation | undefined {
       return this.heroAnimations.get(animationKey) ??
         this.invaderAnimations.get(animationKey) ??
+        assetManifest.assets["background.stars"]?.animations
+        ?.find((animation) => animation.key === animationKey) ??
         assetManifest.assets[animationKey]?.animations
         ?.find((animation) => animation.key === animationKey);
     }
