@@ -1183,51 +1183,34 @@ export const assets = defineAiAssets(
   },
   "background.stars": {
     "id": "background.stars",
-    "kind": "spritesheet",
-    "prompt": "Tiny animated star sprites for a 2D space invaders background. A spritesheet with five distinct twinkling star animation rows, transparent background, readable at small size.",
+    "kind": "image",
+    "prompt": "Tiny glowing star sprite for a 2D space invaders background, transparent background, readable at very small size.",
     "dimensions": {
-      "width": 128,
-      "height": 160
+      "width": 32,
+      "height": 32
     },
-    "frameGrid": {
-      "frameWidth": 32,
-      "frameHeight": 32,
-      "columns": 4,
-      "rows": 5,
-      "frameCount": 20
-    },
-    "animations": [
-      {
-        "key": "background.stars.twinkle-white",
-        "frames": [0, 1, 2, 3],
-        "frameRate": 8,
-        "repeat": -1
+    "linkedAnimationAssets": {
+      "twinkle-white": {
+        "label": "White twinkle",
+        "assetId": "background.stars.twinkle-white"
       },
-      {
-        "key": "background.stars.blue-pulse",
-        "frames": [4, 5, 6, 7],
-        "frameRate": 7,
-        "repeat": -1
+      "blue-pulse": {
+        "label": "Blue pulse",
+        "assetId": "background.stars.blue-pulse"
       },
-      {
-        "key": "background.stars.gold-flare",
-        "frames": [8, 9, 10, 11],
-        "frameRate": 9,
-        "repeat": -1
+      "gold-flare": {
+        "label": "Gold flare",
+        "assetId": "background.stars.gold-flare"
       },
-      {
-        "key": "background.stars.violet-blink",
-        "frames": [12, 13, 14, 15],
-        "frameRate": 6,
-        "repeat": -1
+      "violet-blink": {
+        "label": "Violet blink",
+        "assetId": "background.stars.violet-blink"
       },
-      {
-        "key": "background.stars.green-shimmer",
-        "frames": [16, 17, 18, 19],
-        "frameRate": 8,
-        "repeat": -1
+      "green-shimmer": {
+        "label": "Green shimmer",
+        "assetId": "background.stars.green-shimmer"
       }
-    ],
+    },
     "settings": {
       "model": "gpt-image-2",
       "background": "auto",
@@ -1239,11 +1222,66 @@ export const assets = defineAiAssets(
       "default": {
         "name": "default",
         "file": "/assets/background.stars.default.svg",
-        "prompt": "Tiny animated star sprites for a 2D space invaders background. A spritesheet with five distinct twinkling star animation rows, transparent background, readable at small size.",
+        "prompt": "Tiny glowing star sprite for a 2D space invaders background, transparent background, readable at very small size.",
         "createdAt": "2026-06-05T00:00:00.000Z",
         "model": "starter-asset"
       }
     }
+  },
+  "background.stars.twinkle-white": {
+    "id": "background.stars.twinkle-white",
+    "kind": "spritesheet",
+    "prompt": "White star twinkling animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "dimensions": { "width": 128, "height": 32 },
+    "frameGrid": { "frameWidth": 32, "frameHeight": 32, "columns": 4, "rows": 1, "frameCount": 4 },
+    "animations": [{ "key": "background.stars.twinkle-white", "frames": [0, 1, 2, 3], "frameRate": 8, "repeat": -1 }],
+    "settings": { "model": "gpt-image-2", "background": "auto", "quality": "low", "format": "png", "referenceAssetIds": ["background.stars"] },
+    "activeVersion": "default",
+    "versions": { "default": { "name": "default", "file": "/assets/background.stars.twinkle-white.default.svg", "prompt": "White star twinkling animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.", "createdAt": "2026-06-05T00:00:00.000Z", "model": "starter-asset" } }
+  },
+  "background.stars.blue-pulse": {
+    "id": "background.stars.blue-pulse",
+    "kind": "spritesheet",
+    "prompt": "Blue star pulsing animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "dimensions": { "width": 128, "height": 32 },
+    "frameGrid": { "frameWidth": 32, "frameHeight": 32, "columns": 4, "rows": 1, "frameCount": 4 },
+    "animations": [{ "key": "background.stars.blue-pulse", "frames": [0, 1, 2, 3], "frameRate": 7, "repeat": -1 }],
+    "settings": { "model": "gpt-image-2", "background": "auto", "quality": "low", "format": "png", "referenceAssetIds": ["background.stars"] },
+    "activeVersion": "default",
+    "versions": { "default": { "name": "default", "file": "/assets/background.stars.blue-pulse.default.svg", "prompt": "Blue star pulsing animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.", "createdAt": "2026-06-05T00:00:00.000Z", "model": "starter-asset" } }
+  },
+  "background.stars.gold-flare": {
+    "id": "background.stars.gold-flare",
+    "kind": "spritesheet",
+    "prompt": "Gold star flare animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "dimensions": { "width": 128, "height": 32 },
+    "frameGrid": { "frameWidth": 32, "frameHeight": 32, "columns": 4, "rows": 1, "frameCount": 4 },
+    "animations": [{ "key": "background.stars.gold-flare", "frames": [0, 1, 2, 3], "frameRate": 9, "repeat": -1 }],
+    "settings": { "model": "gpt-image-2", "background": "auto", "quality": "low", "format": "png", "referenceAssetIds": ["background.stars"] },
+    "activeVersion": "default",
+    "versions": { "default": { "name": "default", "file": "/assets/background.stars.gold-flare.default.svg", "prompt": "Gold star flare animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.", "createdAt": "2026-06-05T00:00:00.000Z", "model": "starter-asset" } }
+  },
+  "background.stars.violet-blink": {
+    "id": "background.stars.violet-blink",
+    "kind": "spritesheet",
+    "prompt": "Violet star blinking animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "dimensions": { "width": 128, "height": 32 },
+    "frameGrid": { "frameWidth": 32, "frameHeight": 32, "columns": 4, "rows": 1, "frameCount": 4 },
+    "animations": [{ "key": "background.stars.violet-blink", "frames": [0, 1, 2, 3], "frameRate": 6, "repeat": -1 }],
+    "settings": { "model": "gpt-image-2", "background": "auto", "quality": "low", "format": "png", "referenceAssetIds": ["background.stars"] },
+    "activeVersion": "default",
+    "versions": { "default": { "name": "default", "file": "/assets/background.stars.violet-blink.default.svg", "prompt": "Violet star blinking animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.", "createdAt": "2026-06-05T00:00:00.000Z", "model": "starter-asset" } }
+  },
+  "background.stars.green-shimmer": {
+    "id": "background.stars.green-shimmer",
+    "kind": "spritesheet",
+    "prompt": "Green star shimmering animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "dimensions": { "width": 128, "height": 32 },
+    "frameGrid": { "frameWidth": 32, "frameHeight": 32, "columns": 4, "rows": 1, "frameCount": 4 },
+    "animations": [{ "key": "background.stars.green-shimmer", "frames": [0, 1, 2, 3], "frameRate": 8, "repeat": -1 }],
+    "settings": { "model": "gpt-image-2", "background": "auto", "quality": "low", "format": "png", "referenceAssetIds": ["background.stars"] },
+    "activeVersion": "default",
+    "versions": { "default": { "name": "default", "file": "/assets/background.stars.green-shimmer.default.svg", "prompt": "Green star shimmering animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.", "createdAt": "2026-06-05T00:00:00.000Z", "model": "starter-asset" } }
   },
   "background.space": {
     "id": "background.space",

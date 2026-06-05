@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="32" viewBox="0 0 128 32">
+  <rect width="128" height="32" fill="none"/>
+  <defs>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="2.4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <g id="spark" filter="url(#glow)">
+      <path d="M16 5 19 13 27 16 19 19 16 27 13 19 5 16 13 13Z"/>
+      <circle cx="16" cy="16" r="2.8"/>
+    </g>
+  </defs>
+  <g fill="#c4b5fd">
+    <use href="#spark" x="0" opacity=".5" transform="rotate(18 16 16)"/>
+    <use href="#spark" x="32" opacity=".95" transform="rotate(18 48 16)"/>
+    <use href="#spark" x="64" opacity=".55" transform="rotate(18 80 16)"/>
+    <use href="#spark" x="96" opacity=".8" transform="rotate(18 112 16)"/>
+  </g>
+</svg>
