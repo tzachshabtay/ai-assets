@@ -1068,14 +1068,17 @@ async function openAnimationEditor(options: {
   };
 
   const updateSelectedTimings = (
-    applyTiming: (timing: AiAssetAnimationFrameTiming) => AiAssetAnimationFrameTiming
+    applyTiming: (timing: AiAssetAnimationFrameTiming) => AiAssetAnimationFrameTiming,
+    options: { syncInputsAfterUpdate?: boolean } = {}
   ) => {
     for (const frameSlot of selectedFrameSlots) {
       frameTimings[frameSlot] = applyTiming(frameTimings[frameSlot] ?? {});
     }
 
     updateSelectedFrameThumbs();
-    syncInputs();
+    if (options.syncInputsAfterUpdate) {
+      syncInputs();
+    }
     restartPreview();
   };
 
