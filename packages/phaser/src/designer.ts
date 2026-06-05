@@ -966,7 +966,8 @@ async function openAnimationEditor(options: {
   dialog.append(card);
   options.root.append(dialog);
 
-  let selectedFrameSlot = 0;
+  let anchorFrameSlot = 0;
+  const selectedFrameSlots = new Set<number>([0]);
   let stopPreview: (() => void) | undefined;
   const frameTimings = baseAnimation.frames.map((_, index) => ({
     ...baseAnimation.frameTimings?.[index]
@@ -1001,23 +1002,152 @@ async function openAnimationEditor(options: {
   };
 
   const syncInputs = () => {
-    const timing = frameTimings[selectedFrameSlot] ?? {};
-    delayInput.value = String(
-      positiveIntegerValue(timing.delayMs, Math.round(1000 / baseAnimation.frameRate))
+    const selectedTimings = selectedFrameSlotsArray().map((frameSlot) => frameTimings[frameSlot] ?? {});
+    setInputForSelected(
+      delayInput,
+      selectedTimings,
+      (timing) => positiveIntegerValue(timing.delayMs, Math.round(1000 / baseAnimation.frameRate))
     );
-    offsetXInput.value = String(integerValue(timing.offsetX, 0));
-    offsetYInput.value = String(integerValue(timing.offsetY, 0));
-    scaleXInput.value = String(numberValue(timing.scaleX, 1));
-    scaleYInput.value = String(numberValue(timing.scaleY, 1));
-    rotationInput.value = String(numberValue(timing.rotation, 0));
-    tagInput.value = timing.tag ?? "";
+    setInputForSelected(offsetXInput, selectedTimings, (timing) => integerValue(timing.offsetX, 0));
+    setInputForSelected(offsetYInput, selectedTimings, (timing) => integerValue(timing.offsetY, 0));
+    setInputForSelected(scaleXInput, selectedTimings, (timing) => numberValue(timing.scaleX, 1));
+    setInputForSelected(scaleYInput, selectedTimings, (timing) => numberValue(timing.scaleY, 1));
+    setInputForSelected(rotationInput, selectedTimings, (timing) => numberValue(timing.rotation, 0));
+    setInputForSelected(tagInput, selectedTimings, (timing) => timing.tag ?? "");
 
     for (const button of strip.querySelectorAll("button")) {
-      button.classList.toggle(
-        "is-selected",
-        Number((button as HTMLButtonElement).dataset.frameSlot) === selectedFrameSlot
-      );
+      const frameSlot = Number((button as HTMLButtonElement).dataset.frameSlot);
+      button.classList.toggle("is-selected", selectedFrameSlots.has(frameSlot));
     }
+  };
+
+  const selectedFrameSlotsArray = () => [...selectedFrameSlots].sort((left, right) => left - right);
+
+  const selectFrame = (index: number, event: MouseEvent) => {
+    if (event.shiftKey) {
+      const start = Math.min(anchorFrameSlot, index);
+      const end = Math.max(anchorFrameSlot, index);
+      selectedFrameSlots.clear();
+
+      for (let frameSlot = start; frameSlot <= end; frameSlot += 1) {
+        selectedFrameSlots.add(frameSlot);
+      }
+    } else if (event.metaKey || event.ctrlKey) {
+      if (selectedFrameSlots.has(index)) {
+        selectedFrameSlots.delete(index);
+      } else {
+        selectedFrameSlots.add(index);
+      }
+
+      anchorFrameSlot = index;
+    } else {
+      selectedFrameSlots.clear();
+      selectedFrameSlots.add(index);
+      anchorFrameSlot = index;
+    }
+
+    syncInputs();
+  };
+
+  const updateSelectedFrameThumbs = () => {
+    for (const frameSlot of selectedFrameSlots) {
+      const selectedButton = strip.querySelector<HTMLButtonElement>(
+        `button[data-frame-slot="${frameSlot}"]`
+      );
+
+      if (selectedButton) {
+        setFrameBackground(selectedButton, {
+          src: options.src,
+          frame: baseAnimation.frames[frameSlot] ?? 0,
+          frameGrid,
+          displaySize: { width: 48, height: 48 },
+          timing: frameTimings[frameSlot]
+        });
+      }
+    }
+  };
+
+  const updateSelectedTimings = (
+    applyTiming: (timing: AiAssetAnimationFrameTiming) => AiAssetAnimationFrameTiming
+  ) => {
+    for (const frameSlot of selectedFrameSlots) {
+      frameTimings[frameSlot] = applyTiming(frameTimings[frameSlot] ?? {});
+    }
+
+    updateSelectedFrameThumbs();
+    syncInputs();
+    restartPreview();
+  };
+
+  const updateSelectedDelay = () => {
+    updateSelectedTimings((timing) => ({
+      ...timing,
+      delayMs: positiveIntegerInput(delayInput, Math.round(1000 / baseAnimation.frameRate))
+    }));
+  };
+
+  const updateSelectedOffsetX = () => {
+    updateSelectedTimings((timing) => ({
+      ...timing,
+      offsetX: integerInput(offsetXInput, 0)
+    }));
+  };
+
+  const updateSelectedOffsetY = () => {
+    updateSelectedTimings((timing) => ({
+      ...timing,
+      offsetY: integerInput(offsetYInput, 0)
+    }));
+  };
+
+  const updateSelectedScaleX = () => {
+    updateSelectedTimings((timing) => ({
+      ...timing,
+      scaleX: numberInput(scaleXInput, 1)
+    }));
+  };
+
+  const updateSelectedScaleY = () => {
+    updateSelectedTimings((timing) => ({
+      ...timing,
+      scaleY: numberInput(scaleYInput, 1)
+    }));
+  };
+
+  const updateSelectedRotation = () => {
+    updateSelectedTimings((timing) => ({
+      ...timing,
+      rotation: numberInput(rotationInput, 0)
+    }));
+  };
+
+  const updateSelectedTag = () => {
+    updateSelectedTimings((timing) => ({
+      ...timing,
+      tag: tagInput.value.trim() || undefined
+    }));
+  };
+
+  const bindFrameInput = (input: HTMLInputElement, update: () => void) => {
+    input.addEventListener("input", () => {
+      if (selectedFrameSlots.size === 0) return;
+
+      update();
+    });
+  };
+
+  const setInputForSelected = (
+    input: HTMLInputElement,
+    timings: AiAssetAnimationFrameTiming[],
+    valueForTiming: (timing: AiAssetAnimationFrameTiming) => string | number
+  ) => {
+    if (timings.length === 0) {
+      input.value = "";
+      return;
+    }
+
+    const values = timings.map((timing) => String(valueForTiming(timing)));
+    input.value = values.every((value) => value === values[0]) ? values[0] : "";
   };
 
   const renderStrip = () => {
@@ -1036,47 +1166,20 @@ async function openAnimationEditor(options: {
         displaySize: { width: 48, height: 48 },
         timing: frameTimings[index]
       });
-      button.addEventListener("click", () => {
-        selectedFrameSlot = index;
-        syncInputs();
+      button.addEventListener("click", (event) => {
+        selectFrame(index, event);
       });
       strip.append(button);
     });
   };
 
-  const updateSelectedTiming = () => {
-    frameTimings[selectedFrameSlot] = {
-      delayMs: positiveIntegerInput(delayInput, Math.round(1000 / baseAnimation.frameRate)),
-      offsetX: integerInput(offsetXInput, 0),
-      offsetY: integerInput(offsetYInput, 0),
-      scaleX: numberInput(scaleXInput, 1),
-      scaleY: numberInput(scaleYInput, 1),
-      rotation: numberInput(rotationInput, 0),
-      tag: tagInput.value.trim() || undefined
-    };
-    const selectedButton = strip.querySelector<HTMLButtonElement>(
-      `button[data-frame-slot="${selectedFrameSlot}"]`
-    );
-
-    if (selectedButton) {
-      setFrameBackground(selectedButton, {
-        src: options.src,
-        frame: baseAnimation.frames[selectedFrameSlot] ?? 0,
-        frameGrid,
-        displaySize: { width: 48, height: 48 },
-        timing: frameTimings[selectedFrameSlot]
-      });
-    }
-    restartPreview();
-  };
-
-  delayInput.addEventListener("input", updateSelectedTiming);
-  offsetXInput.addEventListener("input", updateSelectedTiming);
-  offsetYInput.addEventListener("input", updateSelectedTiming);
-  scaleXInput.addEventListener("input", updateSelectedTiming);
-  scaleYInput.addEventListener("input", updateSelectedTiming);
-  rotationInput.addEventListener("input", updateSelectedTiming);
-  tagInput.addEventListener("input", updateSelectedTiming);
+  bindFrameInput(delayInput, updateSelectedDelay);
+  bindFrameInput(offsetXInput, updateSelectedOffsetX);
+  bindFrameInput(offsetYInput, updateSelectedOffsetY);
+  bindFrameInput(scaleXInput, updateSelectedScaleX);
+  bindFrameInput(scaleYInput, updateSelectedScaleY);
+  bindFrameInput(rotationInput, updateSelectedRotation);
+  bindFrameInput(tagInput, updateSelectedTag);
 
   const close = () => {
     stopPreview?.();
