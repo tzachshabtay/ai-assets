@@ -47,6 +47,11 @@ const laserAnimationAssetIds = [
   "laser.red.hit"
 ];
 
+const laserHitDisplaySizes: Record<string, { width: number; height: number }> = {
+  "laser.blue.hit": { width: 18, height: 18 },
+  "laser.red.hit": { width: 18, height: 18 }
+};
+
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
 
@@ -676,14 +681,22 @@ function startGame(assetManifest: AiAssetManifest): void {
         return;
       }
 
-      const asset = assetManifest.assets[animationKey];
-      const size = this.displaySizeForAsset(asset);
+      const size = laserHitDisplaySizes[animationKey] ??
+        this.displaySizeForAsset(assetManifest.assets[animationKey]);
+      const fallbackDestroy = this.time.delayedCall(
+        this.animationDuration(animationKey) + 80,
+        () => laser.destroy()
+      );
+
       laser.setPosition(x, y);
       laser.setTexture(this.aiRuntime.key(animationKey));
       laser.setDisplaySize(size.width, size.height);
       laser.setDepth(9);
       laser.play(animationKey, true);
-      laser.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => laser.destroy());
+      laser.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+        fallbackDestroy.remove(false);
+        laser.destroy();
+      });
     }
 
     private delayUntilTaggedFrame(animationKey: string, tag: string): number {

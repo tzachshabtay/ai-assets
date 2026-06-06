@@ -1794,8 +1794,22 @@ export const assets = defineAiAssets(
           2,
           3
         ],
-        "frameRate": 18,
-        "repeat": 0
+        "frameRate": 8,
+        "repeat": 0,
+        "frameTimings": [
+          {
+            "delayMs": 110
+          },
+          {
+            "delayMs": 130
+          },
+          {
+            "delayMs": 130
+          },
+          {
+            "delayMs": 130
+          }
+        ]
       }
     ],
     "settings": {
@@ -1949,8 +1963,22 @@ export const assets = defineAiAssets(
           2,
           3
         ],
-        "frameRate": 18,
-        "repeat": 0
+        "frameRate": 8,
+        "repeat": 0,
+        "frameTimings": [
+          {
+            "delayMs": 110
+          },
+          {
+            "delayMs": 130
+          },
+          {
+            "delayMs": 130
+          },
+          {
+            "delayMs": 130
+          }
+        ]
       }
     ],
     "settings": {
