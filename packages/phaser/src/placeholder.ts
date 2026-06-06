@@ -42,7 +42,7 @@ export function aiAssetPlaceholderDataUrl(asset: AiAssetDefinition): string {
     "</svg>"
   ].join("");
 
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  return `data:image/svg+xml;base64,${base64Encode(svg)}`;
 }
 
 function placeholderCell(
@@ -61,4 +61,20 @@ function placeholderCell(
     `<circle cx="${cx}" cy="${cy - Math.max(5, height * 0.12)}" r="${Math.max(2, Math.min(width, height) * (0.1 + pulse * 0.04))}" fill="#38bdf8" opacity="${pulse}"/>`,
     `<text x="${cx}" y="${cy + Math.max(5, height * 0.18)}" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="${Math.max(5, Math.min(width / 5, height / 5, 12))}" fill="#e2e8f0">Loading...</text>`
   ].join("");
+}
+
+function base64Encode(value: string): string {
+  if (typeof btoa === "function") {
+    return btoa(value);
+  }
+
+  const bufferConstructor = (globalThis as {
+    Buffer?: { from(value: string, encoding: "utf8"): { toString(encoding: "base64"): string } };
+  }).Buffer;
+
+  if (!bufferConstructor) {
+    throw new Error("AI asset placeholder generation requires btoa or Buffer.");
+  }
+
+  return bufferConstructor.from(value, "utf8").toString("base64");
 }

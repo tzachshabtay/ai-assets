@@ -9,6 +9,10 @@ import {
   type DebugStyleGuideDraft,
   type GeneratedDebugOption
 } from "./debug-client.js";
+import {
+  ensureMissingAiAssetFirstDrafts,
+  type EnsureMissingAiAssetFirstDraftsProgress
+} from "./first-drafts.js";
 
 type AiAssetTextureFrameConfig = {
   frameWidth: number;
@@ -39,6 +43,7 @@ export type AiAssetDesignerOptions = {
   scene: AiAssetDesignerSceneLike;
   manifest: AiAssetManifest;
   client?: AiAssetDebugClient;
+  autoFirstDrafts?: boolean;
   assetIds?: string[];
   title?: string;
   optionCount?: number;
@@ -48,6 +53,7 @@ export type AiAssetDesignerOptions = {
     | Record<string, AiAssetPreviewDisplaySize>
     | ((assetId: string, asset: AiAssetDefinition) => AiAssetPreviewDisplaySize | undefined);
   onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
+  onAssetReady?(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
   onManifestUpdated?(manifest: AiAssetManifest): void;
 };
 
@@ -186,6 +192,18 @@ export function installAiAssetDesigner(
   const syncAsset = (assetId: string) => {
     syncAnimationChoices(assetId);
     syncTargetAsset(selectedTargetAssetId);
+  };
+
+  const handleFirstDraftProgress = (progress: EnsureMissingAiAssetFirstDraftsProgress) => {
+    if (progress.total === 0) return;
+
+    setStatus(
+      elements,
+      progress.currentAssetId
+        ? `Generating ${readableAssetName(progress.currentAssetId)} ${progress.completed}/${progress.total}...`
+        : `Generating first drafts ${progress.completed}/${progress.total}...`,
+      "busy"
+    );
   };
 
   elements.toggle.addEventListener("click", () => {
@@ -387,6 +405,38 @@ export function installAiAssetDesigner(
   });
 
   syncAsset(selectedAssetId);
+
+  if (options.autoFirstDrafts !== false) {
+    void ensureMissingAiAssetFirstDrafts({
+      scene: options.scene,
+      manifest,
+      client,
+      assetIds: options.assetIds,
+      continueOnError: true,
+      onManifestUpdated: (updatedManifest) => {
+        manifest = updatedManifest;
+        options.onManifestUpdated?.(updatedManifest);
+        syncAsset(selectedAssetId);
+      },
+      onAssetReady: (assetId, textureKey, asset) => {
+        (options.onAssetReady ?? options.onPreview)(assetId, textureKey, asset);
+      },
+      onProgress: handleFirstDraftProgress,
+      onError: (error, assetId) => {
+        setStatus(
+          elements,
+          `First draft failed for ${readableAssetName(assetId)}: ${errorMessage(error)}`,
+          "error"
+        );
+      }
+    }).then((result) => {
+      if (result.generatedAssetIds.length > 0 && result.errors.length === 0) {
+        setStatus(elements, "First drafts generated.", "success");
+      }
+    }).catch((error) => {
+      setStatus(elements, `First draft failed: ${errorMessage(error)}`, "error");
+    });
+  }
 
   return {
     root: elements.root,

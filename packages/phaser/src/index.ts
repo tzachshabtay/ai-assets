@@ -9,6 +9,14 @@ export {
 
 export { createAiAnimations } from "./animations.js";
 
+export type {
+  EnsureMissingAiAssetFirstDraftsOptions,
+  EnsureMissingAiAssetFirstDraftsProgress,
+  EnsureMissingAiAssetFirstDraftsResult
+} from "./first-drafts.js";
+
+export { ensureMissingAiAssetFirstDrafts } from "./first-drafts.js";
+
 export type { AiAssetRuntimeOptions } from "./runtime.js";
 
 export { AiAssetRuntime } from "./runtime.js";
