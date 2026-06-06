@@ -657,7 +657,7 @@ export const assets = defineAiAssets(
   "invader.raider": {
     "id": "invader.raider",
     "kind": "image",
-    "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background. red color.",
+    "prompt": "Alien invader raider for a 2D space invaders game, readable silhouette, transparent background. bright green color.",
     "dimensions": {
       "width": 64,
       "height": 64
@@ -682,7 +682,7 @@ export const assets = defineAiAssets(
         "assetId": "invader.raider.destroyed"
       }
     },
-    "activeVersion": "promoted-1780541957309",
+    "activeVersion": "promoted-1780781374574",
     "versions": {
       "default": {
         "name": "default",
@@ -750,13 +750,28 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780250792117",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780781374574": {
+        "name": "promoted-1780781374574",
+        "file": "/assets/invader.raider.promoted-1780781374574.png",
+        "prompt": "Alien invader raider for a 2D space invaders game, readable silhouette, transparent background. bright green color.",
+        "createdAt": "2026-06-06T21:29:34.593Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png"
+        },
+        "parentVersion": "promoted-1780541957309",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.raider.idle": {
     "id": "invader.raider.idle",
     "kind": "spritesheet",
-    "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+    "prompt": "Alien invader scout raider animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
     "dimensions": {
       "width": 128,
       "height": 128
@@ -790,7 +805,7 @@ export const assets = defineAiAssets(
         "invader.raider"
       ]
     },
-    "activeVersion": "promoted-1780542126752",
+    "activeVersion": "promoted-1780781559194",
     "versions": {
       "default": {
         "name": "default",
@@ -888,22 +903,40 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780447725139",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780781559194": {
+        "name": "promoted-1780781559194",
+        "file": "/assets/invader.raider.idle.promoted-1780781559194.png",
+        "prompt": "Alien invader scout raider animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+        "createdAt": "2026-06-06T21:32:39.216Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.raider"
+          ]
+        },
+        "parentVersion": "promoted-1780542126752",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.raider.shooting": {
     "id": "invader.raider.shooting",
     "kind": "spritesheet",
-    "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
+    "prompt": "shooting animation, the alien is turning around and shooting from its butt (should have a well defined butt) and then turns back, the laser itself should not be in the animation but a small spark from the butt when the shot starts",
     "dimensions": {
-      "width": 192,
+      "width": 256,
       "height": 192
     },
     "frameGrid": {
-      "frameCount": 8,
+      "frameCount": 12,
       "frameWidth": 64,
       "frameHeight": 64,
-      "columns": 3,
+      "columns": 4,
       "rows": 3
     },
     "animations": [
@@ -917,7 +950,11 @@ export const assets = defineAiAssets(
           4,
           5,
           6,
-          7
+          7,
+          8,
+          9,
+          10,
+          11
         ],
         "frameRate": 10,
         "repeat": 0,
@@ -962,7 +999,11 @@ export const assets = defineAiAssets(
             "delayMs": 100,
             "offsetX": 0,
             "offsetY": 0
-          }
+          },
+          {},
+          {},
+          {},
+          {}
         ]
       }
     ],
@@ -975,7 +1016,7 @@ export const assets = defineAiAssets(
         "invader.raider"
       ]
     },
-    "activeVersion": "promoted-1780542418532",
+    "activeVersion": "promoted-1780781825356",
     "versions": {
       "default": {
         "name": "default",
@@ -1091,13 +1132,31 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780456444685",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780781825356": {
+        "name": "promoted-1780781825356",
+        "file": "/assets/invader.raider.shooting.promoted-1780781825356.png",
+        "prompt": "shooting animation, the alien is turning around and shooting from its butt (should have a well defined butt) and then turns back, the laser itself should not be in the animation but a small spark from the butt when the shot starts",
+        "createdAt": "2026-06-06T21:37:05.366Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.raider"
+          ]
+        },
+        "parentVersion": "promoted-1780542418532",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.raider.destroyed": {
     "id": "invader.raider.destroyed",
     "kind": "spritesheet",
-    "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+    "prompt": "Alien invader raider destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
     "dimensions": {
       "width": 192,
       "height": 192
@@ -1135,7 +1194,7 @@ export const assets = defineAiAssets(
         "invader.raider"
       ]
     },
-    "activeVersion": "promoted-1780542613732",
+    "activeVersion": "promoted-1780781981622",
     "versions": {
       "default": {
         "name": "default",
@@ -1215,13 +1274,31 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780450920237",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780781981622": {
+        "name": "promoted-1780781981622",
+        "file": "/assets/invader.raider.destroyed.promoted-1780781981622.png",
+        "prompt": "Alien invader raider destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+        "createdAt": "2026-06-06T21:39:41.642Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.raider"
+          ]
+        },
+        "parentVersion": "promoted-1780542613732",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.hunter": {
     "id": "invader.hunter",
     "kind": "image",
-    "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background. red color.",
+    "prompt": "Alien invader hunter with scary claws for a 2D space invaders game, readable silhouette, transparent background. yellow color.",
     "dimensions": {
       "width": 64,
       "height": 64
@@ -1246,7 +1323,7 @@ export const assets = defineAiAssets(
         "assetId": "invader.hunter.destroyed"
       }
     },
-    "activeVersion": "promoted-1780541957309",
+    "activeVersion": "promoted-1780782171885",
     "versions": {
       "default": {
         "name": "default",
@@ -1314,13 +1391,28 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780250792117",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780782171885": {
+        "name": "promoted-1780782171885",
+        "file": "/assets/invader.hunter.promoted-1780782171885.png",
+        "prompt": "Alien invader hunter with scary claws for a 2D space invaders game, readable silhouette, transparent background. yellow color.",
+        "createdAt": "2026-06-06T21:42:51.900Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png"
+        },
+        "parentVersion": "promoted-1780541957309",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.hunter.idle": {
     "id": "invader.hunter.idle",
     "kind": "spritesheet",
-    "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+    "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, claws close and open, readable silhouette, transparent background.",
     "dimensions": {
       "width": 128,
       "height": 128
@@ -1354,7 +1446,7 @@ export const assets = defineAiAssets(
         "invader.hunter"
       ]
     },
-    "activeVersion": "promoted-1780542126752",
+    "activeVersion": "promoted-1780782339292",
     "versions": {
       "default": {
         "name": "default",
@@ -1452,13 +1544,31 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780447725139",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780782339292": {
+        "name": "promoted-1780782339292",
+        "file": "/assets/invader.hunter.idle.promoted-1780782339292.png",
+        "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, claws close and open, readable silhouette, transparent background.",
+        "createdAt": "2026-06-06T21:45:39.380Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.hunter"
+          ]
+        },
+        "parentVersion": "promoted-1780542126752",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.hunter.shooting": {
     "id": "invader.hunter.shooting",
     "kind": "spritesheet",
-    "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
+    "prompt": "shooting animation, the alien looks down and shooting from its mouth, the laser itself should not be in the animation but a small spark from the mouth when the shot starts",
     "dimensions": {
       "width": 192,
       "height": 192
@@ -1539,7 +1649,7 @@ export const assets = defineAiAssets(
         "invader.hunter"
       ]
     },
-    "activeVersion": "promoted-1780542418532",
+    "activeVersion": "promoted-1780782548529",
     "versions": {
       "default": {
         "name": "default",
@@ -1655,13 +1765,31 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "promoted-1780456444685",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780782548529": {
+        "name": "promoted-1780782548529",
+        "file": "/assets/invader.hunter.shooting.promoted-1780782548529.png",
+        "prompt": "shooting animation, the alien looks down and shooting from its mouth, the laser itself should not be in the animation but a small spark from the mouth when the shot starts",
+        "createdAt": "2026-06-06T21:49:08.581Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.hunter"
+          ]
+        },
+        "parentVersion": "promoted-1780542418532",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.hunter.destroyed": {
     "id": "invader.hunter.destroyed",
     "kind": "spritesheet",
-    "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+    "prompt": "Alien invader hunter destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
     "dimensions": {
       "width": 192,
       "height": 192
@@ -1699,7 +1827,7 @@ export const assets = defineAiAssets(
         "invader.hunter"
       ]
     },
-    "activeVersion": "promoted-1780542613732",
+    "activeVersion": "promoted-1780782669591",
     "versions": {
       "default": {
         "name": "default",
@@ -1778,6 +1906,24 @@ export const assets = defineAiAssets(
           ]
         },
         "parentVersion": "promoted-1780450920237",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780782669591": {
+        "name": "promoted-1780782669591",
+        "file": "/assets/invader.hunter.destroyed.promoted-1780782669591.png",
+        "prompt": "Alien invader hunter destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+        "createdAt": "2026-06-06T21:51:09.603Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.hunter"
+          ]
+        },
+        "parentVersion": "promoted-1780542613732",
         "notes": "Promoted from the AI asset designer."
       }
     }
@@ -3281,6 +3427,18 @@ export const assets = defineAiAssets(
         }
       }
     }
+  }
+}
+, {
+  "styleGuide": {
+    "prompt": "Hand-painted 1990s cartoon adventure game background, exaggerated perspective, whimsical architecture, bright saturated colors, smooth ink outlines, highly expressive shapes, playful visual humor, stylized proportions, curved and distorted geometry, detailed environmental storytelling, clean cel-animation aesthetic, retro PC adventure game art, professionally illustrated, high detail, colorful and cheerful atmosphere.",
+    "images": [
+      {
+        "name": "style.png",
+        "file": "/assets/style-guide.1780542427743.1.png",
+        "mimeType": "image/png"
+      }
+    ]
   }
 }
 );
