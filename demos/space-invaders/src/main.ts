@@ -94,6 +94,7 @@ function startGame(assetManifest: AiAssetManifest): void {
     >();
     private starSprites: StarSprite[] = [];
     private starAnimationKeys: string[] = [];
+    private pixelCollisionLocalPoint = new Phaser.Math.Vector2();
 
     constructor() {
       super("space-invaders");
@@ -333,11 +334,13 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       for (const bullet of [...this.bullets]) {
         for (const invader of [...this.invaders]) {
-          if (Phaser.Geom.Intersects.RectangleToRectangle(bullet.getBounds(), invader.getBounds())) {
+          const collisionPoint = this.pixelCollisionPoint(bullet, invader);
+
+          if (collisionPoint) {
             this.bullets = this.bullets.filter((candidate) => candidate !== bullet);
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
             bullet.destroy();
-            this.spawnLaserHit("laser.blue.hit", bullet.x, invader.getBounds().bottom);
+            this.spawnLaserHit("laser.blue.hit", collisionPoint.x, collisionPoint.y);
             this.playInvaderAnimation(invader, "invader.scout.destroyed");
             invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
@@ -348,10 +351,12 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
 
       for (const bullet of [...this.invaderBullets]) {
-        if (Phaser.Geom.Intersects.RectangleToRectangle(bullet.getBounds(), this.hero.getBounds())) {
+        const collisionPoint = this.pixelCollisionPoint(bullet, this.hero);
+
+        if (collisionPoint) {
           this.invaderBullets = this.invaderBullets.filter((candidate) => candidate !== bullet);
           bullet.destroy();
-          this.spawnLaserHit("laser.red.hit", bullet.x, this.hero.getBounds().top);
+          this.spawnLaserHit("laser.red.hit", collisionPoint.x, collisionPoint.y);
           this.statusText?.setText("Hit. The ship holds.");
           this.playHeroActionAnimation("hero.ship.hit");
         }
@@ -360,6 +365,80 @@ function startGame(assetManifest: AiAssetManifest): void {
       if (this.invaders.length === 0) {
         this.resetWave("Wave cleared.");
       }
+    }
+
+    private pixelCollisionPoint(
+      first: Phaser.GameObjects.Sprite,
+      second: Phaser.GameObjects.Sprite
+    ): Phaser.Math.Vector2 | undefined {
+      if (!first.active || !second.active) return undefined;
+
+      const firstBounds = first.getBounds();
+      const secondBounds = second.getBounds();
+      const left = Math.max(firstBounds.left, secondBounds.left);
+      const right = Math.min(firstBounds.right, secondBounds.right);
+      const top = Math.max(firstBounds.top, secondBounds.top);
+      const bottom = Math.min(firstBounds.bottom, secondBounds.bottom);
+
+      if (right <= left || bottom <= top) return undefined;
+
+      const startX = Math.floor(left);
+      const endX = Math.ceil(right);
+      const startY = Math.floor(top);
+      const endY = Math.ceil(bottom);
+
+      for (let y = startY; y < endY; y += 1) {
+        for (let x = startX; x < endX; x += 1) {
+          const sampleX = x + 0.5;
+          const sampleY = y + 0.5;
+
+          if (
+            this.isSpritePixelOpaqueAt(first, sampleX, sampleY) &&
+            this.isSpritePixelOpaqueAt(second, sampleX, sampleY)
+          ) {
+            return new Phaser.Math.Vector2(sampleX, sampleY);
+          }
+        }
+      }
+
+      return undefined;
+    }
+
+    private isSpritePixelOpaqueAt(
+      sprite: Phaser.GameObjects.Sprite,
+      worldX: number,
+      worldY: number
+    ): boolean {
+      const localPoint = sprite.getLocalPoint(worldX, worldY, this.pixelCollisionLocalPoint);
+      const frame = sprite.frame;
+      let pixelX = Math.floor(localPoint.x);
+      let pixelY = Math.floor(localPoint.y);
+
+      if (sprite.flipX) {
+        pixelX = frame.width - pixelX - 1;
+      }
+
+      if (sprite.flipY) {
+        pixelY = frame.height - pixelY - 1;
+      }
+
+      if (
+        pixelX < 0 ||
+        pixelY < 0 ||
+        pixelX >= frame.width ||
+        pixelY >= frame.height
+      ) {
+        return false;
+      }
+
+      const alpha = this.textures.getPixelAlpha(
+        pixelX,
+        pixelY,
+        sprite.texture.key,
+        frame.name
+      );
+
+      return (alpha ?? 0) >= 16;
     }
 
     private spawnInvaders(): void {
