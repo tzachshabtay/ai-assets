@@ -750,6 +750,7 @@ function renderOptions(options: {
       const animationStage = document.createElement("div");
       animationStage.className = "ai-game-assets-designer__option-animation";
       animationStage.hidden = true;
+      selectButton.append(animationStage);
 
       const animateButton = document.createElement("button");
       animateButton.type = "button";
@@ -782,7 +783,7 @@ function renderOptions(options: {
         });
       });
 
-      card.append(animationStage, animateButton);
+      card.append(animateButton);
     }
 
     options.elements.options.append(card);
@@ -1921,8 +1922,9 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__animation-stage,
 .ai-game-assets-designer__option-animation {
-  background-repeat: no-repeat;
-  image-rendering: pixelated;
+  position: relative;
+  overflow: hidden;
+  background: #0f1218;
 }
 .ai-game-assets-designer__animate-button {
   border: 1px solid #58657a;
@@ -1988,7 +1990,7 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__options {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(82px, 1fr));
   gap: 8px;
   margin-top: 10px;
 }
