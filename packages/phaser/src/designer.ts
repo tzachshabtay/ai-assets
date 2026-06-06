@@ -213,6 +213,27 @@ export function installAiAssetDesigner(
     );
   };
 
+  const lockGenerationStatus = () => {
+    elements.status.dataset.statusLock = "generation";
+  };
+
+  const unlockGenerationStatus = () => {
+    if (elements.status.dataset.statusLock === "generation") {
+      delete elements.status.dataset.statusLock;
+    }
+  };
+
+  const finishGeneration = (id: number) => {
+    if (activeGeneration?.id !== id) {
+      return false;
+    }
+
+    activeGeneration = undefined;
+    elements.regenerateButton.textContent = "Regenerate";
+    unlockGenerationStatus();
+    return true;
+  };
+
   elements.toggle.addEventListener("click", () => {
     setOpen(elements.root.dataset.open !== "true");
   });
@@ -262,6 +283,7 @@ export function installAiAssetDesigner(
       activeGeneration.controller.abort();
       activeGeneration = undefined;
       elements.regenerateButton.textContent = "Regenerate";
+      unlockGenerationStatus();
       setStatus(elements, "Generation cancelled.", "info");
       return;
     }
@@ -273,6 +295,7 @@ export function installAiAssetDesigner(
     activeGeneration = { controller, id: currentGenerationId };
 
     setStatus(elements, "Generating options...", "busy");
+    lockGenerationStatus();
     elements.promoteButton.disabled = true;
     elements.regenerateButton.textContent = "Cancel";
     selectedOption = undefined;
@@ -292,6 +315,7 @@ export function installAiAssetDesigner(
         return;
       }
 
+      finishGeneration(currentGenerationId);
       renderOptions({
         elements,
         generated,
@@ -311,13 +335,11 @@ export function installAiAssetDesigner(
         return;
       }
 
+      finishGeneration(currentGenerationId);
       elements.options.innerHTML = "";
       setStatus(elements, `Generation failed. ${errorMessage(error)}`, "error");
     } finally {
-      if (activeGeneration?.id === currentGenerationId) {
-        activeGeneration = undefined;
-        elements.regenerateButton.textContent = "Regenerate";
-      }
+      finishGeneration(currentGenerationId);
     }
   });
 
@@ -1613,6 +1635,13 @@ function setStatus(
   message: string,
   kind: "idle" | "info" | "busy" | "success" | "error"
 ): void {
+  if (
+    elements.status.dataset.statusLock === "generation" &&
+    (kind !== "busy" || message !== "Generating options...")
+  ) {
+    return;
+  }
+
   stopStatusAnimation(elements.status);
   elements.status.dataset.kind = kind;
 
