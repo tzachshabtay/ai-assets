@@ -93,6 +93,8 @@ const laserHitDisplaySizes: Record<string, { width: number; height: number }> = 
   "laser.red.hit": { width: 18, height: 18 }
 };
 const maxHeroLives = 5;
+const heroLifeIconSize = 30;
+const heroLifeIconSpacing = 34;
 
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
@@ -611,13 +613,12 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       for (let index = 0; index < maxHeroLives; index += 1) {
         const icon = this.add.image(
-          614 - ((maxHeroLives - 1 - index) * 24),
-          28,
+          618 - ((maxHeroLives - 1 - index) * heroLifeIconSpacing),
+          30,
           this.aiRuntime.key("hero.ship")
         );
-        icon.setDisplaySize(20, 20);
+        icon.setDisplaySize(heroLifeIconSize, heroLifeIconSize);
         icon.setDepth(40);
-        icon.setAlpha(0.92);
         this.heroLifeIcons.push(icon);
       }
 
@@ -627,15 +628,17 @@ function startGame(assetManifest: AiAssetManifest): void {
     private updateHeroLifeBarTexture(textureKey: string): void {
       for (const icon of this.heroLifeIcons) {
         icon.setTexture(textureKey);
-        icon.setDisplaySize(20, 20);
+        icon.setDisplaySize(heroLifeIconSize, heroLifeIconSize);
       }
     }
 
     private updateHeroLifeBar(): void {
       this.heroLifeIcons.forEach((icon, index) => {
         const isAlive = index < this.heroLives;
-        icon.setVisible(isAlive);
-        icon.setActive(isAlive);
+        icon.setVisible(true);
+        icon.setActive(true);
+        icon.setAlpha(isAlive ? 0.95 : 0.28);
+        icon.setTint(isAlive ? 0xffffff : 0x1f2937);
       });
     }
 
