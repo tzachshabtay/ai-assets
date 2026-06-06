@@ -118,11 +118,12 @@ async function routeRequest(
       assetIds?: string[];
     }>(request);
     let manifest = await readManifest(options.manifestPath);
-    const requestedAssetIds = new Set(body.assetIds ?? Object.keys(manifest.assets));
+    const requestedAssetIds = body.assetIds ?? Object.keys(manifest.assets);
+    const assetIdsToGenerate = planFirstDraftGeneration(manifest, requestedAssetIds);
     const generated: Array<{ assetId: string; versionName: string }> = [];
     let generatedIndex = 0;
 
-    for (const assetId of requestedAssetIds) {
+    for (const assetId of assetIdsToGenerate) {
       const asset = manifest.assets[assetId];
 
       if (!asset || asset.kind === "collection" || Object.keys(asset.versions).length > 0) {
@@ -220,6 +221,45 @@ type DebugStyleGuide = {
     dataUrl: string;
   }>;
 };
+
+export function planFirstDraftGeneration(
+  manifest: AiAssetManifest,
+  requestedAssetIds: string[]
+): string[] {
+  const planned: string[] = [];
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+
+  const visit = (assetId: string) => {
+    if (visited.has(assetId)) return;
+
+    const asset = manifest.assets[assetId];
+
+    if (!asset || asset.kind === "collection" || Object.keys(asset.versions).length > 0) {
+      return;
+    }
+
+    if (visiting.has(assetId)) {
+      throw new Error(`AI asset first-draft references contain a cycle at "${assetId}".`);
+    }
+
+    visiting.add(assetId);
+
+    for (const referenceAssetId of asset.settings?.referenceAssetIds ?? []) {
+      visit(referenceAssetId);
+    }
+
+    visiting.delete(assetId);
+    visited.add(assetId);
+    planned.push(assetId);
+  };
+
+  for (const assetId of requestedAssetIds) {
+    visit(assetId);
+  }
+
+  return planned;
+}
 
 async function getReferenceImages(
   options: AiAssetDevServerOptions,
