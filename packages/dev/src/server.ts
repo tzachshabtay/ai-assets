@@ -3,6 +3,7 @@ import {
   resolveAiAsset,
   type AiAssetDefinition,
   type AiAssetDimensions,
+  type AiAssetFormat,
   type AiAssetFrameGrid,
   type AiAssetManifest,
   type AiAssetStyleGuide
@@ -77,6 +78,7 @@ async function routeRequest(
       count?: number;
       dimensions?: AiAssetDimensions;
       frameCount?: number;
+      format?: AiAssetFormat;
       styleGuide?: DebugStyleGuide;
     }>(request);
     const manifest = await readManifest(options.manifestPath);
@@ -88,6 +90,7 @@ async function routeRequest(
       asset,
       prompt: body.prompt,
       count: body.count,
+      settings: body.format ? { format: body.format } : undefined,
       references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds),
       stylePrompt: body.styleGuide
         ? body.styleGuide.prompt?.trim() || undefined
@@ -107,6 +110,7 @@ async function routeRequest(
         dimensions: option.dimensions,
         frameGrid: option.frameGrid,
         animations: option.animations,
+        settings: option.settings,
         dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
       }))
     });
@@ -185,6 +189,7 @@ async function routeRequest(
       dimensions?: AiAssetDimensions;
       frameGrid?: AiAssetFrameGrid;
       animations?: AiAssetDefinition["animations"];
+      settings?: AiAssetDefinition["settings"];
       activate?: boolean;
       notes?: string;
     }>(request);
@@ -194,7 +199,8 @@ async function routeRequest(
       revisedPrompt: body.revisedPrompt,
       dimensions: body.dimensions,
       frameGrid: body.frameGrid,
-      animations: body.animations
+      animations: body.animations,
+      settings: body.settings
     });
     const result = await saveGeneratedOption(options, {
       assetId: body.assetId,
@@ -432,6 +438,7 @@ function optionFromDataUrl(
     dimensions?: AiAssetDimensions;
     frameGrid?: AiAssetFrameGrid;
     animations?: AiAssetDefinition["animations"];
+    settings?: AiAssetDefinition["settings"];
   }
 ) {
   const match = /^data:(.+);base64,(.+)$/.exec(dataUrl);
@@ -448,7 +455,8 @@ function optionFromDataUrl(
     revisedPrompt: metadata.revisedPrompt,
     dimensions: metadata.dimensions,
     frameGrid: metadata.frameGrid,
-    animations: metadata.animations
+    animations: metadata.animations,
+    settings: metadata.settings
   };
 }
 

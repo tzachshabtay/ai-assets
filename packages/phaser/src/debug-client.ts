@@ -1,3 +1,5 @@
+import type { AiAssetGenerationSettings, AiAssetManifest } from "@ai-game-assets/core";
+
 export type GenerateDebugOptionsRequest = {
   assetId: string;
   prompt?: string;
@@ -7,6 +9,7 @@ export type GenerateDebugOptionsRequest = {
     height: number;
   };
   frameCount?: number;
+  format?: AiAssetGenerationSettings["format"];
   styleGuide?: DebugStyleGuideDraft;
 };
 
@@ -54,6 +57,7 @@ export type GeneratedDebugOption = {
       tag?: string;
     }>;
   }>;
+  settings?: AiAssetGenerationSettings;
 };
 
 export type SaveDebugOptionRequest = {
@@ -69,6 +73,7 @@ export type SaveDebugOptionRequest = {
   };
   frameGrid?: GeneratedDebugOption["frameGrid"];
   animations?: GeneratedDebugOption["animations"];
+  settings?: AiAssetGenerationSettings;
   activate?: boolean;
   notes?: string;
 };
@@ -180,7 +185,6 @@ export class AiAssetDebugClient {
     }
   }
 }
-import type { AiAssetManifest } from "@ai-game-assets/core";
 
 async function fetchDebugEndpoint(
   url: string,

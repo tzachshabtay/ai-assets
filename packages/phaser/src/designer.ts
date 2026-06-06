@@ -2,6 +2,8 @@ import type {
   AiAssetAnimation,
   AiAssetAnimationFrameTiming,
   AiAssetDefinition,
+  AiAssetFormat,
+  AiAssetGenerationSettings,
   AiAssetManifest
 } from "@ai-game-assets/core";
 import {
@@ -81,6 +83,8 @@ type DesignerElements = {
   heightInput: HTMLInputElement;
   frameCountInput: HTMLInputElement;
   frameCountField: HTMLLabelElement;
+  formatSelect: HTMLSelectElement;
+  formatField: HTMLLabelElement;
   promptInput: HTMLTextAreaElement;
   currentImage: HTMLImageElement;
   currentAnimation: HTMLDivElement;
@@ -102,6 +106,13 @@ type StyleGuideDraft = {
   }>;
 };
 
+const assetFormatOptions: Array<{ value: AiAssetFormat; label: string }> = [
+  { value: "png", label: "PNG" },
+  { value: "jpg", label: "JPEG" },
+  { value: "webp", label: "WebP" },
+  { value: "svg", label: "SVG" }
+];
+
 export function installAiAssetDesigner(
   options: AiAssetDesignerOptions
 ): AiAssetDesigner {
@@ -115,6 +126,7 @@ export function installAiAssetDesigner(
   let stopCurrentAnimationPreview: (() => void) | undefined;
   let editedCurrentOption: GeneratedDebugOption | undefined;
   let styleGuideDraft = styleGuideDraftFromManifest(manifest);
+  const formatDrafts = new Map<string, AiAssetFormat>();
   let activeGeneration:
     | {
         controller: AbortController;
@@ -171,6 +183,13 @@ export function installAiAssetDesigner(
     elements.promptInput.value = activeVersion?.prompt ?? asset.prompt;
     elements.widthInput.value = String(asset.frameGrid?.frameWidth ?? asset.dimensions.width);
     elements.heightInput.value = String(asset.frameGrid?.frameHeight ?? asset.dimensions.height);
+    elements.formatSelect.value = effectiveGenerationFormat(
+      manifest,
+      formatDrafts,
+      selectedAssetId,
+      assetId
+    );
+    elements.formatField.hidden = !canEditGenerationFormat(manifest, selectedAssetId, assetId);
     elements.frameCountInput.value = String(
       asset.frameGrid?.frameCount ??
       (asset.frameGrid ? asset.frameGrid.columns * asset.frameGrid.rows : 1)
@@ -248,6 +267,12 @@ export function installAiAssetDesigner(
     syncTargetAsset(selectedTargetAssetId);
   });
 
+  elements.formatSelect.addEventListener("change", () => {
+    if (canEditGenerationFormat(manifest, selectedAssetId, selectedTargetAssetId)) {
+      formatDrafts.set(selectedTargetAssetId, normalizeAssetFormat(elements.formatSelect.value));
+    }
+  });
+
   elements.currentPreview.addEventListener("click", () => {
     const asset = manifest.assets[selectedTargetAssetId];
     const activeVersion = asset.versions[asset.activeVersion];
@@ -291,6 +316,12 @@ export function installAiAssetDesigner(
     const controller = new AbortController();
     const currentGenerationId = generationId + 1;
     const generationAssetId = selectedTargetAssetId;
+    const generationFormat = effectiveGenerationFormat(
+      manifest,
+      formatDrafts,
+      selectedAssetId,
+      generationAssetId
+    );
     generationId = currentGenerationId;
     activeGeneration = { controller, id: currentGenerationId };
 
@@ -305,8 +336,13 @@ export function installAiAssetDesigner(
         assetId: generationAssetId,
         prompt: elements.promptInput.value,
         count: options.optionCount ?? 3,
+        format: generationFormat,
         styleGuide: await styleGuideRequest(styleGuideDraft),
-        ...generationOverridesFromInputs(elements, manifest.assets[generationAssetId])
+        ...generationOverridesFromInputs(
+          elements,
+          manifest.assets[generationAssetId],
+          generationFormat
+        )
       }, {
         signal: controller.signal
       });
@@ -361,12 +397,14 @@ export function installAiAssetDesigner(
         dimensions: selectedOption.dimensions,
         frameGrid: selectedOption.frameGrid,
         animations: selectedOption.animations,
+        settings: selectedOption.settings,
         activate: true,
         notes: "Promoted from the AI asset designer."
       });
 
       manifest = await client.getManifest();
       options.onManifestUpdated?.(manifest);
+      formatDrafts.delete(selectedTargetAssetId);
       syncTargetAsset(selectedTargetAssetId);
       setStatus(elements, `Promoted ${selectedTargetAssetId} to ${versionName}.`, "success");
 
@@ -558,6 +596,14 @@ function createDesignerElements(
   const widthInput = numericInput();
   const heightInput = numericInput();
   const frameCountInput = numericInput();
+  const formatSelect = document.createElement("select");
+  formatSelect.className = "ai-game-assets-designer__format-select";
+  for (const format of assetFormatOptions) {
+    const option = document.createElement("option");
+    option.value = format.value;
+    option.textContent = format.label;
+    formatSelect.append(option);
+  }
   const dimensionGrid = document.createElement("div");
   dimensionGrid.className = "ai-game-assets-designer__dimensions";
   dimensionGrid.append(
@@ -565,6 +611,7 @@ function createDesignerElements(
     labelWrap("Height", heightInput)
   );
   const frameCountField = labelWrap("Frames", frameCountInput);
+  const formatField = labelWrap("Format", formatSelect);
 
   const currentPreview = document.createElement("div");
   currentPreview.className = "ai-game-assets-designer__current";
@@ -614,6 +661,7 @@ function createDesignerElements(
     animationField,
     dimensionGrid,
     frameCountField,
+    formatField,
     labelWrap("Current", currentPreview),
     labelWrap("Prompt", promptInput),
     actions,
@@ -635,6 +683,8 @@ function createDesignerElements(
     heightInput,
     frameCountInput,
     frameCountField,
+    formatSelect,
+    formatField,
     promptInput,
     currentImage,
     currentAnimation,
@@ -1345,10 +1395,12 @@ function setFrameBackground(
 
 function generationOverridesFromInputs(
   elements: DesignerElements,
-  asset: AiAssetDefinition
+  asset: AiAssetDefinition,
+  format: AiAssetFormat
 ): {
   dimensions: { width: number; height: number };
   frameCount?: number;
+  settings: AiAssetGenerationSettings;
 } {
   const dimensions = {
     width: positiveIntegerInput(
@@ -1362,16 +1414,53 @@ function generationOverridesFromInputs(
   };
 
   if (!asset.frameGrid) {
-    return { dimensions };
+    return {
+      dimensions,
+      settings: { format }
+    };
   }
 
   return {
     dimensions,
+    settings: { format },
     frameCount: positiveIntegerInput(
       elements.frameCountInput,
       asset.frameGrid.frameCount ?? asset.frameGrid.columns * asset.frameGrid.rows
     )
   };
+}
+
+function canEditGenerationFormat(
+  manifest: AiAssetManifest,
+  selectedAssetId: string,
+  targetAssetId: string
+): boolean {
+  const selectedAsset = manifest.assets[selectedAssetId];
+
+  return selectedAsset?.kind === "collection" || selectedAssetId === targetAssetId;
+}
+
+function effectiveGenerationFormat(
+  manifest: AiAssetManifest,
+  drafts: Map<string, AiAssetFormat>,
+  selectedAssetId: string,
+  targetAssetId: string
+): AiAssetFormat {
+  if (canEditGenerationFormat(manifest, selectedAssetId, targetAssetId)) {
+    return drafts.get(targetAssetId) ?? selectedFormatFromDesignerOrAsset(manifest.assets[targetAssetId]);
+  }
+
+  return drafts.get(selectedAssetId) ?? selectedFormatFromDesignerOrAsset(manifest.assets[selectedAssetId]);
+}
+
+function selectedFormatFromDesignerOrAsset(asset: AiAssetDefinition | undefined): AiAssetFormat {
+  return normalizeAssetFormat(asset?.settings?.format);
+}
+
+function normalizeAssetFormat(format: string | undefined): AiAssetFormat {
+  if (format === "jpg" || format === "webp" || format === "svg") return format;
+
+  return "png";
 }
 
 function assetWithGeneratedGeometry(

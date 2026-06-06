@@ -2,6 +2,7 @@ import type {
   AiAssetAnimation,
   AiAssetDefinition,
   AiAssetDimensions,
+  AiAssetFormat,
   AiAssetFrameGrid,
   AiAssetGenerationSettings
 } from "@ai-game-assets/core";
@@ -56,6 +57,7 @@ export type AiImageProvider = {
 export type OpenAiImageProviderOptions = {
   apiKey?: string;
   model?: string;
+  svgModel?: string;
   quality?: AiAssetGenerationSettings["quality"];
   background?: AiAssetGenerationSettings["background"];
 };
@@ -79,6 +81,15 @@ export function createOpenAiImageProvider(
       const prompt = request.prompt ?? request.asset.prompt;
       const requestedFormat =
         request.settings?.format ?? request.asset.settings?.format ?? "png";
+      if (requestedFormat === "svg") {
+        return generateSvgAssets(request, {
+          apiKey,
+          model: request.settings?.model ?? options.svgModel ?? process.env.OPENAI_SVG_MODEL ?? "gpt-5.5",
+          prompt,
+          count: request.count ?? 1
+        });
+      }
+
       const outputFormat = normalizeOutputFormat(requestedFormat);
       const requestedBackground = resolveRequestedBackground(request, options);
       const background = normalizeBackgroundForModel(model, requestedBackground);
@@ -171,6 +182,179 @@ export function createOpenAiImageProvider(
       return generated;
     }
   };
+}
+
+async function generateSvgAssets(
+  request: GenerateAssetRequest,
+  context: {
+    apiKey: string;
+    model: string;
+    prompt: string;
+    count: number;
+  }
+): Promise<GeneratedAssetOption[]> {
+  const generated: GeneratedAssetOption[] = [];
+  const references = [
+    ...(request.references ?? []),
+    ...(request.styleReferences ?? []).map((reference, index) => ({
+      ...reference,
+      fileName: `style-reference-${index + 1}-${reference.fileName}`
+    }))
+  ];
+
+  for (let index = 0; index < context.count; index += 1) {
+    const prompt = svgAssetPrompt(request, {
+      prompt: context.prompt,
+      variation: context.count > 1 ? createVariationSeed(index) : undefined,
+      variationIndex: index,
+      variationCount: context.count
+    });
+    const response = await createSvgResponse(context.apiKey, {
+      model: context.model,
+      prompt,
+      references
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(
+        `OpenAI SVG generation failed (${response.status}): ${openAiErrorMessage(body)}`
+      );
+    }
+
+    const payload = await response.json() as unknown;
+    const svg = normalizeSvgOutput(extractResponseText(payload), request.asset.dimensions);
+
+    generated.push({
+      image: Buffer.from(svg, "utf8"),
+      mimeType: "image/svg+xml",
+      prompt: context.prompt,
+      model: context.model,
+      dimensions: request.asset.dimensions,
+      frameGrid: request.asset.frameGrid,
+      animations: request.asset.animations,
+      settings: {
+        ...request.asset.settings,
+        ...request.settings,
+        model: context.model,
+        format: "svg"
+      }
+    });
+  }
+
+  return generated;
+}
+
+function svgAssetPrompt(
+  request: GenerateAssetRequest,
+  context: {
+    prompt: string;
+    variation?: string;
+    variationIndex?: number;
+    variationCount?: number;
+  }
+): string {
+  const lines = [
+    context.prompt,
+    "",
+    "Generate a single valid SVG file as XML markup for a 2D game asset.",
+    "Return only the <svg>...</svg> document. Do not wrap it in Markdown, do not add commentary, and do not output raster images or base64 data.",
+    `The root <svg> must use xmlns="http://www.w3.org/2000/svg", width="${request.asset.dimensions.width}", height="${request.asset.dimensions.height}", and viewBox="0 0 ${request.asset.dimensions.width} ${request.asset.dimensions.height}".`,
+    `Asset kind: ${request.asset.kind}.`,
+    `Target canvas: ${request.asset.dimensions.width}x${request.asset.dimensions.height}.`,
+    "Use vector primitives such as paths, polygons, circles, ellipses, rects, gradients, masks, and groups. Keep IDs unique and descriptive.",
+    "Do not include scripts, external URLs, foreignObject, CSS imports, font imports, animation tags, or event handlers."
+  ];
+
+  if (request.stylePrompt?.trim()) {
+    lines.push(`Style guide: ${request.stylePrompt.trim()}`);
+  }
+
+  if (referencesNeedIdentity(request)) {
+    lines.push(
+      "Use the provided non-style reference image as the character identity reference. Preserve its silhouette, palette distribution, proportions, markings, and distinctive details while drawing it as clean SVG."
+    );
+  }
+
+  if (request.asset.frameGrid) {
+    const frameCount =
+      request.asset.frameGrid.frameCount ??
+      request.asset.frameGrid.columns * request.asset.frameGrid.rows;
+    lines.push(
+      `Spritesheet contract: create exactly ${frameCount} animation frames arranged in the first ${frameCount} cells of a fixed grid with ${request.asset.frameGrid.columns} columns and ${request.asset.frameGrid.rows} rows.`,
+      `Each frame cell is exactly ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}. The full SVG canvas is ${request.asset.dimensions.width}x${request.asset.dimensions.height}.`,
+      `Use one complete frame per grid cell, ordered left-to-right then top-to-bottom. Cell rectangles are: ${gridCellRectangles(request)}.`,
+      "Keep the background transparent by leaving empty areas unpainted. Do not draw visible grid lines, labels, frame numbers, or cell borders."
+    );
+  } else if (request.asset.settings?.background === "opaque") {
+    lines.push(
+      "Create one continuous opaque scene covering the full SVG canvas. Do not create a spritesheet, contact sheet, labels, or panels."
+    );
+  } else {
+    lines.push(
+      "Create exactly one complete transparent-background sprite on the canvas. Leave empty areas unpainted; do not draw a white, black, gray, checkerboard, or colored background."
+    );
+  }
+
+  if (context.variation) {
+    lines.push(
+      context.variation,
+      variationDirectionPromptLine(context.variationIndex ?? 0)
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function referencesNeedIdentity(request: GenerateAssetRequest): boolean {
+  return Boolean(request.references?.length);
+}
+
+async function createSvgResponse(
+  apiKey: string,
+  body: {
+    model: string;
+    prompt: string;
+    references: GenerateAssetReference[];
+  }
+): Promise<Response> {
+  const content: Array<
+    | { type: "input_text"; text: string }
+    | { type: "input_image"; image_url: string }
+  > = [{ type: "input_text", text: body.prompt }];
+
+  for (const reference of body.references) {
+    if (!isSupportedResponseImageMimeType(reference.mimeType)) continue;
+
+    content.push({
+      type: "input_image",
+      image_url: `data:${reference.mimeType};base64,${Buffer.from(reference.image).toString("base64")}`
+    });
+  }
+
+  return fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: body.model,
+      input: [
+        {
+          role: "user",
+          content
+        }
+      ]
+    })
+  });
+}
+
+function isSupportedResponseImageMimeType(mimeType: string): boolean {
+  return mimeType === "image/png" ||
+    mimeType === "image/jpeg" ||
+    mimeType === "image/webp" ||
+    mimeType === "image/gif";
 }
 
 function gameAssetPrompt(
@@ -1068,6 +1252,85 @@ async function readImagePayload(response: Response): Promise<{
   };
 }
 
+function extractResponseText(payload: unknown): string {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "output_text" in payload &&
+    typeof payload.output_text === "string"
+  ) {
+    return payload.output_text;
+  }
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "output" in payload &&
+    Array.isArray(payload.output)
+  ) {
+    const chunks: string[] = [];
+
+    for (const item of payload.output) {
+      if (
+        item &&
+        typeof item === "object" &&
+        "content" in item &&
+        Array.isArray(item.content)
+      ) {
+        for (const content of item.content) {
+          if (
+            content &&
+            typeof content === "object" &&
+            "text" in content &&
+            typeof content.text === "string"
+          ) {
+            chunks.push(content.text);
+          }
+        }
+      }
+    }
+
+    if (chunks.length > 0) {
+      return chunks.join("\n");
+    }
+  }
+
+  throw new Error("OpenAI SVG generation response did not include text output.");
+}
+
+function normalizeSvgOutput(svgText: string, dimensions: AiAssetDimensions): string {
+  const match = /<svg\b[\s\S]*<\/svg>/i.exec(svgText);
+  const svg = (match?.[0] ?? svgText).trim();
+
+  if (!/^<svg\b/i.test(svg) || !/<\/svg>$/i.test(svg)) {
+    throw new Error("SVG generation did not return a valid <svg> document.");
+  }
+
+  return sanitizeSvgMarkup(ensureSvgRootAttributes(svg, dimensions));
+}
+
+function ensureSvgRootAttributes(svg: string, dimensions: AiAssetDimensions): string {
+  return svg.replace(/<svg\b([^>]*)>/i, (_match, attributes: string) => {
+    const cleanedAttributes = String(attributes)
+      .replace(/\s+xmlns=(["']).*?\1/i, "")
+      .replace(/\s+width=(["']).*?\1/i, "")
+      .replace(/\s+height=(["']).*?\1/i, "")
+      .replace(/\s+viewBox=(["']).*?\1/i, "")
+      .trim();
+    const prefix = cleanedAttributes ? ` ${cleanedAttributes}` : "";
+
+    return `<svg${prefix} xmlns="http://www.w3.org/2000/svg" width="${dimensions.width}" height="${dimensions.height}" viewBox="0 0 ${dimensions.width} ${dimensions.height}">`;
+  });
+}
+
+function sanitizeSvgMarkup(svg: string): string {
+  return svg
+    .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    .replace(/<foreignObject\b[\s\S]*?<\/foreignObject>/gi, "")
+    .replace(/\s+on[a-z]+\s*=\s*(["']).*?\1/gi, "")
+    .replace(/\s+(?:href|xlink:href)\s*=\s*(["'])\s*(?:javascript:|https?:|data:)[\s\S]*?\1/gi, "");
+}
+
 function arrayBufferFromBytes(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(
     bytes.byteOffset,
@@ -1076,7 +1339,7 @@ function arrayBufferFromBytes(bytes: Uint8Array): ArrayBuffer {
 }
 
 function normalizeOutputFormat(
-  format: AiAssetGenerationSettings["format"] | undefined
+  format: AiAssetFormat | undefined
 ): "png" | "webp" | "jpeg" {
   if (format === "webp") return "webp";
   if (format === "jpg") return "jpeg";
