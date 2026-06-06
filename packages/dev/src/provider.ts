@@ -84,7 +84,7 @@ export function createOpenAiImageProvider(
       if (requestedFormat === "svg") {
         return generateSvgAssets(request, {
           apiKey,
-          model: request.settings?.model ?? options.svgModel ?? process.env.OPENAI_SVG_MODEL ?? "gpt-5.5",
+          model: request.settings?.model ?? options.svgModel ?? process.env.OPENAI_SVG_MODEL ?? "gpt-5",
           prompt,
           count: request.count ?? 1
         });
