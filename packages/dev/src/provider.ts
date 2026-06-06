@@ -21,6 +21,7 @@ const CHROMA_KEY_CANDIDATES: RgbColor[] = [
 ];
 const CHROMA_MATCH_TOLERANCE = 120;
 const CHROMA_EDGE_TOLERANCE = 170;
+const CHROMA_EDGE_FILL_TOLERANCE = 150;
 
 export type GenerateAssetRequest = {
   asset: AiAssetDefinition;
@@ -457,23 +458,27 @@ function createVariationSeed(index: number): string {
 function selectChromaKey(request: GenerateAssetRequest): RgbColor {
   const samples = [...(request.references ?? []), ...(request.styleReferences ?? [])]
     .flatMap((reference) => referenceColorSamples(reference));
+  const prompt = `${request.prompt ?? ""} ${request.asset.prompt}`.toLowerCase();
 
   if (!samples.length) {
-    const prompt = `${request.prompt ?? ""} ${request.asset.prompt}`.toLowerCase();
-
-    if (/\b(red|pink|purple|magenta|violet|crimson)\b/.test(prompt)) {
-      return { red: 0, green: 255, blue: 0 };
-    }
+    return CHROMA_KEY_CANDIDATES.find((candidate) => !promptMentionsChromaFamily(prompt, candidate)) ??
+      DEFAULT_CHROMA_KEY;
   }
 
-  if (!samples.length) return DEFAULT_CHROMA_KEY;
-
   return CHROMA_KEY_CANDIDATES
+    .filter((candidate) => !promptMentionsChromaFamily(prompt, candidate))
     .map((candidate) => ({
       candidate,
       score: Math.min(...samples.map((sample) => colorDistance(candidate, sample)))
     }))
-    .sort((left, right) => right.score - left.score)[0]?.candidate ?? DEFAULT_CHROMA_KEY;
+    .sort((left, right) => right.score - left.score)[0]?.candidate ??
+    CHROMA_KEY_CANDIDATES
+      .map((candidate) => ({
+        candidate,
+        score: Math.min(...samples.map((sample) => colorDistance(candidate, sample)))
+      }))
+      .sort((left, right) => right.score - left.score)[0]?.candidate ??
+    DEFAULT_CHROMA_KEY;
 }
 
 function referenceLockPromptLines(references: GenerateAssetReference[]): string[] {
@@ -828,13 +833,7 @@ function removeChromaBackground(image: Uint8Array, chromaKey: RgbColor): Buffer 
   }
 
   for (let index = 0; index < transparent.length; index += 1) {
-    if (
-      transparent[index] ||
-      (
-        backgroundRemoval.kind === "chroma" &&
-        isStrongChromaPixel(png, index, backgroundRemoval.chromaKey)
-      )
-    ) {
+    if (transparent[index]) {
       transparent[index] = 1;
       setAlpha(png, index, 0);
     }
@@ -1027,24 +1026,12 @@ function isRemovableEdgeBackgroundPixel(
 ): boolean {
   if (backgroundRemoval.kind === "chroma") {
     return (
-      isChromaPixel(png, index, 260, backgroundRemoval.chromaKey) ||
-      isKeyTintedPixel(rgbAt(png, index), backgroundRemoval.chromaKey, 0.45)
+      isChromaPixel(png, index, CHROMA_EDGE_FILL_TOLERANCE, backgroundRemoval.chromaKey) ||
+      isKeyTintedPixel(rgbAt(png, index), backgroundRemoval.chromaKey, 0.86)
     );
   }
 
   return isNeutralMattePixel(rgbAt(png, index), backgroundRemoval.matteColor);
-}
-
-function isStrongChromaPixel(png: PNG, index: number, chromaKey: RgbColor): boolean {
-  const offset = index * 4;
-  const red = png.data[offset] ?? 0;
-  const green = png.data[offset + 1] ?? 0;
-  const blue = png.data[offset + 2] ?? 0;
-
-  return (
-    isChromaPixel(png, index, CHROMA_MATCH_TOLERANCE, chromaKey) ||
-    isKeyTintedPixel({ red, green, blue }, chromaKey, 0.65)
-  );
 }
 
 function isKeyTintedPixel(color: RgbColor, chromaKey: RgbColor, strength: number): boolean {
@@ -1060,6 +1047,30 @@ function isKeyTintedPixel(color: RgbColor, chromaKey: RgbColor, strength: number
     activeChannels.every((channel) => channel.color >= 150 * strength) &&
     inactiveChannels.every((channel) => channel.color <= 190 * (1.1 - strength))
   );
+}
+
+function promptMentionsChromaFamily(prompt: string, chromaKey: RgbColor): boolean {
+  if (chromaKey.red === 255 && chromaKey.green === 0 && chromaKey.blue === 255) {
+    return /\b(red|pink|purple|magenta|violet|crimson|fuchsia)\b/.test(prompt);
+  }
+
+  if (chromaKey.red === 0 && chromaKey.green === 255 && chromaKey.blue === 0) {
+    return /\b(green|lime|emerald|neon green|chartreuse)\b/.test(prompt);
+  }
+
+  if (chromaKey.red === 0 && chromaKey.green === 255 && chromaKey.blue === 255) {
+    return /\b(cyan|aqua|teal|turquoise|blue)\b/.test(prompt);
+  }
+
+  if (chromaKey.red === 255 && chromaKey.green === 255 && chromaKey.blue === 0) {
+    return /\b(yellow|gold|golden|amber)\b/.test(prompt);
+  }
+
+  if (chromaKey.red === 0 && chromaKey.green === 0 && chromaKey.blue === 255) {
+    return /\b(blue|navy|cobalt|azure|indigo|cyan)\b/.test(prompt);
+  }
+
+  return false;
 }
 
 function chromaDistance(png: PNG, index: number, chromaKey: RgbColor): number {
