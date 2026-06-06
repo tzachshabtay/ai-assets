@@ -85,6 +85,10 @@ export type EnsureFirstDraftsResult = {
   }>;
 };
 
+export type AiAssetDebugClientRequestOptions = {
+  signal?: AbortSignal;
+};
+
 export class AiAssetDebugClient {
   readonly endpoint: string;
 
@@ -92,14 +96,18 @@ export class AiAssetDebugClient {
     this.endpoint = endpoint.replace(/\/$/, "");
   }
 
-  async generate(request: GenerateDebugOptionsRequest): Promise<GeneratedDebugOption[]> {
+  async generate(
+    request: GenerateDebugOptionsRequest,
+    options: AiAssetDebugClientRequestOptions = {}
+  ): Promise<GeneratedDebugOption[]> {
     const url = `${this.endpoint}/__ai-assets/generate`;
     const response = await fetchDebugEndpoint(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(request)
+      body: JSON.stringify(request),
+      signal: options.signal
     });
 
     if (!response.ok) {
@@ -181,6 +189,10 @@ async function fetchDebugEndpoint(
   try {
     return await fetch(url, init);
   } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+
     throw new Error(
       [
         `Could not reach the AI asset dev server at ${url}.`,
@@ -204,4 +216,10 @@ async function responseErrorMessage(response: Response): Promise<string> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
 }

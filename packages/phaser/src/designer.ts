@@ -115,6 +115,13 @@ export function installAiAssetDesigner(
   let stopCurrentAnimationPreview: (() => void) | undefined;
   let editedCurrentOption: GeneratedDebugOption | undefined;
   let styleGuideDraft = styleGuideDraftFromManifest(manifest);
+  let activeGeneration:
+    | {
+        controller: AbortController;
+        id: number;
+      }
+    | undefined;
+  let generationId = 0;
 
   if (!selectedAssetId) {
     throw new Error("AI asset designer requires at least one asset.");
@@ -251,26 +258,46 @@ export function installAiAssetDesigner(
   });
 
   elements.regenerateButton.addEventListener("click", async () => {
+    if (activeGeneration) {
+      activeGeneration.controller.abort();
+      activeGeneration = undefined;
+      elements.regenerateButton.textContent = "Regenerate";
+      setStatus(elements, "Generation cancelled.", "info");
+      return;
+    }
+
+    const controller = new AbortController();
+    const currentGenerationId = generationId + 1;
+    const generationAssetId = selectedTargetAssetId;
+    generationId = currentGenerationId;
+    activeGeneration = { controller, id: currentGenerationId };
+
     setStatus(elements, "Generating options...", "busy");
     elements.promoteButton.disabled = true;
-    elements.regenerateButton.disabled = true;
+    elements.regenerateButton.textContent = "Cancel";
     selectedOption = undefined;
 
     try {
       const generated = await client.generate({
-        assetId: selectedTargetAssetId,
+        assetId: generationAssetId,
         prompt: elements.promptInput.value,
         count: options.optionCount ?? 3,
         styleGuide: await styleGuideRequest(styleGuideDraft),
-        ...generationOverridesFromInputs(elements, manifest.assets[selectedTargetAssetId])
+        ...generationOverridesFromInputs(elements, manifest.assets[generationAssetId])
+      }, {
+        signal: controller.signal
       });
+
+      if (activeGeneration?.id !== currentGenerationId) {
+        return;
+      }
 
       renderOptions({
         elements,
         generated,
         scene: options.scene,
         manifest,
-        assetId: selectedTargetAssetId,
+        assetId: generationAssetId,
         designerOptions: options,
         onPreview: options.onPreview,
         onSelected(option) {
@@ -280,10 +307,17 @@ export function installAiAssetDesigner(
       });
       setStatus(elements, "Pick an option to preview it.", "info");
     } catch (error) {
+      if (isAbortError(error)) {
+        return;
+      }
+
       elements.options.innerHTML = "";
       setStatus(elements, `Generation failed. ${errorMessage(error)}`, "error");
     } finally {
-      elements.regenerateButton.disabled = false;
+      if (activeGeneration?.id === currentGenerationId) {
+        activeGeneration = undefined;
+        elements.regenerateButton.textContent = "Regenerate";
+      }
     }
   });
 
@@ -442,7 +476,11 @@ export function installAiAssetDesigner(
     root: elements.root,
     open: () => setOpen(true),
     close: () => setOpen(false),
-    destroy: () => elements.root.remove()
+    destroy: () => {
+      activeGeneration?.controller.abort();
+      stopStatusAnimation(elements.status);
+      elements.root.remove();
+    }
   };
 }
 
@@ -1562,13 +1600,60 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
+}
+
+const statusAnimationTimers = new WeakMap<HTMLDivElement, number>();
+
 function setStatus(
   elements: Pick<DesignerElements, "status">,
   message: string,
   kind: "idle" | "info" | "busy" | "success" | "error"
 ): void {
-  elements.status.textContent = message;
+  stopStatusAnimation(elements.status);
   elements.status.dataset.kind = kind;
+
+  if (kind === "busy" && message === "Generating options...") {
+    startGeneratingStatusAnimation(elements.status, message);
+    return;
+  }
+
+  elements.status.textContent = message;
+}
+
+function stopStatusAnimation(status: HTMLDivElement): void {
+  const timer = statusAnimationTimers.get(status);
+
+  if (timer !== undefined) {
+    window.clearInterval(timer);
+    statusAnimationTimers.delete(status);
+  }
+}
+
+function startGeneratingStatusAnimation(status: HTMLDivElement, message: string): void {
+  let offset = 0;
+  const highlightLength = 3;
+  const maxOffset = Math.max(1, message.length - highlightLength + 1);
+  const render = () => {
+    const before = message.slice(0, offset);
+    const highlighted = message.slice(offset, offset + highlightLength);
+    const after = message.slice(offset + highlightLength);
+    const highlight = document.createElement("span");
+    highlight.className = "ai-game-assets-designer__status-highlight";
+    highlight.textContent = highlighted;
+    status.replaceChildren(
+      document.createTextNode(before),
+      highlight,
+      document.createTextNode(after)
+    );
+    offset = (offset + 1) % maxOffset;
+  };
+
+  render();
+  statusAnimationTimers.set(status, window.setInterval(render, 140));
 }
 
 function ensureDesignerStyles(): void {
@@ -1749,6 +1834,10 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__status[data-kind="busy"] {
   color: #bfdbfe;
+}
+.ai-game-assets-designer__status-highlight {
+  color: #ffffff;
+  text-shadow: 0 0 10px rgba(147, 197, 253, 0.9);
 }
 .ai-game-assets-designer__options {
   display: grid;
