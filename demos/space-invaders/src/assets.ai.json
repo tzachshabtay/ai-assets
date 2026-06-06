@@ -1799,7 +1799,7 @@
             {
               "delayMs": 110,
               "offsetX": 0,
-              "offsetY": 92,
+              "offsetY": -5,
               "scaleX": 1,
               "scaleY": 1,
               "rotation": 0
@@ -1807,7 +1807,7 @@
             {
               "delayMs": 130,
               "offsetX": 0,
-              "offsetY": 92,
+              "offsetY": -5,
               "scaleX": 1,
               "scaleY": 1,
               "rotation": 0
@@ -1815,7 +1815,7 @@
             {
               "delayMs": 130,
               "offsetX": 0,
-              "offsetY": 92,
+              "offsetY": -5,
               "scaleX": 1,
               "scaleY": 1,
               "rotation": 0
@@ -1823,7 +1823,7 @@
             {
               "delayMs": 130,
               "offsetX": 0,
-              "offsetY": 92,
+              "offsetY": -5,
               "scaleX": 1,
               "scaleY": 1,
               "rotation": 0
@@ -1840,7 +1840,7 @@
           "laser.blue"
         ]
       },
-      "activeVersion": "promoted-1780768681503",
+      "activeVersion": "promoted-1780778373125",
       "versions": {
         "default": {
           "name": "default",
@@ -1874,6 +1874,42 @@
             ]
           },
           "parentVersion": "default",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780778333620": {
+          "name": "promoted-1780778333620",
+          "file": "/assets/laser.blue.hit.promoted-1780778333620.svg",
+          "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+          "createdAt": "2026-06-06T20:38:53.657Z",
+          "model": "gpt-5",
+          "settings": {
+            "model": "gpt-5",
+            "background": "auto",
+            "quality": "low",
+            "format": "svg",
+            "referenceAssetIds": [
+              "laser.blue"
+            ]
+          },
+          "parentVersion": "promoted-1780768681503",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780778373125": {
+          "name": "promoted-1780778373125",
+          "file": "/assets/laser.blue.hit.promoted-1780778373125.svg",
+          "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+          "createdAt": "2026-06-06T20:39:33.137Z",
+          "model": "gpt-5",
+          "settings": {
+            "model": "gpt-5",
+            "background": "auto",
+            "quality": "low",
+            "format": "svg",
+            "referenceAssetIds": [
+              "laser.blue"
+            ]
+          },
+          "parentVersion": "promoted-1780778333620",
           "notes": "Promoted from the AI asset designer."
         }
       }
@@ -1944,7 +1980,41 @@
             3
           ],
           "frameRate": 8,
-          "repeat": -1
+          "repeat": -1,
+          "frameTimings": [
+            {
+              "delayMs": 125,
+              "offsetX": 0,
+              "offsetY": 0,
+              "scaleX": 2,
+              "scaleY": 1.5,
+              "rotation": 0
+            },
+            {
+              "delayMs": 125,
+              "offsetX": 0,
+              "offsetY": 0,
+              "scaleX": 2,
+              "scaleY": 1.5,
+              "rotation": 0
+            },
+            {
+              "delayMs": 125,
+              "offsetX": 0,
+              "offsetY": 0,
+              "scaleX": 2,
+              "scaleY": 1.5,
+              "rotation": 0
+            },
+            {
+              "delayMs": 125,
+              "offsetX": 0,
+              "offsetY": 0,
+              "scaleX": 2,
+              "scaleY": 1.5,
+              "rotation": 0
+            }
+          ]
         }
       ],
       "settings": {
@@ -1956,7 +2026,7 @@
           "laser.red"
         ]
       },
-      "activeVersion": "promoted-1780770882406",
+      "activeVersion": "promoted-1780778436408",
       "versions": {
         "default": {
           "name": "default",
@@ -1990,6 +2060,24 @@
             ]
           },
           "parentVersion": "default",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780778436408": {
+          "name": "promoted-1780778436408",
+          "file": "/assets/laser.red.flicker.promoted-1780778436408.svg",
+          "prompt": "Red enemy laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+          "createdAt": "2026-06-06T20:40:36.417Z",
+          "model": "gpt-5",
+          "settings": {
+            "model": "gpt-5",
+            "background": "auto",
+            "quality": "low",
+            "format": "svg",
+            "referenceAssetIds": [
+              "laser.red"
+            ]
+          },
+          "parentVersion": "promoted-1780770882406",
           "notes": "Promoted from the AI asset designer."
         }
       }
