@@ -324,10 +324,9 @@ function startGame(assetManifest: AiAssetManifest): void {
       for (const bullet of [...this.bullets]) {
         for (const invader of [...this.invaders]) {
           if (Phaser.Geom.Intersects.RectangleToRectangle(bullet.getBounds(), invader.getBounds())) {
-            bullet.destroy();
             this.bullets = this.bullets.filter((candidate) => candidate !== bullet);
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
-            this.spawnLaserHit("laser.blue.hit", bullet.x, invader.getBounds().top);
+            this.playLaserHit(bullet, "laser.blue.hit", bullet.x, invader.getBounds().top);
             this.playInvaderAnimation(invader, "invader.scout.destroyed");
             invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
@@ -339,9 +338,8 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       for (const bullet of [...this.invaderBullets]) {
         if (Phaser.Geom.Intersects.RectangleToRectangle(bullet.getBounds(), this.hero.getBounds())) {
-          bullet.destroy();
           this.invaderBullets = this.invaderBullets.filter((candidate) => candidate !== bullet);
-          this.spawnLaserHit("laser.red.hit", bullet.x, this.hero.getBounds().bottom);
+          this.playLaserHit(bullet, "laser.red.hit", bullet.x, this.hero.getBounds().bottom);
           this.statusText?.setText("Hit. The ship holds.");
           this.playHeroActionAnimation("hero.ship.hit");
         }
@@ -667,16 +665,25 @@ function startGame(assetManifest: AiAssetManifest): void {
       return laser;
     }
 
-    private spawnLaserHit(animationKey: string, x: number, y: number): void {
-      if (!this.aiRuntime) return;
+    private playLaserHit(
+      laser: LaserSprite,
+      animationKey: string,
+      x: number,
+      y: number
+    ): void {
+      if (!this.aiRuntime) {
+        laser.destroy();
+        return;
+      }
 
       const asset = assetManifest.assets[animationKey];
-      const hit = this.add.sprite(x, y, this.aiRuntime.key(animationKey));
       const size = this.displaySizeForAsset(asset);
-      hit.setDisplaySize(size.width, size.height);
-      hit.setDepth(9);
-      hit.play(animationKey);
-      hit.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => hit.destroy());
+      laser.setPosition(x, y);
+      laser.setTexture(this.aiRuntime.key(animationKey));
+      laser.setDisplaySize(size.width, size.height);
+      laser.setDepth(9);
+      laser.play(animationKey, true);
+      laser.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => laser.destroy());
     }
 
     private delayUntilTaggedFrame(animationKey: string, tag: string): number {

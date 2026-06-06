@@ -1698,7 +1698,7 @@ export const assets = defineAiAssets(
   "laser.blue.flicker": {
     "id": "laser.blue.flicker",
     "kind": "spritesheet",
-    "prompt": "Blue player laser slow flicker animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+    "prompt": "Blue player laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
     "dimensions": {
       "width": 8,
       "height": 36
@@ -1732,7 +1732,7 @@ export const assets = defineAiAssets(
         "laser.blue"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780761577431",
     "versions": {
       "default": {
         "name": "default",
@@ -1749,6 +1749,24 @@ export const assets = defineAiAssets(
             "laser.blue"
           ]
         }
+      },
+      "promoted-1780761577431": {
+        "name": "promoted-1780761577431",
+        "file": "/assets/laser.blue.flicker.promoted-1780761577431.svg",
+        "prompt": "Blue player laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+        "createdAt": "2026-06-06T15:59:37.481Z",
+        "model": "gpt-5",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "laser.blue"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
