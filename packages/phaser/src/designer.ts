@@ -779,7 +779,8 @@ function renderOptions(options: {
             options.designerOptions,
             options.assetId,
             optionAsset
-          )
+          ),
+          applyFrameTransforms: false
         });
       });
 
@@ -864,6 +865,7 @@ function startSpritesheetPreview(options: {
   src: string;
   asset: AiAssetDefinition;
   displaySize: AiAssetPreviewDisplaySize;
+  applyFrameTransforms?: boolean;
 }): () => void {
   const frameGrid = options.asset.frameGrid;
 
@@ -886,9 +888,12 @@ function startSpritesheetPreview(options: {
   const renderFrame = () => {
     const frame = frames[frameCursor % frames.length] ?? 0;
     const timing = frameTimings[frameCursor % frames.length];
-    const scaleX = timing?.scaleX ?? 1;
-    const scaleY = timing?.scaleY ?? 1;
-    const rotation = timing?.rotation ?? 0;
+    const applyFrameTransforms = options.applyFrameTransforms ?? true;
+    const offsetX = applyFrameTransforms ? timing?.offsetX ?? 0 : 0;
+    const offsetY = applyFrameTransforms ? timing?.offsetY ?? 0 : 0;
+    const scaleX = applyFrameTransforms ? timing?.scaleX ?? 1 : 1;
+    const scaleY = applyFrameTransforms ? timing?.scaleY ?? 1 : 1;
+    const rotation = applyFrameTransforms ? timing?.rotation ?? 0 : 0;
 
     options.element.style.width = `${options.displaySize.width}px`;
     options.element.style.height = `${options.displaySize.height}px`;
@@ -899,7 +904,7 @@ function startSpritesheetPreview(options: {
       displaySize: options.displaySize
     });
     frameElement.style.transform =
-      `translate(${timing?.offsetX ?? 0}px, ${timing?.offsetY ?? 0}px) ` +
+      `translate(${offsetX}px, ${offsetY}px) ` +
       `scale(${scaleX}, ${scaleY}) rotate(${rotation}deg)`;
     frameElement.style.transformOrigin = "center";
     frameCursor += 1;
