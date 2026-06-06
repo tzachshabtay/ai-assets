@@ -120,6 +120,10 @@ export const assets = defineAiAssets(
       "destroyed": {
         "label": "Destroyed",
         "assetId": "invader.scout.destroyed"
+      },
+      "celebration": {
+        "label": "Celebration",
+        "assetId": "invader.scout.celebration"
       }
     },
     "activeVersion": "promoted-1780541957309",
@@ -684,6 +688,10 @@ export const assets = defineAiAssets(
       "destroyed": {
         "label": "Destroyed",
         "assetId": "invader.raider.destroyed"
+      },
+      "celebration": {
+        "label": "Celebration",
+        "assetId": "invader.raider.celebration"
       }
     },
     "activeVersion": "promoted-1780781374574",
@@ -1325,6 +1333,10 @@ export const assets = defineAiAssets(
       "destroyed": {
         "label": "Destroyed",
         "assetId": "invader.hunter.destroyed"
+      },
+      "celebration": {
+        "label": "Celebration",
+        "assetId": "invader.hunter.celebration"
       }
     },
     "activeVersion": "promoted-1780782171885",
@@ -2346,7 +2358,7 @@ export const assets = defineAiAssets(
         "hero.ship"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780789451269",
     "versions": {
       "default": {
         "name": "default",
@@ -2354,6 +2366,24 @@ export const assets = defineAiAssets(
         "prompt": "Hero starfighter explosion animation. Ship erupts into a bright energy blast, expanding fireball, sparks, then fading smoke and embers, transparent background.",
         "createdAt": "2026-06-06T00:00:00.000Z",
         "model": "starter-asset"
+      },
+      "promoted-1780789451269": {
+        "name": "promoted-1780789451269",
+        "file": "/assets/hero.ship.explosion.promoted-1780789451269.png",
+        "prompt": "Hero starfighter explosion animation. Ship erupts into a bright energy blast, expanding fireball, sparks, then fading smoke and embers, transparent background.",
+        "createdAt": "2026-06-06T23:44:11.286Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "hero.ship"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -3501,6 +3531,162 @@ export const assets = defineAiAssets(
         }
       }
     }
+  },
+  "invader.scout.celebration": {
+    "id": "invader.scout.celebration",
+    "kind": "spritesheet",
+    "prompt": "Alien invader scout celebration animation. The same red alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+    "dimensions": {
+      "width": 128,
+      "height": 128
+    },
+    "frameGrid": {
+      "frameCount": 4,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "columns": 2,
+      "rows": 2
+    },
+    "animations": [
+      {
+        "key": "invader.scout.celebration",
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "frameRate": 7,
+        "repeat": -1
+      }
+    ],
+    "settings": {
+      "model": "gpt-image-2",
+      "background": "auto",
+      "quality": "low",
+      "format": "png",
+      "referenceAssetIds": [
+        "invader.scout"
+      ]
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/invader.scout.celebration.default.svg",
+        "prompt": "Alien invader scout celebration animation. The same red alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset"
+      }
+    }
+  },
+  "invader.raider.celebration": {
+    "id": "invader.raider.celebration",
+    "kind": "spritesheet",
+    "prompt": "Alien invader raider celebration animation. The same gold alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+    "dimensions": {
+      "width": 128,
+      "height": 128
+    },
+    "frameGrid": {
+      "frameCount": 4,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "columns": 2,
+      "rows": 2
+    },
+    "animations": [
+      {
+        "key": "invader.raider.celebration",
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "frameRate": 7,
+        "repeat": -1
+      }
+    ],
+    "settings": {
+      "model": "gpt-image-2",
+      "background": "auto",
+      "quality": "low",
+      "format": "png",
+      "referenceAssetIds": [
+        "invader.raider"
+      ]
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/invader.raider.celebration.default.svg",
+        "prompt": "Alien invader raider celebration animation. The same gold alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset"
+      }
+    }
+  },
+  "invader.hunter.celebration": {
+    "id": "invader.hunter.celebration",
+    "kind": "spritesheet",
+    "prompt": "Alien invader hunter celebration animation. The same green alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+    "dimensions": {
+      "width": 128,
+      "height": 128
+    },
+    "frameGrid": {
+      "frameCount": 4,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "columns": 2,
+      "rows": 2
+    },
+    "animations": [
+      {
+        "key": "invader.hunter.celebration",
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "frameRate": 7,
+        "repeat": -1
+      }
+    ],
+    "settings": {
+      "model": "gpt-image-2",
+      "background": "auto",
+      "quality": "low",
+      "format": "png",
+      "referenceAssetIds": [
+        "invader.hunter"
+      ]
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/invader.hunter.celebration.default.svg",
+        "prompt": "Alien invader hunter celebration animation. The same green alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset"
+      }
+    }
+  }
+}
+, {
+  "styleGuide": {
+    "prompt": "Hand-painted 1990s cartoon adventure game background, exaggerated perspective, whimsical architecture, bright saturated colors, smooth ink outlines, highly expressive shapes, playful visual humor, stylized proportions, curved and distorted geometry, detailed environmental storytelling, clean cel-animation aesthetic, retro PC adventure game art, professionally illustrated, high detail, colorful and cheerful atmosphere.",
+    "images": [
+      {
+        "name": "style.png",
+        "file": "/assets/style-guide.1780542427743.1.png",
+        "mimeType": "image/png"
+      }
+    ]
   }
 }
 );

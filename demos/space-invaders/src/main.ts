@@ -37,6 +37,7 @@ type InvaderType = {
   idle: string;
   shooting: string;
   destroyed: string;
+  celebration: string;
 };
 
 type InvaderSprite = Phaser.GameObjects.Sprite & {
@@ -50,19 +51,22 @@ const invaderTypes: InvaderType[] = [
     base: "invader.scout",
     idle: "invader.scout.idle",
     shooting: "invader.scout.shooting",
-    destroyed: "invader.scout.destroyed"
+    destroyed: "invader.scout.destroyed",
+    celebration: "invader.scout.celebration"
   },
   {
     base: "invader.raider",
     idle: "invader.raider.idle",
     shooting: "invader.raider.shooting",
-    destroyed: "invader.raider.destroyed"
+    destroyed: "invader.raider.destroyed",
+    celebration: "invader.raider.celebration"
   },
   {
     base: "invader.hunter",
     idle: "invader.hunter.idle",
     shooting: "invader.hunter.shooting",
-    destroyed: "invader.hunter.destroyed"
+    destroyed: "invader.hunter.destroyed",
+    celebration: "invader.hunter.celebration"
   }
 ];
 
@@ -70,7 +74,8 @@ const invaderBaseAssetIds = invaderTypes.map((type) => type.base);
 const invaderAnimationAssetIds = invaderTypes.flatMap((type) => [
   type.idle,
   type.shooting,
-  type.destroyed
+  type.destroyed,
+  type.celebration
 ]);
 
 const starAnimationAssetIds = [
@@ -95,6 +100,7 @@ const laserHitDisplaySizes: Record<string, { width: number; height: number }> = 
 const maxHeroLives = 5;
 const heroLifeIconSize = 30;
 const heroLifeIconSpacing = 34;
+const invaderHeroReachPadding = 8;
 
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
@@ -122,6 +128,8 @@ function startGame(assetManifest: AiAssetManifest): void {
     private score = 0;
     private heroLives = maxHeroLives;
     private heroDestroyed = false;
+    private invadersCelebrating = false;
+    private heroLifeSilhouettes: Phaser.GameObjects.Image[] = [];
     private heroLifeIcons: Phaser.GameObjects.Image[] = [];
     private scoreText?: Phaser.GameObjects.Text;
     private statusText?: Phaser.GameObjects.Text;
@@ -271,14 +279,17 @@ function startGame(assetManifest: AiAssetManifest): void {
           "invader.scout.idle": { width: 42, height: 42 },
           "invader.scout.shooting": { width: 42, height: 42 },
           "invader.scout.destroyed": { width: 42, height: 42 },
+          "invader.scout.celebration": { width: 42, height: 42 },
           "invader.raider": { width: 42, height: 42 },
           "invader.raider.idle": { width: 42, height: 42 },
           "invader.raider.shooting": { width: 42, height: 42 },
           "invader.raider.destroyed": { width: 42, height: 42 },
+          "invader.raider.celebration": { width: 42, height: 42 },
           "invader.hunter": { width: 42, height: 42 },
           "invader.hunter.idle": { width: 42, height: 42 },
           "invader.hunter.shooting": { width: 42, height: 42 },
           "invader.hunter.destroyed": { width: 42, height: 42 },
+          "invader.hunter.celebration": { width: 42, height: 42 },
           "laser.blue": { width: 4, height: 18 },
           "laser.blue.flicker": { width: 4, height: 18 },
           "laser.blue.hit": { width: 18, height: 18 },
@@ -349,6 +360,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     private updateInvaders(delta: number, time: number) {
       if (!this.invaders || this.invaders.length === 0) return;
+      if (this.invadersCelebrating) return;
 
       const step = 42 * (delta / 1000) * this.invaderDirection;
 
@@ -357,6 +369,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
 
       this.correctInvaderEdgeHit();
+      this.checkInvadersReachedHero();
 
       if (this.invaders.some((invader) => invader.y > 625)) {
         this.resetWave("Invaders regrouped.");
@@ -369,7 +382,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         this.playInvaderAnimation(shooter, shooter.invaderType.shooting);
         this.scheduleInvaderLaser(shooter, shooter.invaderType.shooting);
         shooter.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-          if (shooter.active) {
+          if (shooter.active && !this.invadersCelebrating) {
             this.playInvaderAnimation(shooter, shooter.invaderType.idle);
           }
         });
@@ -526,6 +539,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       this.invaders = [];
       this.invaderDirection = 1;
+      this.invadersCelebrating = false;
 
       for (let row = 0; row < 3; row += 1) {
         for (let col = 0; col < 8; col += 1) {
@@ -595,6 +609,8 @@ function startGame(assetManifest: AiAssetManifest): void {
     }
 
     private resetWave(message: string): void {
+      if (this.heroDestroyed) return;
+
       for (const invader of this.invaders) invader.destroy();
       for (const bullet of this.bullets) bullet.destroy();
       for (const bullet of this.invaderBullets) bullet.destroy();
@@ -605,15 +621,42 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.statusText?.setText(`${message} New wave incoming.`);
     }
 
+    private checkInvadersReachedHero(): void {
+      if (!this.hero || this.heroDestroyed || this.invadersCelebrating || this.invaders.length === 0) {
+        return;
+      }
+
+      const bottomInvader = this.invaders.reduce((lowest, invader) => (
+        invader.getBounds().bottom > lowest.getBounds().bottom ? invader : lowest
+      ));
+      const heroLine = this.hero.getBounds().top + invaderHeroReachPadding;
+
+      if (bottomInvader.getBounds().bottom >= heroLine) {
+        this.statusText?.setText("Invaders breached the ship.");
+        this.playHeroExplosion();
+      }
+    }
+
     private createHeroLifeBar(): void {
       if (!this.aiRuntime) return;
 
+      for (const silhouette of this.heroLifeSilhouettes) silhouette.destroy();
       for (const icon of this.heroLifeIcons) icon.destroy();
+      this.heroLifeSilhouettes = [];
       this.heroLifeIcons = [];
 
       for (let index = 0; index < maxHeroLives; index += 1) {
+        const x = 618 - ((maxHeroLives - 1 - index) * heroLifeIconSpacing);
+        const silhouette = this.add.image(x, 30, this.aiRuntime.key("hero.ship"));
+        silhouette.setDisplaySize(heroLifeIconSize, heroLifeIconSize);
+        silhouette.setDepth(39);
+        silhouette.setTint(0x94a3b8);
+        silhouette.setTintMode(Phaser.TintModes.FILL);
+        silhouette.setAlpha(0.58);
+        this.heroLifeSilhouettes.push(silhouette);
+
         const icon = this.add.image(
-          618 - ((maxHeroLives - 1 - index) * heroLifeIconSpacing),
+          x,
           30,
           this.aiRuntime.key("hero.ship")
         );
@@ -626,6 +669,11 @@ function startGame(assetManifest: AiAssetManifest): void {
     }
 
     private updateHeroLifeBarTexture(textureKey: string): void {
+      for (const silhouette of this.heroLifeSilhouettes) {
+        silhouette.setTexture(textureKey);
+        silhouette.setDisplaySize(heroLifeIconSize, heroLifeIconSize);
+      }
+
       for (const icon of this.heroLifeIcons) {
         icon.setTexture(textureKey);
         icon.setDisplaySize(heroLifeIconSize, heroLifeIconSize);
@@ -633,12 +681,17 @@ function startGame(assetManifest: AiAssetManifest): void {
     }
 
     private updateHeroLifeBar(): void {
+      for (const silhouette of this.heroLifeSilhouettes) {
+        silhouette.setVisible(true);
+        silhouette.setActive(true);
+      }
+
       this.heroLifeIcons.forEach((icon, index) => {
         const isAlive = index < this.heroLives;
-        icon.setVisible(true);
-        icon.setActive(true);
-        icon.setAlpha(isAlive ? 0.95 : 0.28);
-        icon.setTint(isAlive ? 0xffffff : 0x1f2937);
+        icon.setVisible(isAlive);
+        icon.setActive(isAlive);
+        icon.setAlpha(0.95);
+        icon.setTint(0xffffff);
       });
     }
 
@@ -662,6 +715,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       if (!this.hero || this.heroDestroyed) return;
 
       this.heroDestroyed = true;
+      this.startInvaderCelebration();
       this.heroLockedUntil = Number.POSITIVE_INFINITY;
       this.detachHeroFrameTransformHandler();
       this.hero.setFlipX(false);
@@ -674,6 +728,23 @@ function startGame(assetManifest: AiAssetManifest): void {
         this.hero?.setVisible(false);
         this.hero?.setActive(false);
       });
+    }
+
+    private startInvaderCelebration(): void {
+      if (this.invadersCelebrating) return;
+
+      this.invadersCelebrating = true;
+
+      for (const bullet of this.bullets) bullet.destroy();
+      for (const bullet of this.invaderBullets) bullet.destroy();
+      this.bullets = [];
+      this.invaderBullets = [];
+
+      for (const invader of this.invaders) {
+        if (!invader.active) continue;
+
+        this.playInvaderAnimation(invader, invader.invaderType.celebration);
+      }
     }
 
     private recreateHeroAnimations(
@@ -888,7 +959,13 @@ function startGame(assetManifest: AiAssetManifest): void {
       const delayMs = this.delayUntilTaggedFrame(animationKey, "shoot");
 
       this.time.delayedCall(delayMs, () => {
-        if (!shooter.active || this.invaderAnimationKeys.get(shooter) !== animationKey) return;
+        if (
+          this.invadersCelebrating ||
+          !shooter.active ||
+          this.invaderAnimationKeys.get(shooter) !== animationKey
+        ) {
+          return;
+        }
 
         this.invaderBullets.push(this.spawnLaser("laser.red.flicker", shooter.x, shooter.y + 30));
       });
