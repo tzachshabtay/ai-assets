@@ -535,7 +535,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       for (const star of this.starSprites) star.destroy();
       this.starSprites = [];
 
-      for (let index = 0; index < 56; index += 1) {
+      for (let index = 0; index < 28; index += 1) {
         const star = this.add.sprite(
           Phaser.Math.Between(0, 640),
           Phaser.Math.Between(0, 640),
@@ -544,7 +544,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         star.starSpeed = Phaser.Math.FloatBetween(8, 42);
         star.starAnimationKey = Phaser.Utils.Array.GetRandom(this.starAnimationKeys) as string;
         star.setDepth(-82);
-        star.setAlpha(Phaser.Math.FloatBetween(0.35, 0.9));
+        star.setAlpha(Phaser.Math.FloatBetween(0.175, 0.45));
         star.setScale(Phaser.Math.FloatBetween(0.35, 1.25));
         star.play(star.starAnimationKey);
         this.starSprites.push(star);
@@ -561,7 +561,7 @@ function startGame(assetManifest: AiAssetManifest): void {
           star.x = Phaser.Math.Between(0, 640);
           star.y = -20;
           star.starSpeed = Phaser.Math.FloatBetween(8, 42);
-          star.setAlpha(Phaser.Math.FloatBetween(0.35, 0.9));
+          star.setAlpha(Phaser.Math.FloatBetween(0.175, 0.45));
           star.setScale(Phaser.Math.FloatBetween(0.35, 1.25));
           star.starAnimationKey = Phaser.Utils.Array.GetRandom(this.starAnimationKeys) as string;
           star.play(star.starAnimationKey);
