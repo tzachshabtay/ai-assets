@@ -30,12 +30,21 @@ type StarSprite = Phaser.GameObjects.Sprite & {
   starAnimationKey: string;
 };
 
+type LaserSprite = Phaser.GameObjects.Sprite;
+
 const starAnimationAssetIds = [
   "background.stars.twinkle-white",
   "background.stars.blue-pulse",
   "background.stars.gold-flare",
   "background.stars.violet-blink",
   "background.stars.green-shimmer"
+];
+
+const laserAnimationAssetIds = [
+  "laser.blue.flicker",
+  "laser.blue.hit",
+  "laser.red.flicker",
+  "laser.red.hit"
 ];
 
 let manifest: AiAssetManifest;
@@ -56,8 +65,8 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
     private fireKey?: Phaser.Input.Keyboard.Key;
-    private bullets: Phaser.GameObjects.Rectangle[] = [];
-    private invaderBullets: Phaser.GameObjects.Rectangle[] = [];
+    private bullets: LaserSprite[] = [];
+    private invaderBullets: LaserSprite[] = [];
     private lastShotAt = 0;
     private invaderDirection = 1;
     private lastInvaderShotAt = 0;
@@ -95,6 +104,9 @@ function startGame(assetManifest: AiAssetManifest): void {
       createAiAnimations(this, assetManifest, "hero.ship.shooting");
       createAiAnimations(this, assetManifest, "hero.ship.hit");
       for (const assetId of starAnimationAssetIds) {
+        createAiAnimations(this, assetManifest, assetId);
+      }
+      for (const assetId of laserAnimationAssetIds) {
         createAiAnimations(this, assetManifest, assetId);
       }
       createAiAnimations(this, assetManifest, "invader.scout.idle");
@@ -143,6 +155,10 @@ function startGame(assetManifest: AiAssetManifest): void {
           this.applyStarTexture(assetId, textureKey);
         }
 
+        if (laserAnimationAssetIds.includes(assetId)) {
+          this.recreateLaserAnimations(assetId, textureKey, asset);
+        }
+
         if (assetId === "hero.ship" && this.hero) {
           this.heroAnimationKey = undefined;
           this.hero.setTexture(textureKey);
@@ -180,7 +196,14 @@ function startGame(assetManifest: AiAssetManifest): void {
         scene: this,
         manifest: assetManifest,
         client: debugClient,
-        assetIds: ["hero.ship", "invader.scout", "background.space", "background.stars"],
+        assetIds: [
+          "hero.ship",
+          "invader.scout",
+          "laser.blue",
+          "laser.red",
+          "background.space",
+          "background.stars"
+        ],
         onManifestUpdated: (updatedManifest) => {
           manifest = updatedManifest;
         },
@@ -194,6 +217,12 @@ function startGame(assetManifest: AiAssetManifest): void {
           "invader.scout.idle": { width: 42, height: 42 },
           "invader.scout.shooting": { width: 42, height: 42 },
           "invader.scout.destroyed": { width: 42, height: 42 },
+          "laser.blue": { width: 4, height: 18 },
+          "laser.blue.flicker": { width: 4, height: 18 },
+          "laser.blue.hit": { width: 4, height: 18 },
+          "laser.red": { width: 5, height: 16 },
+          "laser.red.flicker": { width: 5, height: 16 },
+          "laser.red.hit": { width: 5, height: 16 },
           "background.space": { width: 180, height: 180 },
           "background.stars": { width: 32, height: 32 },
           "background.stars.twinkle-white": { width: 32, height: 32 },
@@ -298,6 +327,7 @@ function startGame(assetManifest: AiAssetManifest): void {
             bullet.destroy();
             this.bullets = this.bullets.filter((candidate) => candidate !== bullet);
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
+            this.spawnLaserHit("laser.blue.hit", bullet.x, invader.getBounds().top);
             this.playInvaderAnimation(invader, "invader.scout.destroyed");
             invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
@@ -311,6 +341,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         if (Phaser.Geom.Intersects.RectangleToRectangle(bullet.getBounds(), this.hero.getBounds())) {
           bullet.destroy();
           this.invaderBullets = this.invaderBullets.filter((candidate) => candidate !== bullet);
+          this.spawnLaserHit("laser.red.hit", bullet.x, this.hero.getBounds().bottom);
           this.statusText?.setText("Hit. The ship holds.");
           this.playHeroActionAnimation("hero.ship.hit");
         }
@@ -470,6 +501,27 @@ function startGame(assetManifest: AiAssetManifest): void {
       return animationKeys;
     }
 
+    private recreateLaserAnimations(
+      assetId: string,
+      textureKey: string,
+      asset = assetManifest.assets[assetId]
+    ): string[] {
+      const animationKeys: string[] = [];
+
+      for (const animation of asset?.animations ?? []) {
+        this.anims.remove(animation.key);
+        this.anims.create({
+          key: animation.key,
+          frames: this.animationFramesWithTiming(textureKey, animation),
+          frameRate: animation.frameRate,
+          repeat: animation.repeat ?? -1
+        });
+        animationKeys.push(animation.key);
+      }
+
+      return animationKeys;
+    }
+
     private resolveStarAnimationKeys(): string[] {
       return starAnimationAssetIds.flatMap((assetId) =>
         assetManifest.assets[assetId]?.animations?.map((animation) => animation.key) ?? []
@@ -522,7 +574,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.time.delayedCall(delayMs, () => {
         if (!shooter.active || this.heroAnimationKey !== animationKey) return;
 
-        this.bullets.push(this.add.rectangle(shooter.x, shooter.y - 35, 4, 18, 0x6ed3ff));
+        this.bullets.push(this.spawnLaser("laser.blue.flicker", shooter.x, shooter.y - 35));
       });
     }
 
@@ -596,8 +648,35 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.time.delayedCall(delayMs, () => {
         if (!shooter.active || this.invaderAnimationKeys.get(shooter) !== animationKey) return;
 
-        this.invaderBullets.push(this.add.rectangle(shooter.x, shooter.y + 30, 5, 16, 0xfca5a5));
+        this.invaderBullets.push(this.spawnLaser("laser.red.flicker", shooter.x, shooter.y + 30));
       });
+    }
+
+    private spawnLaser(animationKey: string, x: number, y: number): LaserSprite {
+      if (!this.aiRuntime) {
+        throw new Error("AI runtime is required to spawn laser assets.");
+      }
+
+      const asset = assetManifest.assets[animationKey];
+      const laser = this.add.sprite(x, y, this.aiRuntime.key(animationKey));
+      const size = this.displaySizeForAsset(asset);
+      laser.setDisplaySize(size.width, size.height);
+      laser.setDepth(8);
+      laser.play(animationKey);
+
+      return laser;
+    }
+
+    private spawnLaserHit(animationKey: string, x: number, y: number): void {
+      if (!this.aiRuntime) return;
+
+      const asset = assetManifest.assets[animationKey];
+      const hit = this.add.sprite(x, y, this.aiRuntime.key(animationKey));
+      const size = this.displaySizeForAsset(asset);
+      hit.setDisplaySize(size.width, size.height);
+      hit.setDepth(9);
+      hit.play(animationKey);
+      hit.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => hit.destroy());
     }
 
     private delayUntilTaggedFrame(animationKey: string, tag: string): number {
@@ -685,6 +764,9 @@ function startGame(assetManifest: AiAssetManifest): void {
         starAnimationAssetIds
         .flatMap((assetId) => assetManifest.assets[assetId]?.animations ?? [])
         .find((animation) => animation.key === animationKey) ??
+        laserAnimationAssetIds
+        .flatMap((assetId) => assetManifest.assets[assetId]?.animations ?? [])
+        .find((animation) => animation.key === animationKey) ??
         assetManifest.assets[animationKey]?.animations
         ?.find((animation) => animation.key === animationKey);
     }
@@ -718,7 +800,7 @@ function startGame(assetManifest: AiAssetManifest): void {
   });
 }
 
-function keepBullet(bullet: Phaser.GameObjects.Rectangle): boolean {
+function keepBullet(bullet: LaserSprite): boolean {
   if (bullet.y > -20 && bullet.y < 660) {
     return true;
   }

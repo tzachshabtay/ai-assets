@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+  <defs>
+    <radialGradient id="gsf_glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#FFF8D6" stop-opacity="1"/>
+      <stop offset="0.45" stop-color="#FFE066" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#FF9C00" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gsf_core" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#FFF2A6"/>
+      <stop offset="1" stop-color="#FFC12A"/>
+    </radialGradient>
+    <linearGradient id="gsf_petal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFD34A"/>
+      <stop offset="1" stop-color="#FF8E00"/>
+    </linearGradient>
+    <linearGradient id="gsf_ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFF2A6"/>
+      <stop offset="1" stop-color="#FFB300"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Frame 1 -->
+  <g id="frame1" transform="translate(0,0)">
+    <circle cx="16" cy="16" r="6.5" fill="url(#gsf_glow)" opacity="0.9"/>
+    <circle cx="16" cy="16" r="3.2" fill="url(#gsf_core)" stroke="#21120E" stroke-width="0.9"/>
+    <!-- cross rays (outlined) -->
+    <g id="f1_rays">
+      <g>
+        <line x1="16" y1="10" x2="16" y2="22" stroke="#24150F" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="16" y1="10.2" x2="16" y2="21.8" stroke="#FFD34A" stroke-width="1.4" stroke-linecap="round"/>
+      </g>
+      <g>
+        <line x1="10" y1="16" x2="22" y2="16" stroke="#24150F" stroke-width="2.2" stroke-linecap="round"/>
+        <line x1="10.2" y1="16" x2="21.8" y2="16" stroke="#FFD34A" stroke-width="1.4" stroke-linecap="round"/>
+      </g>
+      <g>
+        <line x1="12" y1="12" x2="20" y2="20" stroke="#24150F" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="12.2" y1="12.2" x2="19.8" y2="19.8" stroke="#FFE066" stroke-width="1.2" stroke-linecap="round"/>
+      </g>
+      <g>
+        <line x1="20" y1="12" x2="12" y2="20" stroke="#24150F" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="19.8" y1="12.2" x2="12.2" y2="19.8" stroke="#FFE066" stroke-width="1.2" stroke-linecap="round"/>
+      </g>
+    </g>
+    <!-- playful spark dots -->
+    <circle cx="9.5" cy="14.5" r="0.9" fill="#FFF7C8" stroke="#21120E" stroke-width="0.6"/>
+    <circle cx="22.7" cy="17.2" r="1" fill="#FFD34A" stroke="#21120E" stroke-width="0.6"/>
+    <circle cx="16.2" cy="7.9" r="0.8" fill="#FFE066" stroke="#21120E" stroke-width="0.5"/>
+  </g>
+
+  <!-- Frame 2 -->
+  <g id="frame2" transform="translate(32,0)">
+    <g transform="rotate(12,16,16)">
+      <circle cx="16" cy="16" r="9" fill="url(#gsf_glow)" opacity="0.95"/>
+      <circle cx="16" cy="16" r="3.8" fill="url(#gsf_core)" stroke="#21120E" stroke-width="1"/>
+      <!-- long rays -->
+      <g>
+        <line x1="16" y1="7.5" x2="16" y2="24.5" stroke="#24150F" stroke-width="2.6" stroke-linecap="round"/>
+        <line x1="16" y1="7.8" x2="16" y2="24.2" stroke="#FFD34A" stroke-width="1.8" stroke-linecap="round"/>
+      </g>
+      <g>
+        <line x1="7.5" y1="16" x2="24.5" y2="16" stroke="#24150F" stroke-width="2.6" stroke-linecap="round"/>
+        <line x1="7.8" y1="16" x2="24.2" y2="16" stroke="#FFD34A" stroke-width="1.8" stroke-linecap="round"/>
+      </g>
+      <g>
+        <line x1="10.2" y1="10.2" x2="21.8" y2="21.8" stroke="#24150F" stroke-width="2" stroke-linecap="round"/>
+        <line x1="10.4" y1="10.4" x2="21.6" y2="21.6" stroke="#FFE066" stroke-width="1.4" stroke-linecap="round"/>
+      </g>
+      <g>
+        <line x1="21.8" y1="10.2" x2="10.2" y2="21.8" stroke="#24150F" stroke-width="2" stroke-linecap="round"/>
+        <line x1="21.6" y1="10.4" x2="10.4" y2="21.6" stroke="#FFE066" stroke-width="1.4" stroke-linecap="round"/>
+      </g>
+      <!-- tiny orbiting sparks -->
+      <circle cx="7.8" cy="13.2" r="1" fill="#FFF7C8" stroke="#21120E" stroke-width="0.6"/>
+      <circle cx="24.2" cy="18.8" r="1.1" fill="#FFD34A" stroke="#21120E" stroke-width="0.6"/>
+      <circle cx="12.3" cy="24.3" r="0.9" fill="#FFE066" stroke="#21120E" stroke-width="0.5"/>
+    </g>
+  </g>
+
+  <!-- Frame 3 -->
+  <g id="frame3" transform="translate(64,0)">
+    <g transform="rotate(-8,16,16)">
+      <circle cx="16" cy="16" r="10.5" fill="url(#gsf_glow)" opacity="0.98"/>
+      <circle cx="16" cy="16" r="4.2" fill="url(#gsf_core)" stroke="#1D120E" stroke-width="1"/>
+      <!-- ring shock -->
+      <circle cx="16" cy="16" r="9.2" fill="none" stroke="#24150F" stroke-width="2.4"/>
+      <circle cx="16" cy="16" r="9.2" fill="none" stroke="url(#gsf_ring)" stroke-width="1.6"/>
+      <!-- petal wedges -->
+      <polygon points="16,4.8 18.6,10.8 16,12.6 13.4,10.8" fill="url(#gsf_petal)" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="27.2,16 21.2,18.6 19.4,16 21.2,13.4" fill="url(#gsf_petal)" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="16,27.2 13.4,21.2 16,19.4 18.6,21.2" fill="url(#gsf_petal)" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="4.8,16 10.8,13.4 12.6,16 10.8,18.6" fill="url(#gsf_petal)" stroke="#21120E" stroke-width="0.8"/>
+      <!-- diagonals -->
+      <polygon points="22.4,6.4 20,12.2 17.8,14.2 19.6,9.6" fill="#FFB300" stroke="#21120E" stroke-width="0.7"/>
+      <polygon points="25.6,22.4 19.8,20 17.8,17.8 22.4,19.6" fill="#FF9D00" stroke="#21120E" stroke-width="0.7"/>
+      <polygon points="9.6,25.6 12,19.8 14.2,17.8 9.6,22.4" fill="#FFB300" stroke="#21120E" stroke-width="0.7"/>
+      <polygon points="6.4,9.6 12.2,12 14.2,14.2 9.6,9.6" fill="#FF9D00" stroke="#21120E" stroke-width="0.7"/>
+    </g>
+  </g>
+
+  <!-- Frame 4 -->
+  <g id="frame4" transform="translate(0,32)">
+    <g transform="rotate(20,16,16)">
+      <circle cx="16" cy="16" r="11.5" fill="url(#gsf_glow)" opacity="0.96"/>
+      <circle cx="16" cy="16" r="4.4" fill="url(#gsf_core)" stroke="#1D120E" stroke-width="1"/>
+      <!-- curvy flare petals -->
+      <path d="M16,5 C17.6,8.5 17,11 16,12.4 C15,11 14.4,8.5 16,5 Z" fill="url(#gsf_petal)" stroke="#21120E" stroke-width="0.8" stroke-linejoin="round"/>
+      <path d="M27,16 C23.5,17.6 21,17 19.6,16 C21,15 23.5,14.4 27,16 Z" fill="url(#gsf_petal)" stroke="#21120E" stroke-width="0.8" stroke-linejoin="round"/>
+      <path d="M16,27 C14.4,23.5 15,21 16,19.6 C17,21 17.6,23.5 16,27 Z" fill="url(#gsf_petal)" stroke="#21120E" stroke-width="0.8" stroke-linejoin="round"/>
+      <path d="M5,16 C8.5,14.4 11,15 12.4,16 C11,17 8.5,17.6 5,16 Z" fill="url(#gsf_petal)" stroke="#21120E" stroke-width="0.8" stroke-linejoin="round"/>
+      <!-- swirl -->
+      <path d="M9.5,9.5 C12.2,8.2 14.8,8.8 16,10.6 C17.2,12.4 16.8,14.8 14.6,16.2 C12.8,17.4 10.6,17.3 9,16.4" fill="none" stroke="#24150F" stroke-width="2"/>
+      <path d="M9.5,9.5 C12.2,8.2 14.8,8.8 16,10.6 C17.2,12.4 16.8,14.8 14.6,16.2 C12.8,17.4 10.6,17.3 9,16.4" fill="none" stroke="#FFE066" stroke-width="1.2"/>
+      <!-- tiny dots -->
+      <circle cx="22.5" cy="8.5" r="1.1" fill="#FFF7C8" stroke="#21120E" stroke-width="0.6"/>
+      <circle cx="24.8" cy="21.2" r="1.2" fill="#FFD34A" stroke="#21120E" stroke-width="0.6"/>
+    </g>
+  </g>
+
+  <!-- Frame 5 -->
+  <g id="frame5" transform="translate(32,32)">
+    <g transform="rotate(-12,16,16)">
+      <circle cx="16" cy="16" r="12.2" fill="url(#gsf_glow)" opacity="0.95"/>
+      <circle cx="16" cy="16" r="4.2" fill="url(#gsf_core)" stroke="#1D120E" stroke-width="1"/>
+      <!-- double ring -->
+      <circle cx="16" cy="16" r="10.8" fill="none" stroke="#24150F" stroke-width="2.6"/>
+      <circle cx="16" cy="16" r="10.8" fill="none" stroke="url(#gsf_ring)" stroke-width="1.8"/>
+      <circle cx="16" cy="16" r="6.8" fill="none" stroke="#24150F" stroke-width="2.2"/>
+      <circle cx="16" cy="16" r="6.8" fill="none" stroke="#FFE066" stroke-width="1.4"/>
+      <!-- spiky shards -->
+      <polygon points="16,3.8 18.2,9.4 16,11 13.8,9.4" fill="#FFB300" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="28.2,16 22.6,18.2 21,16 22.6,13.8" fill="#FF9D00" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="16,28.2 13.8,22.6 16,21 18.2,22.6" fill="#FFB300" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="3.8,16 9.4,13.8 11,16 9.4,18.2" fill="#FF9D00" stroke="#21120E" stroke-width="0.8"/>
+      <!-- small satellites -->
+      <circle cx="7.6" cy="23.8" r="1.2" fill="#FFE066" stroke="#21120E" stroke-width="0.6"/>
+      <circle cx="24.4" cy="7.8" r="1" fill="#FFF7C8" stroke="#21120E" stroke-width="0.6"/>
+    </g>
+  </g>
+
+  <!-- Frame 6 -->
+  <g id="frame6" transform="translate(64,32)">
+    <g transform="rotate(28,16,16)">
+      <circle cx="16" cy="16" r="10.8" fill="url(#gsf_glow)" opacity="0.9"/>
+      <circle cx="16" cy="16" r="3.6" fill="url(#gsf_core)" stroke="#1D120E" stroke-width="0.9"/>
+      <!-- explosive shards -->
+      <polygon points="16,5.2 19.4,11.2 16.8,12.6 14.6,10.2" fill="#FFAA00" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="26.8,10.4 20.8,13.8 19.4,16.2 21.8,14" fill="#FF7F00" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="26.8,21.6 20.8,18.2 19.4,15.8 21.8,18" fill="#FFAA00" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="16,26.8 12.6,20.8 15.2,19.4 17.4,21.8" fill="#FF7F00" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="5.2,21.6 11.2,18.2 12.6,15.8 10.2,18" fill="#FFAA00" stroke="#21120E" stroke-width="0.8"/>
+      <polygon points="5.2,10.4 11.2,13.8 12.6,16.2 10.2,14" fill="#FF7F00" stroke="#21120E" stroke-width="0.8"/>
+      <!-- curved flicks -->
+      <path d="M7.8,14.2 Q9,11.8 11.4,11.2" fill="none" stroke="#24150F" stroke-width="2"/>
+      <path d="M7.8,14.2 Q9,11.8 11.4,11.2" fill="none" stroke="#FFD34A" stroke-width="1.2"/>
+      <path d="M24.2,17.8 Q23,20.2 20.6,20.8" fill="none" stroke="#24150F" stroke-width="2"/>
+      <path d="M24.2,17.8 Q23,20.2 20.6,20.8" fill="none" stroke="#FFE066" stroke-width="1.2"/>
+    </g>
+  </g>
+
+  <!-- Frame 7 -->
+  <g id="frame7" transform="translate(0,64)">
+    <g transform="rotate(-16,16,16)">
+      <circle cx="16" cy="16" r="8.8" fill="url(#gsf_glow)" opacity="0.8"/>
+      <circle cx="16" cy="16" r="2.8" fill="url(#gsf_core)" stroke="#1D120E" stroke-width="0.8"/>
+      <!-- fading ring -->
+      <circle cx="16" cy="16" r="11.2" fill="none" stroke="#24150F" stroke-width="2"/>
+      <circle cx="16" cy="16" r="11.2" fill="none" stroke="#FFD34A" stroke-width="1.2" opacity="0.9"/>
+      <!-- fewer rays -->
+      <line x1="16" y1="9" x2="16" y2="23" stroke="#24150F" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="16" y1="9.2" x2="16" y2="22.8" stroke="#FFE066" stroke-width="1.4" stroke-linecap="round"/>
+      <line x1="9" y1="16" x2="23" y2="16" stroke="#24150F" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="9.2" y1="16" x2="22.8" y2="16" stroke="#FFE066" stroke-width="1.4" stroke-linecap="round"/>
+      <!-- drifting sparkles -->
+      <circle cx="8.2" cy="21.6" r="1.1" fill="#FFF7C8" stroke="#21120E" stroke-width="0.6"/>
+      <circle cx="22.4" cy="9.4" r="1" fill="#FFD34A" stroke="#21120E" stroke-width="0.6"/>
+      <circle cx="12.2" cy="6.6" r="0.9" fill="#FFE066" stroke="#21120E" stroke-width="0.5"/>
+    </g>
+  </g>
+
+  <!-- Frame 8 -->
+  <g id="frame8" transform="translate(32,64)">
+    <g transform="rotate(8,16,16)">
+      <circle cx="16" cy="16" r="6.4" fill="url(#gsf_glow)" opacity="0.75"/>
+      <circle cx="16" cy="16" r="2.5" fill="url(#gsf_core)" stroke="#1D120E" stroke-width="0.8"/>
+      <!-- small cross -->
+      <line x1="16" y1="11.2" x2="16" y2="20.8" stroke="#24150F" stroke-width="2" stroke-linecap="round"/>
+      <line x1="16" y1="11.4" x2="16" y2="20.6" stroke="#FFD34A" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="11.2" y1="16" x2="20.8" y2="16" stroke="#24150F" stroke-width="2" stroke-linecap="round"/>
+      <line x1="11.4" y1="16" x2="20.6" y2="16" stroke="#FFD34A" stroke-width="1.2" stroke-linecap="round"/>
+      <!-- twinkle dots -->
+      <circle cx="7.8" cy="14.6" r="0.9" fill="#FFF7C8" stroke="#21120E" stroke-width="0.5"/>
+      <circle cx="24.2" cy="17.4" r="0.9" fill="#FFE066" stroke="#21120E" stroke-width="0.5"/>
+    </g>
+  </g>
+
+  <!-- Frame 9 (empty cell intentionally left blank to keep background transparent and sheet contract satisfied) -->
+</svg>

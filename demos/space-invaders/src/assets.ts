@@ -1217,17 +1217,17 @@ export const assets = defineAiAssets(
   "background.stars.twinkle-white": {
     "id": "background.stars.twinkle-white",
     "kind": "spritesheet",
-    "prompt": "White star twinkling animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "prompt": "White star twinkling animation for a 2D space invaders background.",
     "dimensions": {
-      "width": 128,
-      "height": 32
+      "width": 96,
+      "height": 96
     },
     "frameGrid": {
       "frameWidth": 32,
       "frameHeight": 32,
-      "columns": 4,
-      "rows": 1,
-      "frameCount": 4
+      "columns": 3,
+      "rows": 3,
+      "frameCount": 8
     },
     "animations": [
       {
@@ -1236,7 +1236,11 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7
         ],
         "frameRate": 8,
         "repeat": -1
@@ -1251,7 +1255,7 @@ export const assets = defineAiAssets(
         "background.stars"
       ]
     },
-    "activeVersion": "first-draft-1780702620989-1",
+    "activeVersion": "promoted-1780754791141",
     "versions": {
       "first-draft-1780702620989-1": {
         "name": "first-draft-1780702620989-1",
@@ -1269,23 +1273,41 @@ export const assets = defineAiAssets(
           ]
         },
         "notes": "Auto-generated first draft for a missing asset."
+      },
+      "promoted-1780754791141": {
+        "name": "promoted-1780754791141",
+        "file": "/assets/background.stars.twinkle-white.promoted-1780754791141.png",
+        "prompt": "White star twinkling animation for a 2D space invaders background.",
+        "createdAt": "2026-06-06T14:06:31.168Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "background.stars"
+          ]
+        },
+        "parentVersion": "first-draft-1780702620989-1",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "background.stars.blue-pulse": {
     "id": "background.stars.blue-pulse",
     "kind": "spritesheet",
-    "prompt": "Blue star pulsing animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "prompt": "Blue star pulsing animation for a 2D space invaders background.",
     "dimensions": {
-      "width": 128,
-      "height": 32
+      "width": 96,
+      "height": 96
     },
     "frameGrid": {
       "frameWidth": 32,
       "frameHeight": 32,
-      "columns": 4,
-      "rows": 1,
-      "frameCount": 4
+      "columns": 3,
+      "rows": 3,
+      "frameCount": 8
     },
     "animations": [
       {
@@ -1294,7 +1316,11 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7
         ],
         "frameRate": 7,
         "repeat": -1
@@ -1309,7 +1335,7 @@ export const assets = defineAiAssets(
         "background.stars"
       ]
     },
-    "activeVersion": "first-draft-1780702642169-2",
+    "activeVersion": "promoted-1780754968149",
     "versions": {
       "first-draft-1780702642169-2": {
         "name": "first-draft-1780702642169-2",
@@ -1327,23 +1353,41 @@ export const assets = defineAiAssets(
           ]
         },
         "notes": "Auto-generated first draft for a missing asset."
+      },
+      "promoted-1780754968149": {
+        "name": "promoted-1780754968149",
+        "file": "/assets/background.stars.blue-pulse.promoted-1780754968149.png",
+        "prompt": "Blue star pulsing animation for a 2D space invaders background.",
+        "createdAt": "2026-06-06T14:09:28.170Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "background.stars"
+          ]
+        },
+        "parentVersion": "first-draft-1780702642169-2",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "background.stars.gold-flare": {
     "id": "background.stars.gold-flare",
     "kind": "spritesheet",
-    "prompt": "Gold star flare animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "prompt": "Gold star flare animation for a 2D space invaders background.",
     "dimensions": {
-      "width": 128,
-      "height": 32
+      "width": 96,
+      "height": 96
     },
     "frameGrid": {
       "frameWidth": 32,
       "frameHeight": 32,
-      "columns": 4,
-      "rows": 1,
-      "frameCount": 4
+      "columns": 3,
+      "rows": 3,
+      "frameCount": 8
     },
     "animations": [
       {
@@ -1352,22 +1396,26 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7
         ],
         "frameRate": 9,
         "repeat": -1
       }
     ],
     "settings": {
-      "model": "gpt-image-2",
+      "model": "gpt-5",
       "background": "auto",
       "quality": "low",
-      "format": "png",
+      "format": "svg",
       "referenceAssetIds": [
         "background.stars"
       ]
     },
-    "activeVersion": "first-draft-1780702665912-3",
+    "activeVersion": "promoted-1780758884737",
     "versions": {
       "first-draft-1780702665912-3": {
         "name": "first-draft-1780702665912-3",
@@ -1385,23 +1433,41 @@ export const assets = defineAiAssets(
           ]
         },
         "notes": "Auto-generated first draft for a missing asset."
+      },
+      "promoted-1780758884737": {
+        "name": "promoted-1780758884737",
+        "file": "/assets/background.stars.gold-flare.promoted-1780758884737.svg",
+        "prompt": "Gold star flare animation for a 2D space invaders background.",
+        "createdAt": "2026-06-06T15:14:44.755Z",
+        "model": "gpt-5",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "background.stars"
+          ]
+        },
+        "parentVersion": "first-draft-1780702665912-3",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "background.stars.violet-blink": {
     "id": "background.stars.violet-blink",
     "kind": "spritesheet",
-    "prompt": "Violet star blinking animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "prompt": "Violet star blinking animation for a 2D space invaders background.",
     "dimensions": {
-      "width": 128,
-      "height": 32
+      "width": 96,
+      "height": 96
     },
     "frameGrid": {
       "frameWidth": 32,
       "frameHeight": 32,
-      "columns": 4,
-      "rows": 1,
-      "frameCount": 4
+      "columns": 3,
+      "rows": 3,
+      "frameCount": 8
     },
     "animations": [
       {
@@ -1410,22 +1476,26 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7
         ],
         "frameRate": 6,
         "repeat": -1
       }
     ],
     "settings": {
-      "model": "gpt-image-2",
+      "model": "gpt-5",
       "background": "auto",
       "quality": "low",
-      "format": "png",
+      "format": "svg",
       "referenceAssetIds": [
         "background.stars"
       ]
     },
-    "activeVersion": "first-draft-1780702686733-4",
+    "activeVersion": "promoted-1780759263994",
     "versions": {
       "first-draft-1780702686733-4": {
         "name": "first-draft-1780702686733-4",
@@ -1443,23 +1513,41 @@ export const assets = defineAiAssets(
           ]
         },
         "notes": "Auto-generated first draft for a missing asset."
+      },
+      "promoted-1780759263994": {
+        "name": "promoted-1780759263994",
+        "file": "/assets/background.stars.violet-blink.promoted-1780759263994.svg",
+        "prompt": "Violet star blinking animation for a 2D space invaders background.",
+        "createdAt": "2026-06-06T15:21:04.014Z",
+        "model": "gpt-5",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "background.stars"
+          ]
+        },
+        "parentVersion": "first-draft-1780702686733-4",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "background.stars.green-shimmer": {
     "id": "background.stars.green-shimmer",
     "kind": "spritesheet",
-    "prompt": "Green star shimmering animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+    "prompt": "Green star shimmering animation for a 2D space invaders background.",
     "dimensions": {
-      "width": 128,
-      "height": 32
+      "width": 96,
+      "height": 96
     },
     "frameGrid": {
       "frameWidth": 32,
       "frameHeight": 32,
-      "columns": 4,
-      "rows": 1,
-      "frameCount": 4
+      "columns": 3,
+      "rows": 3,
+      "frameCount": 8
     },
     "animations": [
       {
@@ -1468,22 +1556,26 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7
         ],
         "frameRate": 8,
         "repeat": -1
       }
     ],
     "settings": {
-      "model": "gpt-image-2",
+      "model": "gpt-5",
       "background": "auto",
       "quality": "low",
-      "format": "png",
+      "format": "svg",
       "referenceAssetIds": [
         "background.stars"
       ]
     },
-    "activeVersion": "first-draft-1780702708075-5",
+    "activeVersion": "promoted-1780759689599",
     "versions": {
       "first-draft-1780702708075-5": {
         "name": "first-draft-1780702708075-5",
@@ -1501,6 +1593,24 @@ export const assets = defineAiAssets(
           ]
         },
         "notes": "Auto-generated first draft for a missing asset."
+      },
+      "promoted-1780759689599": {
+        "name": "promoted-1780759689599",
+        "file": "/assets/background.stars.green-shimmer.promoted-1780759689599.svg",
+        "prompt": "Green star shimmering animation for a 2D space invaders background.",
+        "createdAt": "2026-06-06T15:28:09.621Z",
+        "model": "gpt-5",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "background.stars"
+          ]
+        },
+        "parentVersion": "first-draft-1780702708075-5",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -1541,6 +1651,316 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "default",
         "notes": "Promoted from the AI asset designer."
+      }
+    }
+  },
+  "laser.blue": {
+    "id": "laser.blue",
+    "kind": "image",
+    "prompt": "Blue player laser bolt for a 2D space invaders game, thin bright vertical beam, transparent background.",
+    "dimensions": {
+      "width": 4,
+      "height": 18
+    },
+    "settings": {
+      "model": "gpt-5",
+      "background": "auto",
+      "quality": "low",
+      "format": "svg"
+    },
+    "linkedAnimationAssets": {
+      "flicker": {
+        "label": "Slow flicker",
+        "assetId": "laser.blue.flicker"
+      },
+      "hit": {
+        "label": "Laser hit",
+        "assetId": "laser.blue.hit"
+      }
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/laser.blue.default.svg",
+        "prompt": "Blue player laser bolt for a 2D space invaders game, thin bright vertical beam, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg"
+        }
+      }
+    }
+  },
+  "laser.blue.flicker": {
+    "id": "laser.blue.flicker",
+    "kind": "spritesheet",
+    "prompt": "Blue player laser slow flicker animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+    "dimensions": {
+      "width": 8,
+      "height": 36
+    },
+    "frameGrid": {
+      "frameCount": 4,
+      "frameWidth": 4,
+      "frameHeight": 18,
+      "columns": 2,
+      "rows": 2
+    },
+    "animations": [
+      {
+        "key": "laser.blue.flicker",
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "frameRate": 8,
+        "repeat": -1
+      }
+    ],
+    "settings": {
+      "model": "gpt-5",
+      "background": "auto",
+      "quality": "low",
+      "format": "svg",
+      "referenceAssetIds": [
+        "laser.blue"
+      ]
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/laser.blue.flicker.default.svg",
+        "prompt": "Blue player laser slow flicker animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "laser.blue"
+          ]
+        }
+      }
+    }
+  },
+  "laser.blue.hit": {
+    "id": "laser.blue.hit",
+    "kind": "spritesheet",
+    "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+    "dimensions": {
+      "width": 8,
+      "height": 36
+    },
+    "frameGrid": {
+      "frameCount": 4,
+      "frameWidth": 4,
+      "frameHeight": 18,
+      "columns": 2,
+      "rows": 2
+    },
+    "animations": [
+      {
+        "key": "laser.blue.hit",
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "frameRate": 18,
+        "repeat": 0
+      }
+    ],
+    "settings": {
+      "model": "gpt-5",
+      "background": "auto",
+      "quality": "low",
+      "format": "svg",
+      "referenceAssetIds": [
+        "laser.blue"
+      ]
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/laser.blue.hit.default.svg",
+        "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "laser.blue"
+          ]
+        }
+      }
+    }
+  },
+  "laser.red": {
+    "id": "laser.red",
+    "kind": "image",
+    "prompt": "Red enemy laser bolt for a 2D space invaders game, thin bright vertical beam, transparent background.",
+    "dimensions": {
+      "width": 5,
+      "height": 16
+    },
+    "settings": {
+      "model": "gpt-5",
+      "background": "auto",
+      "quality": "low",
+      "format": "svg"
+    },
+    "linkedAnimationAssets": {
+      "flicker": {
+        "label": "Slow flicker",
+        "assetId": "laser.red.flicker"
+      },
+      "hit": {
+        "label": "Laser hit",
+        "assetId": "laser.red.hit"
+      }
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/laser.red.default.svg",
+        "prompt": "Red enemy laser bolt for a 2D space invaders game, thin bright vertical beam, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg"
+        }
+      }
+    }
+  },
+  "laser.red.flicker": {
+    "id": "laser.red.flicker",
+    "kind": "spritesheet",
+    "prompt": "Red enemy laser slow flicker animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+    "dimensions": {
+      "width": 10,
+      "height": 32
+    },
+    "frameGrid": {
+      "frameCount": 4,
+      "frameWidth": 5,
+      "frameHeight": 16,
+      "columns": 2,
+      "rows": 2
+    },
+    "animations": [
+      {
+        "key": "laser.red.flicker",
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "frameRate": 8,
+        "repeat": -1
+      }
+    ],
+    "settings": {
+      "model": "gpt-5",
+      "background": "auto",
+      "quality": "low",
+      "format": "svg",
+      "referenceAssetIds": [
+        "laser.red"
+      ]
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/laser.red.flicker.default.svg",
+        "prompt": "Red enemy laser slow flicker animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "laser.red"
+          ]
+        }
+      }
+    }
+  },
+  "laser.red.hit": {
+    "id": "laser.red.hit",
+    "kind": "spritesheet",
+    "prompt": "Red enemy laser hit animation. Small hot impact spark where the laser hits at the bottom, transparent background.",
+    "dimensions": {
+      "width": 10,
+      "height": 32
+    },
+    "frameGrid": {
+      "frameCount": 4,
+      "frameWidth": 5,
+      "frameHeight": 16,
+      "columns": 2,
+      "rows": 2
+    },
+    "animations": [
+      {
+        "key": "laser.red.hit",
+        "frames": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "frameRate": 18,
+        "repeat": 0
+      }
+    ],
+    "settings": {
+      "model": "gpt-5",
+      "background": "auto",
+      "quality": "low",
+      "format": "svg",
+      "referenceAssetIds": [
+        "laser.red"
+      ]
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/laser.red.hit.default.svg",
+        "prompt": "Red enemy laser hit animation. Small hot impact spark where the laser hits at the bottom, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "laser.red"
+          ]
+        }
       }
     }
   }
