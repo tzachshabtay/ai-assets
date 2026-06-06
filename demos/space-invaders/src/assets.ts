@@ -87,6 +87,10 @@ export const assets = defineAiAssets(
       "moving-left": {
         "label": "Moving left",
         "assetId": "hero.ship.moving-left"
+      },
+      "explosion": {
+        "label": "Explosion",
+        "assetId": "hero.ship.explosion"
       }
     }
   },
@@ -2283,6 +2287,76 @@ export const assets = defineAiAssets(
       }
     }
   },
+  "hero.ship.explosion": {
+    "id": "hero.ship.explosion",
+    "kind": "spritesheet",
+    "prompt": "Hero starfighter explosion animation. Ship erupts into a bright energy blast, expanding fireball, sparks, then fading smoke and embers, transparent background.",
+    "dimensions": {
+      "width": 384,
+      "height": 256
+    },
+    "frameGrid": {
+      "frameCount": 6,
+      "frameWidth": 128,
+      "frameHeight": 128,
+      "columns": 3,
+      "rows": 2
+    },
+    "animations": [
+      {
+        "key": "hero.ship.explosion",
+        "frames": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "frameRate": 12,
+        "repeat": 0,
+        "frameTimings": [
+          {
+            "delayMs": 70
+          },
+          {
+            "delayMs": 80
+          },
+          {
+            "delayMs": 95
+          },
+          {
+            "delayMs": 110
+          },
+          {
+            "delayMs": 130
+          },
+          {
+            "delayMs": 150
+          }
+        ]
+      }
+    ],
+    "settings": {
+      "model": "gpt-image-2",
+      "background": "auto",
+      "quality": "low",
+      "format": "png",
+      "referenceAssetIds": [
+        "hero.ship"
+      ]
+    },
+    "activeVersion": "default",
+    "versions": {
+      "default": {
+        "name": "default",
+        "file": "/assets/hero.ship.explosion.default.svg",
+        "prompt": "Hero starfighter explosion animation. Ship erupts into a bright energy blast, expanding fireball, sparks, then fading smoke and embers, transparent background.",
+        "createdAt": "2026-06-06T00:00:00.000Z",
+        "model": "starter-asset"
+      }
+    }
+  },
   "hero.ship.moving-left": {
     "id": "hero.ship.moving-left",
     "kind": "spritesheet",
@@ -3427,18 +3501,6 @@ export const assets = defineAiAssets(
         }
       }
     }
-  }
-}
-, {
-  "styleGuide": {
-    "prompt": "Hand-painted 1990s cartoon adventure game background, exaggerated perspective, whimsical architecture, bright saturated colors, smooth ink outlines, highly expressive shapes, playful visual humor, stylized proportions, curved and distorted geometry, detailed environmental storytelling, clean cel-animation aesthetic, retro PC adventure game art, professionally illustrated, high detail, colorful and cheerful atmosphere.",
-    "images": [
-      {
-        "name": "style.png",
-        "file": "/assets/style-guide.1780542427743.1.png",
-        "mimeType": "image/png"
-      }
-    ]
   }
 }
 );

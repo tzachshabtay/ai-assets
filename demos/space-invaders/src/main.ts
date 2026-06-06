@@ -92,6 +92,7 @@ const laserHitDisplaySizes: Record<string, { width: number; height: number }> = 
   "laser.blue.hit": { width: 18, height: 18 },
   "laser.red.hit": { width: 18, height: 18 }
 };
+const maxHeroLives = 5;
 
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
@@ -117,6 +118,9 @@ function startGame(assetManifest: AiAssetManifest): void {
     private invaderDirection = 1;
     private lastInvaderShotAt = 0;
     private score = 0;
+    private heroLives = maxHeroLives;
+    private heroDestroyed = false;
+    private heroLifeIcons: Phaser.GameObjects.Image[] = [];
     private scoreText?: Phaser.GameObjects.Text;
     private statusText?: Phaser.GameObjects.Text;
     private heroAnimationSizes = new Map<string, { width: number; height: number }>();
@@ -150,6 +154,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       createAiAnimations(this, assetManifest, "hero.ship.moving-left");
       createAiAnimations(this, assetManifest, "hero.ship.shooting");
       createAiAnimations(this, assetManifest, "hero.ship.hit");
+      createAiAnimations(this, assetManifest, "hero.ship.explosion");
       for (const assetId of starAnimationAssetIds) {
         createAiAnimations(this, assetManifest, assetId);
       }
@@ -163,6 +168,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.moving-left"]);
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.shooting"]);
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.hit"]);
+      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.explosion"]);
       for (const assetId of invaderAnimationAssetIds) {
         this.registerInvaderAnimationSize(assetManifest.assets[assetId]);
       }
@@ -189,6 +195,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       this.hero = this.add.sprite(320, 570, this.aiRuntime.key("hero.ship.idle"));
       this.playHeroAnimation("hero.ship.idle");
+      this.createHeroLifeBar();
       this.spawnInvaders();
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
@@ -212,6 +219,7 @@ function startGame(assetManifest: AiAssetManifest): void {
           this.heroAnimationKey = undefined;
           this.hero.setTexture(textureKey);
           this.applyDisplaySize(this.hero, asset);
+          this.updateHeroLifeBarTexture(textureKey);
         }
 
         if (assetId.startsWith("hero.ship.")) {
@@ -256,6 +264,7 @@ function startGame(assetManifest: AiAssetManifest): void {
           "hero.ship.moving-left": { width: 54, height: 54 },
           "hero.ship.shooting": { width: 54, height: 54 },
           "hero.ship.hit": { width: 54, height: 54 },
+          "hero.ship.explosion": { width: 54, height: 54 },
           "invader.scout": { width: 42, height: 42 },
           "invader.scout.idle": { width: 42, height: 42 },
           "invader.scout.shooting": { width: 42, height: 42 },
@@ -301,6 +310,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     private updateHero(delta: number) {
       if (!this.hero || !this.cursors) return;
+      if (this.heroDestroyed) return;
       if (this.input.keyboard && !this.input.keyboard.enabled) return;
 
       const speed = 280 * (delta / 1000);
@@ -418,14 +428,15 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
 
       for (const bullet of [...this.invaderBullets]) {
+        if (this.heroDestroyed) break;
+
         const collisionPoint = this.pixelCollisionPoint(bullet, this.hero);
 
         if (collisionPoint) {
           this.invaderBullets = this.invaderBullets.filter((candidate) => candidate !== bullet);
           bullet.destroy();
           this.spawnLaserHit("laser.red.hit", collisionPoint.x, collisionPoint.y);
-          this.statusText?.setText("Hit. The ship holds.");
-          this.playHeroActionAnimation("hero.ship.hit");
+          this.handleHeroHit();
         }
       }
 
@@ -590,6 +601,76 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.invaderBullets = [];
       this.spawnInvaders();
       this.statusText?.setText(`${message} New wave incoming.`);
+    }
+
+    private createHeroLifeBar(): void {
+      if (!this.aiRuntime) return;
+
+      for (const icon of this.heroLifeIcons) icon.destroy();
+      this.heroLifeIcons = [];
+
+      for (let index = 0; index < maxHeroLives; index += 1) {
+        const icon = this.add.image(
+          614 - ((maxHeroLives - 1 - index) * 24),
+          28,
+          this.aiRuntime.key("hero.ship")
+        );
+        icon.setDisplaySize(20, 20);
+        icon.setDepth(40);
+        icon.setAlpha(0.92);
+        this.heroLifeIcons.push(icon);
+      }
+
+      this.updateHeroLifeBar();
+    }
+
+    private updateHeroLifeBarTexture(textureKey: string): void {
+      for (const icon of this.heroLifeIcons) {
+        icon.setTexture(textureKey);
+        icon.setDisplaySize(20, 20);
+      }
+    }
+
+    private updateHeroLifeBar(): void {
+      this.heroLifeIcons.forEach((icon, index) => {
+        const isAlive = index < this.heroLives;
+        icon.setVisible(isAlive);
+        icon.setActive(isAlive);
+      });
+    }
+
+    private handleHeroHit(): void {
+      if (!this.hero || this.heroDestroyed) return;
+
+      this.heroLives = Math.max(0, this.heroLives - 1);
+      this.updateHeroLifeBar();
+
+      if (this.heroLives === 0) {
+        this.statusText?.setText("Ship destroyed.");
+        this.playHeroExplosion();
+        return;
+      }
+
+      this.statusText?.setText(`Hit. ${this.heroLives} ${this.heroLives === 1 ? "life" : "lives"} left.`);
+      this.playHeroActionAnimation("hero.ship.hit");
+    }
+
+    private playHeroExplosion(): void {
+      if (!this.hero || this.heroDestroyed) return;
+
+      this.heroDestroyed = true;
+      this.heroLockedUntil = Number.POSITIVE_INFINITY;
+      this.detachHeroFrameTransformHandler();
+      this.hero.setFlipX(false);
+      this.heroAnimationKey = "hero.ship.explosion";
+      this.hero.play("hero.ship.explosion", true);
+      this.applyHeroFrameTransform("hero.ship.explosion", 0);
+      this.attachHeroFrameTransformHandler("hero.ship.explosion");
+      this.hero.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+        this.detachHeroFrameTransformHandler();
+        this.hero?.setVisible(false);
+        this.hero?.setActive(false);
+      });
     }
 
     private recreateHeroAnimations(
