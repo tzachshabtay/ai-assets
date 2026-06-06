@@ -880,27 +880,27 @@ function startSpritesheetPreview(options: {
   const frameTimings = options.asset.animations?.[0]?.frameTimings ?? [];
   let frameCursor = 0;
   let timeout: number | undefined;
+  const frameElement = ensureFramePreviewElement(options.element);
 
   const renderFrame = () => {
     const frame = frames[frameCursor % frames.length] ?? 0;
     const timing = frameTimings[frameCursor % frames.length];
-    const column = frame % frameGrid.columns;
-    const row = Math.floor(frame / frameGrid.columns);
-    const offsetX = timing?.offsetX ?? 0;
-    const offsetY = timing?.offsetY ?? 0;
     const scaleX = timing?.scaleX ?? 1;
     const scaleY = timing?.scaleY ?? 1;
     const rotation = timing?.rotation ?? 0;
 
     options.element.style.width = `${options.displaySize.width}px`;
     options.element.style.height = `${options.displaySize.height}px`;
-    options.element.style.backgroundImage = `url("${cssUrl(options.src)}")`;
-    options.element.style.backgroundSize =
-      `${frameGrid.columns * options.displaySize.width}px ${frameGrid.rows * options.displaySize.height}px`;
-    options.element.style.backgroundPosition =
-      `${-(column * options.displaySize.width) + offsetX}px ${-(row * options.displaySize.height) + offsetY}px`;
-    options.element.style.transform = `scale(${scaleX}, ${scaleY}) rotate(${rotation}deg)`;
-    options.element.style.transformOrigin = "center";
+    setFrameElementBackground(frameElement, {
+      src: options.src,
+      frame,
+      frameGrid,
+      displaySize: options.displaySize
+    });
+    frameElement.style.transform =
+      `translate(${timing?.offsetX ?? 0}px, ${timing?.offsetY ?? 0}px) ` +
+      `scale(${scaleX}, ${scaleY}) rotate(${rotation}deg)`;
+    frameElement.style.transformOrigin = "center";
     frameCursor += 1;
     timeout = window.setTimeout(renderFrame, timing?.delayMs ?? 1000 / frameRate);
   };
@@ -912,6 +912,7 @@ function startSpritesheetPreview(options: {
       window.clearTimeout(timeout);
     }
     options.element.removeAttribute("style");
+    frameElement.remove();
   };
 }
 
@@ -1374,8 +1375,7 @@ function setFrameBackground(
     timing?: AiAssetAnimationFrameTiming;
   }
 ): void {
-  const column = options.frame % options.frameGrid.columns;
-  const row = Math.floor(options.frame / options.frameGrid.columns);
+  const frameElement = ensureFramePreviewElement(element);
   const offsetX = options.timing?.offsetX ?? 0;
   const offsetY = options.timing?.offsetY ?? 0;
   const scaleX = options.timing?.scaleX ?? 1;
@@ -1384,13 +1384,42 @@ function setFrameBackground(
 
   element.style.width = `${options.displaySize.width}px`;
   element.style.height = `${options.displaySize.height}px`;
-  element.style.backgroundImage = `url("${cssUrl(options.src)}")`;
-  element.style.backgroundSize =
+  setFrameElementBackground(frameElement, options);
+  frameElement.style.transform =
+    `translate(${offsetX}px, ${offsetY}px) scale(${scaleX}, ${scaleY}) rotate(${rotation}deg)`;
+  frameElement.style.transformOrigin = "center";
+}
+
+function setFrameElementBackground(
+  frameElement: HTMLElement,
+  options: {
+    src: string;
+    frame: number;
+    frameGrid: NonNullable<AiAssetDefinition["frameGrid"]>;
+    displaySize: AiAssetPreviewDisplaySize;
+  }
+): void {
+  const column = options.frame % options.frameGrid.columns;
+  const row = Math.floor(options.frame / options.frameGrid.columns);
+
+  frameElement.style.backgroundImage = `url("${cssUrl(options.src)}")`;
+  frameElement.style.backgroundSize =
     `${options.frameGrid.columns * options.displaySize.width}px ${options.frameGrid.rows * options.displaySize.height}px`;
-  element.style.backgroundPosition =
-    `${-(column * options.displaySize.width) + offsetX}px ${-(row * options.displaySize.height) + offsetY}px`;
-  element.style.transform = `scale(${scaleX}, ${scaleY}) rotate(${rotation}deg)`;
-  element.style.transformOrigin = "center";
+  frameElement.style.backgroundPosition =
+    `${-(column * options.displaySize.width)}px ${-(row * options.displaySize.height)}px`;
+}
+
+function ensureFramePreviewElement(element: HTMLElement): HTMLElement {
+  const existing = element.querySelector<HTMLElement>(
+    ":scope > .ai-game-assets-designer__frame-image"
+  );
+
+  if (existing) return existing;
+
+  const frameElement = document.createElement("span");
+  frameElement.className = "ai-game-assets-designer__frame-image";
+  element.append(frameElement);
+  return frameElement;
 }
 
 function generationOverridesFromInputs(
@@ -2017,6 +2046,13 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__modal-stage {
   margin: 0 auto 14px;
+  position: relative;
+  overflow: hidden;
+  background: #0f1218;
+}
+.ai-game-assets-designer__frame-image {
+  position: absolute;
+  inset: 0;
   background-repeat: no-repeat;
   image-rendering: pixelated;
 }
@@ -2031,8 +2067,8 @@ function ensureDesignerStyles(): void {
   border: 2px solid #384251;
   border-radius: 6px;
   background-color: #0f1218;
-  background-repeat: no-repeat;
-  image-rendering: pixelated;
+  position: relative;
+  overflow: hidden;
   cursor: pointer;
 }
 .ai-game-assets-designer__frame-thumb.is-selected {

@@ -2,6 +2,8 @@ import Phaser from "phaser";
 import {
   AiAssetDebugClient,
   AiAssetRuntime,
+  applyAiAnimationFrameTransform,
+  bindAiAnimationFrameTransforms,
   createAiAnimations,
   installAiAssetDesigner,
   loadAiAssets,
@@ -150,6 +152,8 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.spawnInvaders();
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
+        assetManifest.assets[assetId] = asset;
+
         if (assetId === "background.space" && this.background) {
           this.background.setTexture(textureKey);
           this.background.setDisplaySize(640, 640);
@@ -211,6 +215,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         ],
         onManifestUpdated: (updatedManifest) => {
           manifest = updatedManifest;
+          Object.assign(assetManifest.assets, updatedManifest.assets);
         },
         previewDisplaySize: {
           "hero.ship": { width: 54, height: 54 },
@@ -224,10 +229,10 @@ function startGame(assetManifest: AiAssetManifest): void {
           "invader.scout.destroyed": { width: 42, height: 42 },
           "laser.blue": { width: 4, height: 18 },
           "laser.blue.flicker": { width: 4, height: 18 },
-          "laser.blue.hit": { width: 4, height: 18 },
+          "laser.blue.hit": { width: 18, height: 18 },
           "laser.red": { width: 5, height: 16 },
           "laser.red.flicker": { width: 5, height: 16 },
-          "laser.red.hit": { width: 5, height: 16 },
+          "laser.red.hit": { width: 18, height: 18 },
           "background.space": { width: 180, height: 180 },
           "background.stars": { width: 32, height: 32 },
           "background.stars.twinkle-white": { width: 32, height: 32 },
@@ -331,7 +336,8 @@ function startGame(assetManifest: AiAssetManifest): void {
           if (Phaser.Geom.Intersects.RectangleToRectangle(bullet.getBounds(), invader.getBounds())) {
             this.bullets = this.bullets.filter((candidate) => candidate !== bullet);
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
-            this.playLaserHit(bullet, "laser.blue.hit", bullet.x, invader.getBounds().top);
+            bullet.destroy();
+            this.spawnLaserHit("laser.blue.hit", bullet.x, invader.getBounds().bottom);
             this.playInvaderAnimation(invader, "invader.scout.destroyed");
             invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
@@ -344,7 +350,8 @@ function startGame(assetManifest: AiAssetManifest): void {
       for (const bullet of [...this.invaderBullets]) {
         if (Phaser.Geom.Intersects.RectangleToRectangle(bullet.getBounds(), this.hero.getBounds())) {
           this.invaderBullets = this.invaderBullets.filter((candidate) => candidate !== bullet);
-          this.playLaserHit(bullet, "laser.red.hit", bullet.x, this.hero.getBounds().bottom);
+          bullet.destroy();
+          this.spawnLaserHit("laser.red.hit", bullet.x, this.hero.getBounds().top);
           this.statusText?.setText("Hit. The ship holds.");
           this.playHeroActionAnimation("hero.ship.hit");
         }
@@ -666,36 +673,47 @@ function startGame(assetManifest: AiAssetManifest): void {
       laser.setDisplaySize(size.width, size.height);
       laser.setDepth(8);
       laser.play(animationKey);
+      bindAiAnimationFrameTransforms(
+        laser,
+        this.animationForKey(animationKey),
+        size,
+        { eventName: Phaser.Animations.Events.ANIMATION_UPDATE }
+      );
 
       return laser;
     }
 
-    private playLaserHit(
-      laser: LaserSprite,
-      animationKey: string,
-      x: number,
-      y: number
-    ): void {
-      if (!this.aiRuntime) {
-        laser.destroy();
-        return;
-      }
+    private spawnLaserHit(animationKey: string, x: number, y: number): void {
+      if (!this.aiRuntime) return;
 
       const size = laserHitDisplaySizes[animationKey] ??
         this.displaySizeForAsset(assetManifest.assets[animationKey]);
+      const hit = this.add.sprite(x, y, this.aiRuntime.key(animationKey));
       const fallbackDestroy = this.time.delayedCall(
         this.animationDuration(animationKey) + 80,
-        () => laser.destroy()
+        () => {
+          transformBinding.detach();
+          hit.destroy();
+        }
       );
 
-      laser.setPosition(x, y);
-      laser.setTexture(this.aiRuntime.key(animationKey));
-      laser.setDisplaySize(size.width, size.height);
-      laser.setDepth(9);
-      laser.play(animationKey, true);
-      laser.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      hit.setDisplaySize(size.width, size.height);
+      hit.setOrigin(0.5, animationKey === "laser.red.hit" ? 1 : 0);
+      hit.setDepth(20);
+      hit.play(animationKey, true);
+      const transformBinding = bindAiAnimationFrameTransforms(
+        hit,
+        this.animationForKey(animationKey),
+        size,
+        {
+          eventName: Phaser.Animations.Events.ANIMATION_UPDATE,
+          originY: animationKey === "laser.red.hit" ? 1 : 0
+        }
+      );
+      hit.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
         fallbackDestroy.remove(false);
-        laser.destroy();
+        transformBinding.detach();
+        hit.destroy();
       });
     }
 
@@ -751,19 +769,12 @@ function startGame(assetManifest: AiAssetManifest): void {
       frameSlot: number,
       size: { width: number; height: number }
     ): void {
-      const timing = this.animationForKey(animationKey)?.frameTimings?.[frameSlot];
-      const offsetX = timing?.offsetX ?? 0;
-      const offsetY = timing?.offsetY ?? 0;
-      const scaleX = timing?.scaleX ?? 1;
-      const scaleY = timing?.scaleY ?? 1;
-      const rotation = timing?.rotation ?? 0;
-
-      sprite.setDisplaySize(size.width * scaleX, size.height * scaleY);
-      sprite.setOrigin(
-        0.5 - offsetX / Math.max(1, size.width),
-        0.5 - offsetY / Math.max(1, size.height)
+      applyAiAnimationFrameTransform(
+        sprite,
+        this.animationForKey(animationKey),
+        frameSlot,
+        size
       );
-      sprite.setRotation(Phaser.Math.DegToRad(rotation));
     }
 
     private animationFramesWithTiming(

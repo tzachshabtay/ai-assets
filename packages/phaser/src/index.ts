@@ -10,6 +10,18 @@ export {
 export { createAiAnimations } from "./animations.js";
 
 export type {
+  AiAssetFrameTransformBinding,
+  AiAssetFrameTransformOptions,
+  AiAssetFrameTransformSize,
+  AiAssetFrameTransformTarget
+} from "./frame-transforms.js";
+
+export {
+  applyAiAnimationFrameTransform,
+  bindAiAnimationFrameTransforms
+} from "./frame-transforms.js";
+
+export type {
   EnsureMissingAiAssetFirstDraftsOptions,
   EnsureMissingAiAssetFirstDraftsProgress,
   EnsureMissingAiAssetFirstDraftsResult

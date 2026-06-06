@@ -1775,12 +1775,12 @@ export const assets = defineAiAssets(
     "kind": "spritesheet",
     "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
     "dimensions": {
-      "width": 8,
+      "width": 36,
       "height": 36
     },
     "frameGrid": {
       "frameCount": 4,
-      "frameWidth": 4,
+      "frameWidth": 18,
       "frameHeight": 18,
       "columns": 2,
       "rows": 2
@@ -1798,16 +1798,36 @@ export const assets = defineAiAssets(
         "repeat": 0,
         "frameTimings": [
           {
-            "delayMs": 110
+            "delayMs": 110,
+            "offsetX": 0,
+            "offsetY": 92,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
           },
           {
-            "delayMs": 130
+            "delayMs": 130,
+            "offsetX": 0,
+            "offsetY": 92,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
           },
           {
-            "delayMs": 130
+            "delayMs": 130,
+            "offsetX": 0,
+            "offsetY": 92,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
           },
           {
-            "delayMs": 130
+            "delayMs": 130,
+            "offsetX": 0,
+            "offsetY": 92,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0
           }
         ]
       }
@@ -1821,7 +1841,7 @@ export const assets = defineAiAssets(
         "laser.blue"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780768681503",
     "versions": {
       "default": {
         "name": "default",
@@ -1838,6 +1858,24 @@ export const assets = defineAiAssets(
             "laser.blue"
           ]
         }
+      },
+      "promoted-1780768681503": {
+        "name": "promoted-1780768681503",
+        "file": "/assets/laser.blue.hit.promoted-1780768681503.svg",
+        "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+        "createdAt": "2026-06-06T17:58:01.539Z",
+        "model": "starter-asset",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "laser.blue"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -1885,7 +1923,7 @@ export const assets = defineAiAssets(
   "laser.red.flicker": {
     "id": "laser.red.flicker",
     "kind": "spritesheet",
-    "prompt": "Red enemy laser slow flicker animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+    "prompt": "Red enemy laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
     "dimensions": {
       "width": 10,
       "height": 32
@@ -1919,7 +1957,7 @@ export const assets = defineAiAssets(
         "laser.red"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780770882406",
     "versions": {
       "default": {
         "name": "default",
@@ -1936,6 +1974,24 @@ export const assets = defineAiAssets(
             "laser.red"
           ]
         }
+      },
+      "promoted-1780770882406": {
+        "name": "promoted-1780770882406",
+        "file": "/assets/laser.red.flicker.promoted-1780770882406.svg",
+        "prompt": "Red enemy laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+        "createdAt": "2026-06-06T18:34:42.423Z",
+        "model": "gpt-5",
+        "settings": {
+          "model": "gpt-5",
+          "background": "auto",
+          "quality": "low",
+          "format": "svg",
+          "referenceAssetIds": [
+            "laser.red"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
@@ -1944,13 +2000,13 @@ export const assets = defineAiAssets(
     "kind": "spritesheet",
     "prompt": "Red enemy laser hit animation. Small hot impact spark where the laser hits at the bottom, transparent background.",
     "dimensions": {
-      "width": 10,
-      "height": 32
+      "width": 36,
+      "height": 36
     },
     "frameGrid": {
       "frameCount": 4,
-      "frameWidth": 5,
-      "frameHeight": 16,
+      "frameWidth": 18,
+      "frameHeight": 18,
       "columns": 2,
       "rows": 2
     },
