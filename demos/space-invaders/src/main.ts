@@ -32,7 +32,46 @@ type StarSprite = Phaser.GameObjects.Sprite & {
   starAnimationKey: string;
 };
 
+type InvaderType = {
+  base: string;
+  idle: string;
+  shooting: string;
+  destroyed: string;
+};
+
+type InvaderSprite = Phaser.GameObjects.Sprite & {
+  invaderType: InvaderType;
+};
+
 type LaserSprite = Phaser.GameObjects.Sprite;
+
+const invaderTypes: InvaderType[] = [
+  {
+    base: "invader.scout",
+    idle: "invader.scout.idle",
+    shooting: "invader.scout.shooting",
+    destroyed: "invader.scout.destroyed"
+  },
+  {
+    base: "invader.raider",
+    idle: "invader.raider.idle",
+    shooting: "invader.raider.shooting",
+    destroyed: "invader.raider.destroyed"
+  },
+  {
+    base: "invader.hunter",
+    idle: "invader.hunter.idle",
+    shooting: "invader.hunter.shooting",
+    destroyed: "invader.hunter.destroyed"
+  }
+];
+
+const invaderBaseAssetIds = invaderTypes.map((type) => type.base);
+const invaderAnimationAssetIds = invaderTypes.flatMap((type) => [
+  type.idle,
+  type.shooting,
+  type.destroyed
+]);
 
 const starAnimationAssetIds = [
   "background.stars.twinkle-white",
@@ -67,7 +106,7 @@ function startGame(assetManifest: AiAssetManifest): void {
     aiRuntime?: AiAssetRuntime;
     background?: Phaser.GameObjects.Image;
     hero?: Phaser.GameObjects.Sprite;
-    invaders: Phaser.GameObjects.Sprite[] = [];
+    invaders: InvaderSprite[] = [];
     applyAssetTexture?: (assetId: string, textureKey: string, asset: AiAssetDefinition) => void;
 
     private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -117,16 +156,16 @@ function startGame(assetManifest: AiAssetManifest): void {
       for (const assetId of laserAnimationAssetIds) {
         createAiAnimations(this, assetManifest, assetId);
       }
-      createAiAnimations(this, assetManifest, "invader.scout.idle");
-      createAiAnimations(this, assetManifest, "invader.scout.shooting");
-      createAiAnimations(this, assetManifest, "invader.scout.destroyed");
+      for (const assetId of invaderAnimationAssetIds) {
+        createAiAnimations(this, assetManifest, assetId);
+      }
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.idle"]);
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.moving-left"]);
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.shooting"]);
       this.registerHeroAnimationSize(assetManifest.assets["hero.ship.hit"]);
-      this.registerInvaderAnimationSize(assetManifest.assets["invader.scout.idle"]);
-      this.registerInvaderAnimationSize(assetManifest.assets["invader.scout.shooting"]);
-      this.registerInvaderAnimationSize(assetManifest.assets["invader.scout.destroyed"]);
+      for (const assetId of invaderAnimationAssetIds) {
+        this.registerInvaderAnimationSize(assetManifest.assets[assetId]);
+      }
       this.cursors = this.input.keyboard?.createCursorKeys();
       this.fireKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
@@ -183,14 +222,7 @@ function startGame(assetManifest: AiAssetManifest): void {
           }
         }
 
-        if (assetId === "invader.scout") {
-          for (const invader of this.invaders ?? []) {
-            invader.setTexture(textureKey);
-            this.applyDisplaySize(invader, asset);
-          }
-        }
-
-        if (assetId.startsWith("invader.scout.")) {
+        if (invaderAnimationAssetIds.includes(assetId)) {
           this.recreateInvaderAnimations(assetId, textureKey, asset);
           for (const invader of this.invaders ?? []) {
             const currentAnimationKey = this.invaderAnimationKeys.get(invader);
@@ -208,7 +240,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         client: debugClient,
         assetIds: [
           "hero.ship",
-          "invader.scout",
+          ...invaderBaseAssetIds,
           "laser.blue",
           "laser.red",
           "background.space",
@@ -228,6 +260,14 @@ function startGame(assetManifest: AiAssetManifest): void {
           "invader.scout.idle": { width: 42, height: 42 },
           "invader.scout.shooting": { width: 42, height: 42 },
           "invader.scout.destroyed": { width: 42, height: 42 },
+          "invader.raider": { width: 42, height: 42 },
+          "invader.raider.idle": { width: 42, height: 42 },
+          "invader.raider.shooting": { width: 42, height: 42 },
+          "invader.raider.destroyed": { width: 42, height: 42 },
+          "invader.hunter": { width: 42, height: 42 },
+          "invader.hunter.idle": { width: 42, height: 42 },
+          "invader.hunter.shooting": { width: 42, height: 42 },
+          "invader.hunter.destroyed": { width: 42, height: 42 },
           "laser.blue": { width: 4, height: 18 },
           "laser.blue.flicker": { width: 4, height: 18 },
           "laser.blue.hit": { width: 18, height: 18 },
@@ -313,12 +353,12 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       if (time - this.lastInvaderShotAt > 780) {
         this.lastInvaderShotAt = time;
-        const shooter = Phaser.Utils.Array.GetRandom(this.invaders) as Phaser.GameObjects.Sprite;
-        this.playInvaderAnimation(shooter, "invader.scout.shooting");
-        this.scheduleInvaderLaser(shooter, "invader.scout.shooting");
+        const shooter = Phaser.Utils.Array.GetRandom(this.invaders) as InvaderSprite;
+        this.playInvaderAnimation(shooter, shooter.invaderType.shooting);
+        this.scheduleInvaderLaser(shooter, shooter.invaderType.shooting);
         shooter.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
           if (shooter.active) {
-            this.playInvaderAnimation(shooter, "invader.scout.idle");
+            this.playInvaderAnimation(shooter, shooter.invaderType.idle);
           }
         });
       }
@@ -368,7 +408,7 @@ function startGame(assetManifest: AiAssetManifest): void {
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
             bullet.destroy();
             this.spawnLaserHit("laser.blue.hit", collisionPoint.x, collisionPoint.y);
-            this.playInvaderAnimation(invader, "invader.scout.destroyed");
+            this.playInvaderAnimation(invader, invader.invaderType.destroyed);
             invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
             this.scoreText?.setText(`Score ${this.score}`);
@@ -476,12 +516,14 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       for (let row = 0; row < 3; row += 1) {
         for (let col = 0; col < 8; col += 1) {
+          const invaderType = Phaser.Utils.Array.GetRandom(invaderTypes) as InvaderType;
           const invader = this.add.sprite(
             112 + col * 60,
             118 + row * 58,
-            this.aiRuntime.key("invader.scout.idle")
-          );
-          this.playInvaderAnimation(invader, "invader.scout.idle");
+            this.aiRuntime.key(invaderType.idle)
+          ) as InvaderSprite;
+          invader.invaderType = invaderType;
+          this.playInvaderAnimation(invader, invaderType.idle);
           this.invaders.push(invader);
         }
       }

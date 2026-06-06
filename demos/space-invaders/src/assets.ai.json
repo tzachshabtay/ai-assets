@@ -653,6 +653,1134 @@
         }
       }
     },
+    "invader.raider": {
+      "id": "invader.raider",
+      "kind": "image",
+      "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background. red color.",
+      "dimensions": {
+        "width": 64,
+        "height": 64
+      },
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png"
+      },
+      "linkedAnimationAssets": {
+        "idle": {
+          "label": "Idle",
+          "assetId": "invader.raider.idle"
+        },
+        "shooting": {
+          "label": "Shooting",
+          "assetId": "invader.raider.shooting"
+        },
+        "destroyed": {
+          "label": "Destroyed",
+          "assetId": "invader.raider.destroyed"
+        }
+      },
+      "activeVersion": "promoted-1780541957309",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.raider.default.svg",
+          "prompt": "Alien invader scout for a 2D space invaders game, neon beetle-like armor, readable silhouette, transparent background.",
+          "createdAt": "2026-05-30T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "promoted-1780236988072": {
+          "name": "promoted-1780236988072",
+          "file": "/assets/invader.raider.promoted-1780236988072.png",
+          "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T14:16:28.096Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png"
+          },
+          "parentVersion": "default",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780250659533": {
+          "name": "promoted-1780250659533",
+          "file": "/assets/invader.raider.promoted-1780250659533.png",
+          "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T18:04:19.580Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png"
+          },
+          "parentVersion": "promoted-1780236988072",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780250792117": {
+          "name": "promoted-1780250792117",
+          "file": "/assets/invader.raider.promoted-1780250792117.png",
+          "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background. red color.",
+          "createdAt": "2026-05-31T18:06:32.161Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png"
+          },
+          "parentVersion": "promoted-1780250659533",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780541957309": {
+          "name": "promoted-1780541957309",
+          "file": "/assets/invader.raider.promoted-1780541957309.png",
+          "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background. red color.",
+          "createdAt": "2026-06-04T02:59:17.322Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png"
+          },
+          "parentVersion": "promoted-1780250792117",
+          "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
+    "invader.raider.idle": {
+      "id": "invader.raider.idle",
+      "kind": "spritesheet",
+      "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+      "dimensions": {
+        "width": 128,
+        "height": 128
+      },
+      "frameGrid": {
+        "frameCount": 4,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 2,
+        "rows": 2
+      },
+      "animations": [
+        {
+          "key": "invader.raider.idle",
+          "frames": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frameRate": 6,
+          "repeat": -1
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "activeVersion": "promoted-1780542126752",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.raider.idle.default.svg",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "generated-idle-1780239036123": {
+          "name": "generated-idle-1780239036123",
+          "file": "/assets/invader.raider.idle.generated-idle-1780239036123.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T14:50:36.150Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "default",
+          "notes": "Generated for the Space Invaders animation demo."
+        },
+        "promoted-1780250818107": {
+          "name": "promoted-1780250818107",
+          "file": "/assets/invader.raider.idle.promoted-1780250818107.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T18:06:58.161Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "generated-idle-1780239036123",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780365798285": {
+          "name": "promoted-1780365798285",
+          "file": "/assets/invader.raider.idle.promoted-1780365798285.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-06-02T02:03:18.315Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "promoted-1780250818107",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780447725139": {
+          "name": "promoted-1780447725139",
+          "file": "/assets/invader.raider.idle.promoted-1780447725139.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-06-03T00:48:45.159Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "promoted-1780365798285",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780542126752": {
+          "name": "promoted-1780542126752",
+          "file": "/assets/invader.raider.idle.promoted-1780542126752.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-06-04T03:02:06.779Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "promoted-1780447725139",
+          "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
+    "invader.raider.shooting": {
+      "id": "invader.raider.shooting",
+      "kind": "spritesheet",
+      "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
+      "dimensions": {
+        "width": 192,
+        "height": 192
+      },
+      "frameGrid": {
+        "frameCount": 8,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 3,
+        "rows": 3
+      },
+      "animations": [
+        {
+          "key": "invader.raider.shooting",
+          "frames": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "frameRate": 10,
+          "repeat": 0,
+          "frameTimings": [
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 2,
+              "offsetY": -1
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0,
+              "tag": "shoot"
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            }
+          ]
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "activeVersion": "promoted-1780542418532",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.raider.shooting.default.svg",
+          "prompt": "Alien invader scout shooting animation. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+          "createdAt": "2026-05-31T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "generated-shooting-1780239052135": {
+          "name": "generated-shooting-1780239052135",
+          "file": "/assets/invader.raider.shooting.generated-shooting-1780239052135.png",
+          "prompt": "Alien invader scout shooting animation. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+          "createdAt": "2026-05-31T14:50:52.158Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "default",
+          "notes": "Generated for the Space Invaders animation demo."
+        },
+        "promoted-1780365025144": {
+          "name": "promoted-1780365025144",
+          "file": "/assets/invader.raider.shooting.promoted-1780365025144.png",
+          "prompt": "shooting animation",
+          "createdAt": "2026-06-02T01:50:25.177Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "generated-shooting-1780239052135",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780450422695": {
+          "name": "promoted-1780450422695",
+          "file": "/assets/invader.raider.shooting.promoted-1780450422695.png",
+          "prompt": "shooting animation",
+          "createdAt": "2026-06-03T01:33:42.714Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "promoted-1780365025144",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780454683156": {
+          "name": "promoted-1780454683156",
+          "file": "/assets/invader.raider.shooting.promoted-1780454683156.png",
+          "prompt": "shooting animation",
+          "createdAt": "2026-06-03T02:44:43.169Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "promoted-1780450422695",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780456444685": {
+          "name": "promoted-1780456444685",
+          "file": "/assets/invader.raider.shooting.promoted-1780456444685.png",
+          "prompt": "shooting animation",
+          "createdAt": "2026-06-03T03:14:04.703Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "promoted-1780454683156",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780542418532": {
+          "name": "promoted-1780542418532",
+          "file": "/assets/invader.raider.shooting.promoted-1780542418532.png",
+          "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
+          "createdAt": "2026-06-04T03:06:58.549Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "promoted-1780456444685",
+          "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
+    "invader.raider.destroyed": {
+      "id": "invader.raider.destroyed",
+      "kind": "spritesheet",
+      "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+      "dimensions": {
+        "width": 192,
+        "height": 192
+      },
+      "frameGrid": {
+        "frameCount": 8,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 3,
+        "rows": 3
+      },
+      "animations": [
+        {
+          "key": "invader.raider.destroyed",
+          "frames": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "frameRate": 12,
+          "repeat": 0
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "activeVersion": "promoted-1780542613732",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.raider.destroyed.default.svg",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-05-31T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "generated-destroyed-1780239070336": {
+          "name": "generated-destroyed-1780239070336",
+          "file": "/assets/invader.raider.destroyed.generated-destroyed-1780239070336.png",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-05-31T14:51:10.359Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "default",
+          "notes": "Generated for the Space Invaders animation demo."
+        },
+        "promoted-1780365215588": {
+          "name": "promoted-1780365215588",
+          "file": "/assets/invader.raider.destroyed.promoted-1780365215588.png",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-06-02T01:53:35.619Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "generated-destroyed-1780239070336",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780450920237": {
+          "name": "promoted-1780450920237",
+          "file": "/assets/invader.raider.destroyed.promoted-1780450920237.png",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-06-03T01:42:00.310Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "promoted-1780365215588",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780542613732": {
+          "name": "promoted-1780542613732",
+          "file": "/assets/invader.raider.destroyed.promoted-1780542613732.png",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-06-04T03:10:13.745Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.raider"
+            ]
+          },
+          "parentVersion": "promoted-1780450920237",
+          "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
+    "invader.hunter": {
+      "id": "invader.hunter",
+      "kind": "image",
+      "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background. red color.",
+      "dimensions": {
+        "width": 64,
+        "height": 64
+      },
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png"
+      },
+      "linkedAnimationAssets": {
+        "idle": {
+          "label": "Idle",
+          "assetId": "invader.hunter.idle"
+        },
+        "shooting": {
+          "label": "Shooting",
+          "assetId": "invader.hunter.shooting"
+        },
+        "destroyed": {
+          "label": "Destroyed",
+          "assetId": "invader.hunter.destroyed"
+        }
+      },
+      "activeVersion": "promoted-1780541957309",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.hunter.default.svg",
+          "prompt": "Alien invader scout for a 2D space invaders game, neon beetle-like armor, readable silhouette, transparent background.",
+          "createdAt": "2026-05-30T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "promoted-1780236988072": {
+          "name": "promoted-1780236988072",
+          "file": "/assets/invader.hunter.promoted-1780236988072.png",
+          "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T14:16:28.096Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png"
+          },
+          "parentVersion": "default",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780250659533": {
+          "name": "promoted-1780250659533",
+          "file": "/assets/invader.hunter.promoted-1780250659533.png",
+          "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T18:04:19.580Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png"
+          },
+          "parentVersion": "promoted-1780236988072",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780250792117": {
+          "name": "promoted-1780250792117",
+          "file": "/assets/invader.hunter.promoted-1780250792117.png",
+          "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background. red color.",
+          "createdAt": "2026-05-31T18:06:32.161Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png"
+          },
+          "parentVersion": "promoted-1780250659533",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780541957309": {
+          "name": "promoted-1780541957309",
+          "file": "/assets/invader.hunter.promoted-1780541957309.png",
+          "prompt": "Alien invader scout for a 2D space invaders game, readable silhouette, transparent background. red color.",
+          "createdAt": "2026-06-04T02:59:17.322Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png"
+          },
+          "parentVersion": "promoted-1780250792117",
+          "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
+    "invader.hunter.idle": {
+      "id": "invader.hunter.idle",
+      "kind": "spritesheet",
+      "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+      "dimensions": {
+        "width": 128,
+        "height": 128
+      },
+      "frameGrid": {
+        "frameCount": 4,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 2,
+        "rows": 2
+      },
+      "animations": [
+        {
+          "key": "invader.hunter.idle",
+          "frames": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "frameRate": 6,
+          "repeat": -1
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "activeVersion": "promoted-1780542126752",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.hunter.idle.default.svg",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "generated-idle-1780239036123": {
+          "name": "generated-idle-1780239036123",
+          "file": "/assets/invader.hunter.idle.generated-idle-1780239036123.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T14:50:36.150Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "default",
+          "notes": "Generated for the Space Invaders animation demo."
+        },
+        "promoted-1780250818107": {
+          "name": "promoted-1780250818107",
+          "file": "/assets/invader.hunter.idle.promoted-1780250818107.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-05-31T18:06:58.161Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "generated-idle-1780239036123",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780365798285": {
+          "name": "promoted-1780365798285",
+          "file": "/assets/invader.hunter.idle.promoted-1780365798285.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-06-02T02:03:18.315Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "promoted-1780250818107",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780447725139": {
+          "name": "promoted-1780447725139",
+          "file": "/assets/invader.hunter.idle.promoted-1780447725139.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-06-03T00:48:45.159Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "promoted-1780365798285",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780542126752": {
+          "name": "promoted-1780542126752",
+          "file": "/assets/invader.hunter.idle.promoted-1780542126752.png",
+          "prompt": "Alien invader scout idle animation. Subtle hovering bob, antenna twitch, readable silhouette, transparent background.",
+          "createdAt": "2026-06-04T03:02:06.779Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "promoted-1780447725139",
+          "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
+    "invader.hunter.shooting": {
+      "id": "invader.hunter.shooting",
+      "kind": "spritesheet",
+      "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
+      "dimensions": {
+        "width": 192,
+        "height": 192
+      },
+      "frameGrid": {
+        "frameCount": 8,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 3,
+        "rows": 3
+      },
+      "animations": [
+        {
+          "key": "invader.hunter.shooting",
+          "frames": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "frameRate": 10,
+          "repeat": 0,
+          "frameTimings": [
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 2,
+              "offsetY": -1
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0,
+              "tag": "shoot"
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            },
+            {
+              "delayMs": 100,
+              "offsetX": 0,
+              "offsetY": 0
+            }
+          ]
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "activeVersion": "promoted-1780542418532",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.hunter.shooting.default.svg",
+          "prompt": "Alien invader scout shooting animation. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+          "createdAt": "2026-05-31T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "generated-shooting-1780239052135": {
+          "name": "generated-shooting-1780239052135",
+          "file": "/assets/invader.hunter.shooting.generated-shooting-1780239052135.png",
+          "prompt": "Alien invader scout shooting animation. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+          "createdAt": "2026-05-31T14:50:52.158Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "default",
+          "notes": "Generated for the Space Invaders animation demo."
+        },
+        "promoted-1780365025144": {
+          "name": "promoted-1780365025144",
+          "file": "/assets/invader.hunter.shooting.promoted-1780365025144.png",
+          "prompt": "shooting animation",
+          "createdAt": "2026-06-02T01:50:25.177Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "generated-shooting-1780239052135",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780450422695": {
+          "name": "promoted-1780450422695",
+          "file": "/assets/invader.hunter.shooting.promoted-1780450422695.png",
+          "prompt": "shooting animation",
+          "createdAt": "2026-06-03T01:33:42.714Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "promoted-1780365025144",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780454683156": {
+          "name": "promoted-1780454683156",
+          "file": "/assets/invader.hunter.shooting.promoted-1780454683156.png",
+          "prompt": "shooting animation",
+          "createdAt": "2026-06-03T02:44:43.169Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "promoted-1780450422695",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780456444685": {
+          "name": "promoted-1780456444685",
+          "file": "/assets/invader.hunter.shooting.promoted-1780456444685.png",
+          "prompt": "shooting animation",
+          "createdAt": "2026-06-03T03:14:04.703Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "promoted-1780454683156",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780542418532": {
+          "name": "promoted-1780542418532",
+          "file": "/assets/invader.hunter.shooting.promoted-1780542418532.png",
+          "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
+          "createdAt": "2026-06-04T03:06:58.549Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "promoted-1780456444685",
+          "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
+    "invader.hunter.destroyed": {
+      "id": "invader.hunter.destroyed",
+      "kind": "spritesheet",
+      "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+      "dimensions": {
+        "width": 192,
+        "height": 192
+      },
+      "frameGrid": {
+        "frameCount": 8,
+        "frameWidth": 64,
+        "frameHeight": 64,
+        "columns": 3,
+        "rows": 3
+      },
+      "animations": [
+        {
+          "key": "invader.hunter.destroyed",
+          "frames": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "frameRate": 12,
+          "repeat": 0
+        }
+      ],
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "activeVersion": "promoted-1780542613732",
+      "versions": {
+        "default": {
+          "name": "default",
+          "file": "/assets/invader.hunter.destroyed.default.svg",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-05-31T00:00:00.000Z",
+          "model": "starter-asset"
+        },
+        "generated-destroyed-1780239070336": {
+          "name": "generated-destroyed-1780239070336",
+          "file": "/assets/invader.hunter.destroyed.generated-destroyed-1780239070336.png",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-05-31T14:51:10.359Z",
+          "model": "gpt-image-1.5",
+          "settings": {
+            "model": "gpt-image-1.5",
+            "background": "transparent",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "default",
+          "notes": "Generated for the Space Invaders animation demo."
+        },
+        "promoted-1780365215588": {
+          "name": "promoted-1780365215588",
+          "file": "/assets/invader.hunter.destroyed.promoted-1780365215588.png",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-06-02T01:53:35.619Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "generated-destroyed-1780239070336",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780450920237": {
+          "name": "promoted-1780450920237",
+          "file": "/assets/invader.hunter.destroyed.promoted-1780450920237.png",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-06-03T01:42:00.310Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "promoted-1780365215588",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1780542613732": {
+          "name": "promoted-1780542613732",
+          "file": "/assets/invader.hunter.destroyed.promoted-1780542613732.png",
+          "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+          "createdAt": "2026-06-04T03:10:13.745Z",
+          "model": "gpt-image-2",
+          "settings": {
+            "model": "gpt-image-2",
+            "background": "auto",
+            "quality": "low",
+            "format": "png",
+            "referenceAssetIds": [
+              "invader.hunter"
+            ]
+          },
+          "parentVersion": "promoted-1780450920237",
+          "notes": "Promoted from the AI asset designer."
+        }
+      }
+    },
     "hero.ship.idle": {
       "id": "hero.ship.idle",
       "kind": "spritesheet",
