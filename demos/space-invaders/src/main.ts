@@ -299,17 +299,12 @@ function startGame(assetManifest: AiAssetManifest): void {
       if (!this.invaders || this.invaders.length === 0) return;
 
       const step = 42 * (delta / 1000) * this.invaderDirection;
-      let shouldDrop = false;
 
       for (const invader of this.invaders) {
         invader.x += step;
-        if (invader.x < 45 || invader.x > 595) shouldDrop = true;
       }
 
-      if (shouldDrop) {
-        this.invaderDirection *= -1;
-        for (const invader of this.invaders) invader.y += 14;
-      }
+      this.correctInvaderEdgeHit();
 
       if (this.invaders.some((invader) => invader.y > 625)) {
         this.resetWave("Invaders regrouped.");
@@ -327,6 +322,38 @@ function startGame(assetManifest: AiAssetManifest): void {
           }
         });
       }
+    }
+
+    private correctInvaderEdgeHit(): void {
+      const formationBounds = this.invaderFormationBounds();
+      const leftLimit = 24;
+      const rightLimit = 616;
+      let correctionX = 0;
+
+      if (formationBounds.left < leftLimit) {
+        correctionX = leftLimit - formationBounds.left;
+        this.invaderDirection = 1;
+      } else if (formationBounds.right > rightLimit) {
+        correctionX = rightLimit - formationBounds.right;
+        this.invaderDirection = -1;
+      }
+
+      if (correctionX === 0) return;
+
+      for (const invader of this.invaders) {
+        invader.x += correctionX;
+        invader.y += 14;
+      }
+    }
+
+    private invaderFormationBounds(): Phaser.Geom.Rectangle {
+      const bounds = this.invaders[0].getBounds();
+
+      for (const invader of this.invaders.slice(1)) {
+        Phaser.Geom.Rectangle.MergeRect(bounds, invader.getBounds());
+      }
+
+      return bounds;
     }
 
     private updateCollisions() {
