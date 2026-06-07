@@ -1199,7 +1199,6 @@ function startGame(assetManifest: AiAssetManifest): void {
       assetId: string,
       config?: Phaser.Types.Sound.SoundConfig
     ): void {
-      if (!assetManifest.assets[assetId]?.activeVersion) return;
       if (!this.cache.audio.exists(assetId)) return;
 
       this.sound.play(assetId, config);

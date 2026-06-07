@@ -4046,15 +4046,33 @@
     "audio.sfx.invader-explosion": {
       "id": "audio.sfx.invader-explosion",
       "kind": "sound",
-      "prompt": "Short crunchy alien invader explosion sound effect, arcade sci-fi debris burst, energetic but not harsh, no voice.",
+      "prompt": "Short crunchy alien invader explosion sound effect, should be satisying.",
       "audioSettings": {
         "provider": "elevenlabs",
         "format": "mp3",
         "durationSeconds": 1.2,
         "loop": false
       },
-      "activeVersion": "",
-      "versions": {}
+      "activeVersion": "promoted-1780842819494",
+      "versions": {
+        "promoted-1780842819494": {
+          "name": "promoted-1780842819494",
+          "file": "/assets/audio.sfx.invader-explosion.promoted-1780842819494.mp3",
+          "prompt": "Short crunchy alien invader explosion sound effect, should be satisying.",
+          "createdAt": "2026-06-07T14:33:39.508Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 1.2,
+            "loop": false
+          },
+          "durationSeconds": 1.2,
+          "notes": "Promoted from the AI asset designer."
+        }
+      },
+      "settings": {}
     },
     "audio.music.menu": {
       "id": "audio.music.menu",
