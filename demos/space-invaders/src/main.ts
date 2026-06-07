@@ -93,6 +93,12 @@ const laserAnimationAssetIds = [
   "laser.red.hit"
 ];
 
+const uiAnimationAssetIds = [
+  "ui.button.idle",
+  "ui.button.hover",
+  "ui.button.clicked"
+];
+
 const laserHitDisplaySizes: Record<string, { width: number; height: number }> = {
   "laser.blue.hit": { width: 18, height: 18 },
   "laser.red.hit": { width: 18, height: 18 }
@@ -105,6 +111,7 @@ const invaderBaseSpeed = 42;
 const invaderWaveSpeedIncrease = 0.3;
 const invaderLaserBaseSpeed = 210;
 const invaderLaserWaveSpeedIncrease = 0.125;
+const menuButtonSize = { width: 190, height: 58 };
 
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
@@ -132,12 +139,19 @@ function startGame(assetManifest: AiAssetManifest): void {
     private lastInvaderShotAt = 0;
     private score = 0;
     private heroLives = maxHeroLives;
+    private gameActive = false;
     private heroDestroyed = false;
     private invadersCelebrating = false;
     private heroLifeSilhouettes: Phaser.GameObjects.Image[] = [];
     private heroLifeIcons: Phaser.GameObjects.Image[] = [];
     private scoreText?: Phaser.GameObjects.Text;
     private statusText?: Phaser.GameObjects.Text;
+    private menuContainer?: Phaser.GameObjects.Container;
+    private menuPanel?: Phaser.GameObjects.Image;
+    private menuTitle?: Phaser.GameObjects.Text;
+    private newGameButton?: Phaser.GameObjects.Sprite;
+    private newGameButtonText?: Phaser.GameObjects.Text;
+    private newGameButtonState: "idle" | "hover" | "clicked" = "idle";
     private heroAnimationSizes = new Map<string, { width: number; height: number }>();
     private heroAnimations = new Map<string, AiAssetAnimation>();
     private heroAnimationKey?: string;
@@ -176,6 +190,9 @@ function startGame(assetManifest: AiAssetManifest): void {
       for (const assetId of laserAnimationAssetIds) {
         createAiAnimations(this, assetManifest, assetId);
       }
+      for (const assetId of uiAnimationAssetIds) {
+        createAiAnimations(this, assetManifest, assetId);
+      }
       for (const assetId of invaderAnimationAssetIds) {
         createAiAnimations(this, assetManifest, assetId);
       }
@@ -208,10 +225,8 @@ function startGame(assetManifest: AiAssetManifest): void {
         fontSize: "15px"
       });
 
-      this.hero = this.add.sprite(320, 570, this.aiRuntime.key("hero.ship.idle"));
-      this.playHeroAnimation("hero.ship.idle");
-      this.createHeroLifeBar();
-      this.spawnInvaders();
+      this.startNewGame(false);
+      this.createGameMenu("AI Assets Invaders");
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
         assetManifest.assets[assetId] = asset;
@@ -228,6 +243,24 @@ function startGame(assetManifest: AiAssetManifest): void {
 
         if (laserAnimationAssetIds.includes(assetId)) {
           this.recreateLaserAnimations(assetId, textureKey, asset);
+        }
+
+        if (assetId === "ui.panel" && this.menuPanel) {
+          this.menuPanel.setTexture(textureKey);
+          this.menuPanel.setDisplaySize(360, 230);
+        }
+
+        if (assetId === "ui.button" && this.newGameButton) {
+          this.newGameButton.setTexture(textureKey);
+          this.newGameButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
+        }
+
+        if (uiAnimationAssetIds.includes(assetId)) {
+          this.recreateUiAnimations(assetId, textureKey, asset);
+
+          if (assetId === `ui.button.${this.newGameButtonState}`) {
+            this.playNewGameButtonAnimation(this.newGameButtonState);
+          }
         }
 
         if (assetId === "hero.ship" && this.hero) {
@@ -267,7 +300,9 @@ function startGame(assetManifest: AiAssetManifest): void {
           "laser.blue",
           "laser.red",
           "background.space",
-          "background.stars"
+          "background.stars",
+          "ui.panel",
+          "ui.button"
         ],
         onManifestUpdated: (updatedManifest) => {
           manifest = updatedManifest;
@@ -301,6 +336,11 @@ function startGame(assetManifest: AiAssetManifest): void {
           "laser.red": { width: 5, height: 16 },
           "laser.red.flicker": { width: 5, height: 16 },
           "laser.red.hit": { width: 18, height: 18 },
+          "ui.panel": { width: 180, height: 115 },
+          "ui.button": { width: 190, height: 58 },
+          "ui.button.idle": { width: 190, height: 58 },
+          "ui.button.hover": { width: 190, height: 58 },
+          "ui.button.clicked": { width: 190, height: 58 },
           "background.space": { width: 180, height: 180 },
           "background.stars": { width: 32, height: 32 },
           "background.stars.twinkle-white": { width: 32, height: 32 },
@@ -319,8 +359,10 @@ function startGame(assetManifest: AiAssetManifest): void {
     }
 
     update(time: number, delta: number) {
-      this.updateHero(delta);
       this.updateStars(delta);
+      if (!this.gameActive) return;
+
+      this.updateHero(delta);
       this.updateBullets(delta);
       this.updateInvaders(delta, time);
       this.updateCollisions();
@@ -544,6 +586,115 @@ function startGame(assetManifest: AiAssetManifest): void {
       return (alpha ?? 0) >= 16;
     }
 
+    private startNewGame(activate = true): void {
+      if (!this.aiRuntime) return;
+
+      this.clearGameplayObjects();
+      this.gameActive = activate;
+      this.heroDestroyed = false;
+      this.invadersCelebrating = false;
+      this.heroLives = maxHeroLives;
+      this.score = 0;
+      this.waveIndex = 0;
+      this.lastShotAt = 0;
+      this.lastInvaderShotAt = this.time.now;
+      this.heroLockedUntil = 0;
+      this.heroAnimationKey = undefined;
+      this.scoreText?.setText("Score 0");
+      this.statusText?.setText("Move: arrows  Fire: space");
+
+      this.hero = this.add.sprite(320, 570, this.aiRuntime.key("hero.ship.idle"));
+      this.playHeroAnimation("hero.ship.idle", true);
+      this.createHeroLifeBar();
+      this.spawnInvaders();
+
+      if (activate) {
+        this.hideGameMenu();
+      }
+    }
+
+    private clearGameplayObjects(): void {
+      this.detachHeroFrameTransformHandler();
+
+      for (const bullet of this.bullets) bullet.destroy();
+      for (const bullet of this.invaderBullets) bullet.destroy();
+      for (const invader of this.invaders) invader.destroy();
+      for (const silhouette of this.heroLifeSilhouettes) silhouette.destroy();
+      for (const icon of this.heroLifeIcons) icon.destroy();
+
+      this.hero?.destroy();
+      this.hero = undefined;
+      this.bullets = [];
+      this.invaderBullets = [];
+      this.invaders = [];
+      this.heroLifeSilhouettes = [];
+      this.heroLifeIcons = [];
+    }
+
+    private createGameMenu(title: string): void {
+      if (!this.aiRuntime) return;
+
+      this.menuPanel = this.add.image(0, 0, this.aiRuntime.key("ui.panel"));
+      this.menuPanel.setDisplaySize(360, 230);
+
+      this.menuTitle = this.add.text(0, -58, title, {
+        align: "center",
+        color: "#f8fafc",
+        fontSize: "24px"
+      });
+      this.menuTitle.setOrigin(0.5);
+
+      this.newGameButton = this.add.sprite(0, 50, this.aiRuntime.key("ui.button.idle"));
+      this.newGameButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
+      this.newGameButton.setInteractive({ useHandCursor: true });
+      this.newGameButton.on("pointerover", () => this.playNewGameButtonAnimation("hover"));
+      this.newGameButton.on("pointerout", () => this.playNewGameButtonAnimation("idle"));
+      this.newGameButton.on("pointerdown", () => this.playNewGameButtonAnimation("clicked"));
+      this.newGameButton.on("pointerup", () => {
+        this.playNewGameButtonAnimation("hover");
+        this.startNewGame(true);
+      });
+      this.playNewGameButtonAnimation("idle");
+
+      this.newGameButtonText = this.add.text(0, 50, "New Game", {
+        align: "center",
+        color: "#f8fafc",
+        fontSize: "18px"
+      });
+      this.newGameButtonText.setOrigin(0.5);
+
+      this.menuContainer = this.add.container(320, 320, [
+        this.menuPanel,
+        this.menuTitle,
+        this.newGameButton,
+        this.newGameButtonText
+      ]);
+      this.menuContainer.setDepth(100);
+    }
+
+    private showGameMenu(title: string): void {
+      this.gameActive = false;
+      this.menuTitle?.setText(title);
+      this.playNewGameButtonAnimation("idle");
+      this.newGameButton?.setInteractive({ useHandCursor: true });
+      this.menuContainer?.setVisible(true);
+      this.menuContainer?.setActive(true);
+    }
+
+    private hideGameMenu(): void {
+      this.newGameButton?.disableInteractive();
+      this.menuContainer?.setVisible(false);
+      this.menuContainer?.setActive(false);
+    }
+
+    private playNewGameButtonAnimation(state: "idle" | "hover" | "clicked"): void {
+      if (!this.newGameButton) return;
+
+      this.newGameButtonState = state;
+      this.newGameButton.play(`ui.button.${state}`, true);
+      this.newGameButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
+    }
+
     private spawnInvaders(): void {
       if (!this.aiRuntime) return;
 
@@ -728,6 +879,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       if (!this.hero || this.heroDestroyed) return;
 
       this.heroDestroyed = true;
+      this.gameActive = false;
       this.startInvaderCelebration();
       this.heroLockedUntil = Number.POSITIVE_INFINITY;
       this.detachHeroFrameTransformHandler();
@@ -740,6 +892,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         this.detachHeroFrameTransformHandler();
         this.hero?.setVisible(false);
         this.hero?.setActive(false);
+        this.showGameMenu("Game Over");
       });
     }
 
@@ -828,6 +981,27 @@ function startGame(assetManifest: AiAssetManifest): void {
     }
 
     private recreateLaserAnimations(
+      assetId: string,
+      textureKey: string,
+      asset = assetManifest.assets[assetId]
+    ): string[] {
+      const animationKeys: string[] = [];
+
+      for (const animation of asset?.animations ?? []) {
+        this.anims.remove(animation.key);
+        this.anims.create({
+          key: animation.key,
+          frames: this.animationFramesWithTiming(textureKey, animation),
+          frameRate: animation.frameRate,
+          repeat: animation.repeat ?? -1
+        });
+        animationKeys.push(animation.key);
+      }
+
+      return animationKeys;
+    }
+
+    private recreateUiAnimations(
       assetId: string,
       textureKey: string,
       asset = assetManifest.assets[assetId]
