@@ -102,7 +102,7 @@ const heroLifeIconSize = 30;
 const heroLifeIconSpacing = 34;
 const invaderHeroReachPadding = 8;
 const invaderBaseSpeed = 42;
-const invaderWaveSpeedIncrease = 0.15;
+const invaderWaveSpeedIncrease = 0.3;
 const invaderLaserBaseSpeed = 210;
 const invaderLaserWaveSpeedIncrease = 0.125;
 
@@ -368,8 +368,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       if (!this.invaders || this.invaders.length === 0) return;
       if (this.invadersCelebrating) return;
 
-      const waveSpeedMultiplier = 1 + (this.waveIndex * invaderWaveSpeedIncrease);
-      const step = invaderBaseSpeed * waveSpeedMultiplier * (delta / 1000) * this.invaderDirection;
+      const step = invaderBaseSpeed * this.invaderSpeedMultiplier() * (delta / 1000) * this.invaderDirection;
 
       for (const invader of this.invaders) {
         invader.x += step;
@@ -416,6 +415,10 @@ function startGame(assetManifest: AiAssetManifest): void {
         invader.x += correctionX;
         invader.y += 14;
       }
+    }
+
+    private invaderSpeedMultiplier(): number {
+      return 1 + (this.waveIndex * invaderWaveSpeedIncrease);
     }
 
     private invaderFormationBounds(): Phaser.Geom.Rectangle {
@@ -626,7 +629,9 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.invaderBullets = [];
       this.waveIndex += 1;
       this.spawnInvaders();
-      this.statusText?.setText(`${message} New wave incoming.`);
+      this.statusText?.setText(
+        `${message} Wave ${this.waveIndex + 1}. Speed x${this.invaderSpeedMultiplier().toFixed(1)}.`
+      );
     }
 
     private checkInvadersReachedHero(): void {
