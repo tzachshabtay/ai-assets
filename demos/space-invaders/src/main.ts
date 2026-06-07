@@ -102,7 +102,9 @@ const heroLifeIconSize = 30;
 const heroLifeIconSpacing = 34;
 const invaderHeroReachPadding = 8;
 const invaderBaseSpeed = 42;
-const invaderWaveSpeedIncrease = 0.05;
+const invaderWaveSpeedIncrease = 0.15;
+const invaderLaserBaseSpeed = 210;
+const invaderLaserWaveSpeedIncrease = 0.125;
 
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
@@ -352,7 +354,8 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     private updateBullets(delta: number) {
       const playerStep = 460 * (delta / 1000);
-      const enemyStep = 210 * (delta / 1000);
+      const enemyLaserSpeedMultiplier = 1 + (this.waveIndex * invaderLaserWaveSpeedIncrease);
+      const enemyStep = invaderLaserBaseSpeed * enemyLaserSpeedMultiplier * (delta / 1000);
 
       for (const bullet of this.bullets) bullet.y -= playerStep;
       for (const bullet of this.invaderBullets) bullet.y += enemyStep;
