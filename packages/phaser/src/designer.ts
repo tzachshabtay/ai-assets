@@ -323,7 +323,9 @@ export function installAiAssetDesigner(
     elements.currentPreview.classList.add("is-selected");
     selectedOption = editedCurrentOption;
     elements.promoteButton.disabled = !selectedOption;
-    if (!isAudioAsset(asset)) {
+    if (isAudioAsset(asset)) {
+      options.onPreview(selectedTargetAssetId, activeVersion.file, asset);
+    } else {
       previewCurrentAsset({
         scene: options.scene,
         manifest,
@@ -448,6 +450,17 @@ export function installAiAssetDesigner(
       options.onManifestUpdated?.(manifest);
       formatDrafts.delete(selectedTargetAssetId);
       syncTargetAsset(selectedTargetAssetId);
+      if (isAudioAsset(manifest.assets[selectedTargetAssetId])) {
+        const promotedAsset = manifest.assets[selectedTargetAssetId];
+        const promotedVersion = promotedAsset.versions[promotedAsset.activeVersion];
+        if (promotedVersion?.file) {
+          (options.onAssetReady ?? options.onPreview)(
+            selectedTargetAssetId,
+            promotedVersion.file,
+            promotedAsset
+          );
+        }
+      }
       setStatus(elements, `Promoted ${selectedTargetAssetId} to ${versionName}.`, "success");
 
       if (options.restartOnPromote) {
@@ -814,7 +827,9 @@ function renderOptions(options: {
 
       options.elements.currentPreview.classList.remove("is-selected");
       card.classList.add("is-selected");
-      if (!isAudio) {
+      if (isAudio) {
+        options.onPreview(options.assetId, option.dataUrl, optionAsset);
+      } else {
         previewOption({
           scene: options.scene,
           manifest: options.manifest,

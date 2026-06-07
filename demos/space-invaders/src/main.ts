@@ -6,6 +6,7 @@ import {
   bindAiAnimationFrameTransforms,
   createAiAnimations,
   installAiAssetDesigner,
+  loadAiAudioAssets,
   loadAiAssets,
 } from "@ai-game-assets/phaser";
 import type {
@@ -99,6 +100,9 @@ const uiAnimationAssetIds = [
   "ui.button.clicked"
 ];
 
+const playerLaserSfxAssetId = "audio.sfx.player-laser";
+const invaderExplosionSfxAssetId = "audio.sfx.invader-explosion";
+
 const laserHitDisplaySizes: Record<string, { width: number; height: number }> = {
   "laser.blue.hit": { width: 18, height: 18 },
   "laser.red.hit": { width: 18, height: 18 }
@@ -175,6 +179,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     preload() {
       loadAiAssets(this, assetManifest);
+      loadAiAudioAssets(this, assetManifest);
     }
 
     create() {
@@ -231,6 +236,11 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
         assetManifest.assets[assetId] = asset;
+
+        if (asset.kind === "sound" || asset.kind === "music") {
+          this.refreshAudioAsset(assetId, textureKey);
+          return;
+        }
 
         if (assetId === "background.space" && this.background) {
           this.background.setTexture(textureKey);
@@ -489,6 +499,7 @@ function startGame(assetManifest: AiAssetManifest): void {
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
             bullet.destroy();
             this.spawnLaserHit("laser.blue.hit", collisionPoint.x, collisionPoint.y);
+            this.playAudioAsset(invaderExplosionSfxAssetId, { volume: 0.5 });
             this.playInvaderAnimation(invader, invader.invaderType.destroyed);
             invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
@@ -1079,6 +1090,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         if (!shooter.active || this.heroAnimationKey !== animationKey) return;
 
         this.bullets.push(this.spawnLaser("laser.blue.flicker", shooter.x, shooter.y - 35));
+        this.playAudioAsset(playerLaserSfxAssetId, { volume: 0.55 });
       });
     }
 
@@ -1181,6 +1193,31 @@ function startGame(assetManifest: AiAssetManifest): void {
       );
 
       return laser;
+    }
+
+    private playAudioAsset(
+      assetId: string,
+      config?: Phaser.Types.Sound.SoundConfig
+    ): void {
+      if (!assetManifest.assets[assetId]?.activeVersion) return;
+      if (!this.cache.audio.exists(assetId)) return;
+
+      this.sound.play(assetId, config);
+    }
+
+    private refreshAudioAsset(assetId: string, source: string): void {
+      if (!source) return;
+
+      const audioCache = this.cache.audio as Phaser.Cache.BaseCache & {
+        remove?: (key: string) => unknown;
+      };
+
+      if (audioCache.exists(assetId)) {
+        audioCache.remove?.(assetId);
+      }
+
+      this.load.audio(assetId, source);
+      this.load.start();
     }
 
     private spawnLaserHit(animationKey: string, x: number, y: number): void {

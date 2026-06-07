@@ -4022,8 +4022,26 @@
         "durationSeconds": 0.8,
         "loop": false
       },
-      "activeVersion": "",
-      "versions": {}
+      "activeVersion": "promoted-1780841902063",
+      "versions": {
+        "promoted-1780841902063": {
+          "name": "promoted-1780841902063",
+          "file": "/assets/audio.sfx.player-laser.promoted-1780841902063.mp3",
+          "prompt": "Short crisp retro sci-fi blue laser shot sound effect for an arcade space shooter, punchy attack, quick fade, no voice.",
+          "createdAt": "2026-06-07T14:18:22.079Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 0.8,
+            "loop": false
+          },
+          "durationSeconds": 0.8,
+          "notes": "Promoted from the AI asset designer."
+        }
+      },
+      "settings": {}
     },
     "audio.sfx.invader-explosion": {
       "id": "audio.sfx.invader-explosion",

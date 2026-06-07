@@ -106,6 +106,55 @@ export function loadAiAsset(
   return resolved;
 }
 
+export function loadAiAudioAsset(
+  scene: PhaserSceneLike,
+  manifest: AiAssetManifest,
+  selection: AiAssetSelection | string,
+  options: LoadAiAssetOptions = {}
+): ResolvedAiAsset | undefined {
+  const assetId = typeof selection === "string" ? selection : selection.assetId;
+  const asset = manifest.assets[assetId];
+
+  if (!asset || (asset.kind !== "sound" && asset.kind !== "music")) {
+    throw new Error(`AI asset "${assetId}" is not an audio asset.`);
+  }
+
+  if (!scene.load.audio) {
+    throw new Error("This Phaser scene loader does not support audio assets.");
+  }
+
+  if (Object.keys(asset.versions).length === 0) {
+    return undefined;
+  }
+
+  const resolved = resolveAiAsset(
+    manifest,
+    typeof selection === "string"
+      ? { assetId: selection, versionName: options.versionName }
+      : { ...selection, versionName: options.versionName ?? selection.versionName }
+  );
+  const key = options.key ?? aiTextureKey({
+    assetId: resolved.asset.id,
+    versionName: resolved.versionName === resolved.asset.activeVersion
+      ? undefined
+      : resolved.versionName
+  });
+
+  scene.load.audio(key, joinUrl(options.baseUrl, resolved.version.file));
+  return resolved;
+}
+
+export function loadAiAudioAssets(
+  scene: PhaserSceneLike,
+  manifest: AiAssetManifest,
+  options: LoadAiAssetOptions = {}
+): ResolvedAiAsset[] {
+  return Object.values(manifest.assets)
+    .filter((asset) => asset.kind === "sound" || asset.kind === "music")
+    .map((asset) => loadAiAudioAsset(scene, manifest, asset.id, options))
+    .filter((asset): asset is ResolvedAiAsset => Boolean(asset));
+}
+
 function isSvg(url: string): boolean {
   return /\.svg(?:$|[?#])/i.test(url);
 }

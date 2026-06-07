@@ -1,4 +1,5 @@
 export type PhaserLoaderLike = {
+  audio?(key: string, urls: string | string[]): unknown;
   image(key: string, url: string): unknown;
   svg?(
     key: string,

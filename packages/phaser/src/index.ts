@@ -4,6 +4,8 @@ export type {
 
 export {
   loadAiAsset,
+  loadAiAudioAsset,
+  loadAiAudioAssets,
   loadAiAssets
 } from "./loader.js";
 
