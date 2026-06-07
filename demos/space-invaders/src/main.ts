@@ -112,6 +112,7 @@ const invaderWaveSpeedIncrease = 0.3;
 const invaderLaserBaseSpeed = 210;
 const invaderLaserWaveSpeedIncrease = 0.125;
 const menuButtonSize = { width: 190, height: 58 };
+const menuNewGameButtonY = 28;
 
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
@@ -644,7 +645,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       });
       this.menuTitle.setOrigin(0.5);
 
-      this.newGameButton = this.add.sprite(0, 50, this.aiRuntime.key("ui.button.idle"));
+      this.newGameButton = this.add.sprite(0, menuNewGameButtonY, this.aiRuntime.key("ui.button.idle"));
       this.newGameButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
       this.newGameButton.setInteractive({ useHandCursor: true });
       this.newGameButton.on("pointerover", () => this.playNewGameButtonAnimation("hover"));
@@ -656,7 +657,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       });
       this.playNewGameButtonAnimation("idle");
 
-      this.newGameButtonText = this.add.text(0, 50, "New Game", {
+      this.newGameButtonText = this.add.text(0, menuNewGameButtonY, "New Game", {
         align: "center",
         color: "#f8fafc",
         fontSize: "18px"
