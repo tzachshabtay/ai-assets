@@ -101,6 +101,8 @@ const maxHeroLives = 5;
 const heroLifeIconSize = 30;
 const heroLifeIconSpacing = 34;
 const invaderHeroReachPadding = 8;
+const invaderBaseSpeed = 42;
+const invaderWaveSpeedIncrease = 0.05;
 
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
@@ -124,6 +126,7 @@ function startGame(assetManifest: AiAssetManifest): void {
     private invaderBullets: LaserSprite[] = [];
     private lastShotAt = 0;
     private invaderDirection = 1;
+    private waveIndex = 0;
     private lastInvaderShotAt = 0;
     private score = 0;
     private heroLives = maxHeroLives;
@@ -362,7 +365,8 @@ function startGame(assetManifest: AiAssetManifest): void {
       if (!this.invaders || this.invaders.length === 0) return;
       if (this.invadersCelebrating) return;
 
-      const step = 42 * (delta / 1000) * this.invaderDirection;
+      const waveSpeedMultiplier = 1 + (this.waveIndex * invaderWaveSpeedIncrease);
+      const step = invaderBaseSpeed * waveSpeedMultiplier * (delta / 1000) * this.invaderDirection;
 
       for (const invader of this.invaders) {
         invader.x += step;
@@ -617,6 +621,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       this.bullets = [];
       this.invaderBullets = [];
+      this.waveIndex += 1;
       this.spawnInvaders();
       this.statusText?.setText(`${message} New wave incoming.`);
     }

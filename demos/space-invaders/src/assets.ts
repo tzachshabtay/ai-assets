@@ -3535,17 +3535,17 @@ export const assets = defineAiAssets(
   "invader.scout.celebration": {
     "id": "invader.scout.celebration",
     "kind": "spritesheet",
-    "prompt": "Alien invader scout celebration animation. The same red alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+    "prompt": "Alien invader happy dancing celebration animation",
     "dimensions": {
-      "width": 128,
-      "height": 128
+      "width": 256,
+      "height": 192
     },
     "frameGrid": {
-      "frameCount": 4,
+      "frameCount": 12,
       "frameWidth": 64,
       "frameHeight": 64,
-      "columns": 2,
-      "rows": 2
+      "columns": 4,
+      "rows": 3
     },
     "animations": [
       {
@@ -3554,7 +3554,15 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
         ],
         "frameRate": 7,
         "repeat": -1
@@ -3569,7 +3577,7 @@ export const assets = defineAiAssets(
         "invader.scout"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780791224383",
     "versions": {
       "default": {
         "name": "default",
@@ -3577,23 +3585,59 @@ export const assets = defineAiAssets(
         "prompt": "Alien invader scout celebration animation. The same red alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
         "createdAt": "2026-06-06T00:00:00.000Z",
         "model": "starter-asset"
+      },
+      "promoted-1780790505845": {
+        "name": "promoted-1780790505845",
+        "file": "/assets/invader.scout.celebration.promoted-1780790505845.png",
+        "prompt": "Alien invader happy dancing celebration animation",
+        "createdAt": "2026-06-07T00:01:45.900Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.scout"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780791224383": {
+        "name": "promoted-1780791224383",
+        "file": "/assets/invader.scout.celebration.promoted-1780791224383.png",
+        "prompt": "Alien invader happy dancing celebration animation",
+        "createdAt": "2026-06-07T00:13:44.454Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.scout"
+          ]
+        },
+        "parentVersion": "promoted-1780790505845",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.raider.celebration": {
     "id": "invader.raider.celebration",
     "kind": "spritesheet",
-    "prompt": "Alien invader raider celebration animation. The same gold alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+    "prompt": "Alien invader happy dancing celebration animation",
     "dimensions": {
-      "width": 128,
-      "height": 128
+      "width": 256,
+      "height": 192
     },
     "frameGrid": {
-      "frameCount": 4,
+      "frameCount": 12,
       "frameWidth": 64,
       "frameHeight": 64,
-      "columns": 2,
-      "rows": 2
+      "columns": 4,
+      "rows": 3
     },
     "animations": [
       {
@@ -3602,7 +3646,15 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
         ],
         "frameRate": 7,
         "repeat": -1
@@ -3617,7 +3669,7 @@ export const assets = defineAiAssets(
         "invader.raider"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780791426160",
     "versions": {
       "default": {
         "name": "default",
@@ -3625,23 +3677,41 @@ export const assets = defineAiAssets(
         "prompt": "Alien invader raider celebration animation. The same gold alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
         "createdAt": "2026-06-06T00:00:00.000Z",
         "model": "starter-asset"
+      },
+      "promoted-1780791426160": {
+        "name": "promoted-1780791426160",
+        "file": "/assets/invader.raider.celebration.promoted-1780791426160.png",
+        "prompt": "Alien invader happy dancing celebration animation",
+        "createdAt": "2026-06-07T00:17:06.178Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.raider"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   },
   "invader.hunter.celebration": {
     "id": "invader.hunter.celebration",
     "kind": "spritesheet",
-    "prompt": "Alien invader hunter celebration animation. The same green alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+    "prompt": "Alien invader happy dancing celebration animation",
     "dimensions": {
-      "width": 128,
-      "height": 128
+      "width": 256,
+      "height": 192
     },
     "frameGrid": {
-      "frameCount": 4,
+      "frameCount": 12,
       "frameWidth": 64,
       "frameHeight": 64,
-      "columns": 2,
-      "rows": 2
+      "columns": 4,
+      "rows": 3
     },
     "animations": [
       {
@@ -3650,7 +3720,15 @@ export const assets = defineAiAssets(
           0,
           1,
           2,
-          3
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
         ],
         "frameRate": 7,
         "repeat": -1
@@ -3665,7 +3743,7 @@ export const assets = defineAiAssets(
         "invader.hunter"
       ]
     },
-    "activeVersion": "default",
+    "activeVersion": "promoted-1780791556991",
     "versions": {
       "default": {
         "name": "default",
@@ -3673,6 +3751,24 @@ export const assets = defineAiAssets(
         "prompt": "Alien invader hunter celebration animation. The same green alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
         "createdAt": "2026-06-06T00:00:00.000Z",
         "model": "starter-asset"
+      },
+      "promoted-1780791556991": {
+        "name": "promoted-1780791556991",
+        "file": "/assets/invader.hunter.celebration.promoted-1780791556991.png",
+        "prompt": "Alien invader happy dancing celebration animation",
+        "createdAt": "2026-06-07T00:19:17.005Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.hunter"
+          ]
+        },
+        "parentVersion": "default",
+        "notes": "Promoted from the AI asset designer."
       }
     }
   }
