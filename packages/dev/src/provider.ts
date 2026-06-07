@@ -4,6 +4,7 @@ import type {
   AiAssetDimensions,
   AiAssetFormat,
   AiAssetFrameGrid,
+  AiAudioGenerationSettings,
   AiAssetGenerationSettings
 } from "@ai-game-assets/core";
 import { randomUUID } from "node:crypto";
@@ -46,6 +47,8 @@ export type GeneratedAssetOption = {
   model?: string;
   revisedPrompt?: string;
   settings?: AiAssetGenerationSettings;
+  audioSettings?: AiAudioGenerationSettings;
+  durationSeconds?: number;
   dimensions?: AiAssetDimensions;
   frameGrid?: AiAssetFrameGrid;
   animations?: AiAssetAnimation[];
@@ -68,6 +71,7 @@ export function createOpenAiImageProvider(
 ): AiImageProvider {
   return {
     async generate(request) {
+      const dimensions = requireAssetDimensions(request.asset);
       const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
 
       if (!apiKey) {
@@ -157,7 +161,7 @@ export function createOpenAiImageProvider(
             })
               ? removeChromaBackground(image, chromaKey)
               : image,
-            request.asset.dimensions
+            dimensions
           );
 
           generated.push({
@@ -166,7 +170,7 @@ export function createOpenAiImageProvider(
             prompt,
             model,
             revisedPrompt: item.revised_prompt,
-            dimensions: request.asset.dimensions,
+            dimensions,
             frameGrid: request.asset.frameGrid,
             animations: request.asset.animations,
             settings: {
@@ -194,6 +198,7 @@ async function generateSvgAssets(
     count: number;
   }
 ): Promise<GeneratedAssetOption[]> {
+  const dimensions = requireAssetDimensions(request.asset);
   const generated: GeneratedAssetOption[] = [];
   const references = [
     ...(request.references ?? []),
@@ -224,14 +229,14 @@ async function generateSvgAssets(
     }
 
     const payload = await response.json() as unknown;
-    const svg = normalizeSvgOutput(extractResponseText(payload), request.asset.dimensions);
+    const svg = normalizeSvgOutput(extractResponseText(payload), dimensions);
 
     generated.push({
       image: Buffer.from(svg, "utf8"),
       mimeType: "image/svg+xml",
       prompt: context.prompt,
       model: context.model,
-      dimensions: request.asset.dimensions,
+      dimensions,
       frameGrid: request.asset.frameGrid,
       animations: request.asset.animations,
       settings: {
@@ -255,14 +260,15 @@ function svgAssetPrompt(
     variationCount?: number;
   }
 ): string {
+  const dimensions = requireAssetDimensions(request.asset);
   const lines = [
     context.prompt,
     "",
     "Generate a single valid SVG file as XML markup for a 2D game asset.",
     "Return only the <svg>...</svg> document. Do not wrap it in Markdown, do not add commentary, and do not output raster images or base64 data.",
-    `The root <svg> must use xmlns="http://www.w3.org/2000/svg", width="${request.asset.dimensions.width}", height="${request.asset.dimensions.height}", and viewBox="0 0 ${request.asset.dimensions.width} ${request.asset.dimensions.height}".`,
+    `The root <svg> must use xmlns="http://www.w3.org/2000/svg", width="${dimensions.width}", height="${dimensions.height}", and viewBox="0 0 ${dimensions.width} ${dimensions.height}".`,
     `Asset kind: ${request.asset.kind}.`,
-    `Target canvas: ${request.asset.dimensions.width}x${request.asset.dimensions.height}.`,
+    `Target canvas: ${dimensions.width}x${dimensions.height}.`,
     "Use vector primitives such as paths, polygons, circles, ellipses, rects, gradients, masks, and groups. Keep IDs unique and descriptive.",
     "Do not include scripts, external URLs, foreignObject, CSS imports, font imports, animation tags, or event handlers."
   ];
@@ -283,7 +289,7 @@ function svgAssetPrompt(
       request.asset.frameGrid.columns * request.asset.frameGrid.rows;
     lines.push(
       `Spritesheet contract: create exactly ${frameCount} animation frames arranged in the first ${frameCount} cells of a fixed grid with ${request.asset.frameGrid.columns} columns and ${request.asset.frameGrid.rows} rows.`,
-      `Each frame cell is exactly ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}. The full SVG canvas is ${request.asset.dimensions.width}x${request.asset.dimensions.height}.`,
+      `Each frame cell is exactly ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}. The full SVG canvas is ${dimensions.width}x${dimensions.height}.`,
       `Use one complete frame per grid cell, ordered left-to-right then top-to-bottom. Cell rectangles are: ${gridCellRectangles(request)}.`,
       "Keep the background transparent by leaving empty areas unpainted. Do not draw visible grid lines, labels, frame numbers, or cell borders."
     );
@@ -371,12 +377,13 @@ function gameAssetPrompt(
     variationCount?: number;
   }
 ): string {
+  const dimensions = requireAssetDimensions(request.asset);
   const lines = [
     context.prompt,
     "",
     "Create this as a clean 2D game asset sprite.",
     `Asset kind: ${request.asset.kind}.`,
-    `Target canvas: ${request.asset.dimensions.width}x${request.asset.dimensions.height}.`
+    `Target canvas: ${dimensions.width}x${dimensions.height}.`
   ];
 
   if (shouldRequestRgbaPng(request, context)) {
@@ -400,7 +407,7 @@ function gameAssetPrompt(
     const columnLabel = request.asset.frameGrid.columns === 1 ? "column" : "columns";
     lines.push(
       `Spritesheet contract: exactly ${frameCount} animation frames arranged in the first ${frameCount} cells of a fixed grid with ${request.asset.frameGrid.columns} ${columnLabel} and ${request.asset.frameGrid.rows} ${rowLabel}.`,
-      `The final image must be one ${request.asset.dimensions.width}x${request.asset.dimensions.height} spritesheet, not separate images and not a different grid.`,
+      `The final image must be one ${dimensions.width}x${dimensions.height} spritesheet, not separate images and not a different grid.`,
       `Use one frame per grid cell, ordered left-to-right then top-to-bottom. If the grid has more cells than ${frameCount}, leave the extra trailing cells fully transparent and empty.`,
       `Each cell is exactly ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}; do not merge cells, crop cells, add extra frames beyond ${frameCount}, or change the grid layout.`,
       `Cell rectangles are: ${gridCellRectangles(request)}.`,
@@ -1355,6 +1362,14 @@ function normalizeOutputFormat(
   if (format === "webp") return "webp";
   if (format === "jpg") return "jpeg";
   return "png";
+}
+
+function requireAssetDimensions(asset: AiAssetDefinition): AiAssetDimensions {
+  if (!asset.dimensions) {
+    throw new Error(`AI asset "${asset.id}" requires dimensions for image generation.`);
+  }
+
+  return asset.dimensions;
 }
 
 function normalizeBackgroundForModel(

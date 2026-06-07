@@ -4012,6 +4012,45 @@ export const assets = defineAiAssets(
         }
       }
     }
+  },
+  "audio.sfx.player-laser": {
+    "id": "audio.sfx.player-laser",
+    "kind": "sound",
+    "prompt": "Short crisp retro sci-fi blue laser shot sound effect for an arcade space shooter, punchy attack, quick fade, no voice.",
+    "audioSettings": {
+      "provider": "elevenlabs",
+      "format": "mp3",
+      "durationSeconds": 0.8,
+      "loop": false
+    },
+    "activeVersion": "",
+    "versions": {}
+  },
+  "audio.sfx.invader-explosion": {
+    "id": "audio.sfx.invader-explosion",
+    "kind": "sound",
+    "prompt": "Short crunchy alien invader explosion sound effect, arcade sci-fi debris burst, energetic but not harsh, no voice.",
+    "audioSettings": {
+      "provider": "elevenlabs",
+      "format": "mp3",
+      "durationSeconds": 1.2,
+      "loop": false
+    },
+    "activeVersion": "",
+    "versions": {}
+  },
+  "audio.music.menu": {
+    "id": "audio.music.menu",
+    "kind": "music",
+    "prompt": "Loopable upbeat retro sci-fi arcade menu music, playful space invaders mood, chiptune-inspired synths, no vocals.",
+    "audioSettings": {
+      "provider": "elevenlabs",
+      "format": "mp3",
+      "durationSeconds": 12,
+      "loop": true
+    },
+    "activeVersion": "",
+    "versions": {}
   }
 }
 , {

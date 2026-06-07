@@ -83,6 +83,8 @@ export async function saveGeneratedOption(
     model: input.option.model,
     revisedPrompt: input.option.revisedPrompt,
     settings: input.option.settings,
+    audioSettings: input.option.audioSettings,
+    durationSeconds: input.option.durationSeconds,
     parentVersion: asset.activeVersion || undefined,
     notes: input.notes
   });
@@ -101,6 +103,10 @@ export async function saveGeneratedOption(
         settings: {
           ...updatedAsset.settings,
           ...version.settings
+        },
+        audioSettings: {
+          ...updatedAsset.audioSettings,
+          ...version.audioSettings
         }
       }
     : updatedAsset;
@@ -191,7 +197,19 @@ function extensionFromMimeType(mimeType: string): string {
       return "jpg";
     case "image/svg+xml":
       return "svg";
+    case "audio/mpeg":
+      return "mp3";
+    case "audio/wav":
+    case "audio/x-wav":
+      return "wav";
+    case "audio/ogg":
+      return "ogg";
+    case "audio/opus":
+      return "opus";
+    case "audio/L16":
+    case "audio/pcm":
+      return "pcm";
     default:
-      throw new Error(`Unsupported generated image mime type "${mimeType}".`);
+      throw new Error(`Unsupported generated asset mime type "${mimeType}".`);
   }
 }

@@ -303,7 +303,10 @@ function startGame(assetManifest: AiAssetManifest): void {
           "background.space",
           "background.stars",
           "ui.panel",
-          "ui.button"
+          "ui.button",
+          "audio.sfx.player-laser",
+          "audio.sfx.invader-explosion",
+          "audio.music.menu"
         ],
         onManifestUpdated: (updatedManifest) => {
           manifest = updatedManifest;
@@ -1312,8 +1315,8 @@ function startGame(assetManifest: AiAssetManifest): void {
       height: number;
     } {
       return {
-        width: asset?.frameGrid?.frameWidth ?? asset?.dimensions.width ?? 42,
-        height: asset?.frameGrid?.frameHeight ?? asset?.dimensions.height ?? 42
+        width: asset?.frameGrid?.frameWidth ?? asset?.dimensions?.width ?? 42,
+        height: asset?.frameGrid?.frameHeight ?? asset?.dimensions?.height ?? 42
       };
     }
   }

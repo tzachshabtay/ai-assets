@@ -9,6 +9,14 @@ export type {
 export { createOpenAiImageProvider } from "./provider.js";
 
 export type {
+  AiAudioProvider,
+  ElevenLabsAudioProviderOptions,
+  GenerateAudioAssetRequest
+} from "./audio-provider.js";
+
+export { createElevenLabsAudioProvider } from "./audio-provider.js";
+
+export type {
   AssetStoreOptions,
   SaveGeneratedOptionInput,
   SaveGeneratedOptionResult,

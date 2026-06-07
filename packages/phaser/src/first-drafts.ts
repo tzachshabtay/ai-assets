@@ -184,7 +184,13 @@ function firstDraftTargetAssetIds(
 }
 
 function isMissingLoadableAsset(asset: AiAssetDefinition | undefined): boolean {
-  return Boolean(asset && asset.kind !== "collection" && Object.keys(asset.versions).length === 0);
+  return Boolean(
+    asset &&
+    asset.kind !== "collection" &&
+    asset.kind !== "sound" &&
+    asset.kind !== "music" &&
+    Object.keys(asset.versions).length === 0
+  );
 }
 
 function loadGeneratedTexture(

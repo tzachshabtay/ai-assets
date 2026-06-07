@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import {
   resolveAiAsset,
   type AiAssetDefinition,
+  type AiAudioGenerationSettings,
   type AiAssetDimensions,
   type AiAssetFormat,
   type AiAssetFrameGrid,
@@ -9,6 +10,7 @@ import {
   type AiAssetStyleGuide
 } from "@ai-game-assets/core";
 import type { AiImageProvider } from "./provider.js";
+import type { AiAudioProvider } from "./audio-provider.js";
 import {
   type AssetStoreOptions,
   readManifest,
@@ -19,7 +21,8 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 export type AiAssetDevServerOptions = AssetStoreOptions & {
-  provider: AiImageProvider;
+  provider?: AiImageProvider;
+  audioProvider?: AiAudioProvider;
   host?: string;
   port?: number;
 };
@@ -79,6 +82,7 @@ async function routeRequest(
       dimensions?: AiAssetDimensions;
       frameCount?: number;
       format?: AiAssetFormat;
+      audioSettings?: AiAudioGenerationSettings;
       styleGuide?: DebugStyleGuide;
     }>(request);
     const manifest = await readManifest(options.manifestPath);
@@ -86,19 +90,9 @@ async function routeRequest(
       dimensions: body.dimensions,
       frameCount: body.frameCount
     });
-    const generated = await options.provider.generate({
-      asset,
-      prompt: body.prompt,
-      count: body.count,
-      settings: body.format ? { format: body.format } : undefined,
-      references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds),
-      stylePrompt: body.styleGuide
-        ? body.styleGuide.prompt?.trim() || undefined
-        : manifest.styleGuide?.prompt,
-      styleReferences: body.styleGuide
-        ? referencesFromDataUrls(body.styleGuide.images)
-        : await getStyleReferenceImages(options, manifest.styleGuide)
-    });
+    const generated = isAudioAsset(asset)
+      ? await generateAudio(options, asset, body)
+      : await generateImage(options, manifest, asset, body);
 
     sendJson(response, 200, {
       options: generated.map((option, index) => ({
@@ -111,6 +105,8 @@ async function routeRequest(
         frameGrid: option.frameGrid,
         animations: option.animations,
         settings: option.settings,
+        audioSettings: option.audioSettings,
+        durationSeconds: option.durationSeconds,
         dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
       }))
     });
@@ -130,7 +126,13 @@ async function routeRequest(
     for (const assetId of assetIdsToGenerate) {
       const asset = manifest.assets[assetId];
 
-      if (!asset || asset.kind === "collection" || Object.keys(asset.versions).length > 0) {
+      if (
+        !asset ||
+        asset.kind === "collection" ||
+        isAudioAsset(asset) ||
+        Object.keys(asset.versions).length > 0 ||
+        !options.provider
+      ) {
         continue;
       }
 
@@ -190,6 +192,8 @@ async function routeRequest(
       frameGrid?: AiAssetFrameGrid;
       animations?: AiAssetDefinition["animations"];
       settings?: AiAssetDefinition["settings"];
+      audioSettings?: AiAssetDefinition["audioSettings"];
+      durationSeconds?: number;
       activate?: boolean;
       notes?: string;
     }>(request);
@@ -201,6 +205,10 @@ async function routeRequest(
       frameGrid: body.frameGrid,
       animations: body.animations,
       settings: body.settings
+        ? body.settings
+        : undefined,
+      audioSettings: body.audioSettings,
+      durationSeconds: body.durationSeconds
     });
     const result = await saveGeneratedOption(options, {
       assetId: body.assetId,
@@ -227,6 +235,65 @@ type DebugStyleGuide = {
     dataUrl: string;
   }>;
 };
+
+async function generateImage(
+  options: AiAssetDevServerOptions,
+  manifest: AiAssetManifest,
+  asset: AiAssetDefinition,
+  body: {
+    prompt?: string;
+    count?: number;
+    format?: AiAssetFormat;
+    styleGuide?: DebugStyleGuide;
+  }
+) {
+  if (!options.provider) {
+    throw new Error(
+      "OPENAI_API_KEY is required to generate graphical assets. Audio generation can still be used without it when ELEVENLABS_API_KEY is configured."
+    );
+  }
+
+  return options.provider.generate({
+    asset,
+    prompt: body.prompt,
+    count: body.count,
+    settings: body.format ? { format: body.format } : undefined,
+    references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds),
+    stylePrompt: body.styleGuide
+      ? body.styleGuide.prompt?.trim() || undefined
+      : manifest.styleGuide?.prompt,
+    styleReferences: body.styleGuide
+      ? referencesFromDataUrls(body.styleGuide.images)
+      : await getStyleReferenceImages(options, manifest.styleGuide)
+  });
+}
+
+async function generateAudio(
+  options: AiAssetDevServerOptions,
+  asset: AiAssetDefinition,
+  body: {
+    prompt?: string;
+    count?: number;
+    audioSettings?: AiAudioGenerationSettings;
+  }
+) {
+  if (!options.audioProvider) {
+    throw new Error(
+      "ELEVENLABS_API_KEY is required to generate audio assets. Graphical asset generation can still be used without it when OPENAI_API_KEY is configured."
+    );
+  }
+
+  return options.audioProvider.generate({
+    asset,
+    prompt: body.prompt,
+    count: body.count,
+    audioSettings: body.audioSettings
+  });
+}
+
+function isAudioAsset(asset: AiAssetDefinition): boolean {
+  return asset.kind === "sound" || asset.kind === "music";
+}
 
 export function planFirstDraftGeneration(
   manifest: AiAssetManifest,
@@ -439,6 +506,8 @@ function optionFromDataUrl(
     frameGrid?: AiAssetFrameGrid;
     animations?: AiAssetDefinition["animations"];
     settings?: AiAssetDefinition["settings"];
+    audioSettings?: AiAssetDefinition["audioSettings"];
+    durationSeconds?: number;
   }
 ) {
   const match = /^data:(.+);base64,(.+)$/.exec(dataUrl);
@@ -456,7 +525,9 @@ function optionFromDataUrl(
     dimensions: metadata.dimensions,
     frameGrid: metadata.frameGrid,
     animations: metadata.animations,
-    settings: metadata.settings
+    settings: metadata.settings,
+    audioSettings: metadata.audioSettings,
+    durationSeconds: metadata.durationSeconds
   };
 }
 

@@ -1,5 +1,6 @@
 import type {
   AiAssetDefinition,
+  AiAudioGenerationSettings,
   AiAssetGenerationSettings,
   AiAssetVersion
 } from "./types.js";
@@ -11,6 +12,8 @@ export type CreateVersionInput = {
   model?: string;
   revisedPrompt?: string;
   settings?: AiAssetGenerationSettings;
+  audioSettings?: AiAudioGenerationSettings;
+  durationSeconds?: number;
   parentVersion?: string;
   notes?: string;
   createdAt?: string;
@@ -31,6 +34,11 @@ export function createAiAssetVersion(
       ...asset.settings,
       ...input.settings
     },
+    audioSettings: {
+      ...asset.audioSettings,
+      ...input.audioSettings
+    },
+    durationSeconds: input.durationSeconds ?? input.audioSettings?.durationSeconds,
     parentVersion: input.parentVersion,
     notes: input.notes
   };

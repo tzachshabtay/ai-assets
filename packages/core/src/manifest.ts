@@ -52,8 +52,16 @@ export function assertManifest(manifest: AiAssetManifest): void {
 export function assertAsset(asset: AiAssetDefinition): void {
   assertNonEmpty(asset.id, "asset.id");
   assertNonEmpty(asset.prompt, `${asset.id}.prompt`);
-  assertPositiveInteger(asset.dimensions.width, `${asset.id}.dimensions.width`);
-  assertPositiveInteger(asset.dimensions.height, `${asset.id}.dimensions.height`);
+  if (asset.dimensions) {
+    assertPositiveInteger(asset.dimensions.width, `${asset.id}.dimensions.width`);
+    assertPositiveInteger(asset.dimensions.height, `${asset.id}.dimensions.height`);
+  } else if (asset.kind !== "sound" && asset.kind !== "music") {
+    throw new Error(`${asset.id}.dimensions is required for graphical assets.`);
+  }
+
+  if (asset.audioSettings?.durationSeconds !== undefined) {
+    assertPositiveNumber(asset.audioSettings.durationSeconds, `${asset.id}.audioSettings.durationSeconds`);
+  }
 
   if (asset.kind === "collection") {
     if (Object.keys(asset.versions).length > 0) {
@@ -179,5 +187,11 @@ function assertNonEmpty(value: string | undefined, label: string): void {
 function assertPositiveInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`${label} must be a positive integer.`);
+  }
+}
+
+function assertPositiveNumber(value: number, label: string): void {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${label} must be a positive number.`);
   }
 }

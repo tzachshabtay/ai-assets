@@ -3,10 +3,10 @@ import type { AiAssetDefinition } from "@ai-game-assets/core";
 export function aiAssetPlaceholderDataUrl(asset: AiAssetDefinition): string {
   const width = asset.frameGrid
     ? asset.frameGrid.frameWidth * asset.frameGrid.columns
-    : asset.dimensions.width;
+    : asset.dimensions?.width ?? 128;
   const height = asset.frameGrid
     ? asset.frameGrid.frameHeight * asset.frameGrid.rows
-    : asset.dimensions.height;
+    : asset.dimensions?.height ?? 128;
   const frameWidth = asset.frameGrid?.frameWidth ?? width;
   const frameHeight = asset.frameGrid?.frameHeight ?? height;
   const cells: string[] = [];

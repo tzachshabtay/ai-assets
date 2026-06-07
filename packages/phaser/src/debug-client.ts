@@ -1,4 +1,8 @@
-import type { AiAssetGenerationSettings, AiAssetManifest } from "@ai-game-assets/core";
+import type {
+  AiAssetGenerationSettings,
+  AiAssetManifest,
+  AiAudioGenerationSettings
+} from "@ai-game-assets/core";
 
 export type GenerateDebugOptionsRequest = {
   assetId: string;
@@ -10,6 +14,7 @@ export type GenerateDebugOptionsRequest = {
   };
   frameCount?: number;
   format?: AiAssetGenerationSettings["format"];
+  audioSettings?: AiAudioGenerationSettings;
   styleGuide?: DebugStyleGuideDraft;
 };
 
@@ -58,6 +63,8 @@ export type GeneratedDebugOption = {
     }>;
   }>;
   settings?: AiAssetGenerationSettings;
+  audioSettings?: AiAudioGenerationSettings;
+  durationSeconds?: number;
 };
 
 export type SaveDebugOptionRequest = {
@@ -74,6 +81,8 @@ export type SaveDebugOptionRequest = {
   frameGrid?: GeneratedDebugOption["frameGrid"];
   animations?: GeneratedDebugOption["animations"];
   settings?: AiAssetGenerationSettings;
+  audioSettings?: AiAudioGenerationSettings;
+  durationSeconds?: number;
   activate?: boolean;
   notes?: string;
 };

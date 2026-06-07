@@ -2,6 +2,8 @@ import type {
   AiAssetAnimation,
   AiAssetAnimationFrameTiming,
   AiAssetDefinition,
+  AiAudioFormat,
+  AiAudioGenerationSettings,
   AiAssetFormat,
   AiAssetGenerationSettings,
   AiAssetManifest
@@ -81,12 +83,20 @@ type DesignerElements = {
   animationField: HTMLLabelElement;
   widthInput: HTMLInputElement;
   heightInput: HTMLInputElement;
+  dimensionGrid: HTMLDivElement;
   frameCountInput: HTMLInputElement;
   frameCountField: HTMLLabelElement;
   formatSelect: HTMLSelectElement;
   formatField: HTMLLabelElement;
+  audioFormatSelect: HTMLSelectElement;
+  audioFormatField: HTMLLabelElement;
+  audioDurationInput: HTMLInputElement;
+  audioDurationField: HTMLLabelElement;
+  audioLoopInput: HTMLInputElement;
+  audioLoopField: HTMLLabelElement;
   promptInput: HTMLTextAreaElement;
   currentImage: HTMLImageElement;
+  currentAudio: HTMLAudioElement;
   currentAnimation: HTMLDivElement;
   currentAnimationButton: HTMLButtonElement;
   currentPreview: HTMLDivElement;
@@ -111,6 +121,14 @@ const assetFormatOptions: Array<{ value: AiAssetFormat; label: string }> = [
   { value: "jpg", label: "JPEG" },
   { value: "webp", label: "WebP" },
   { value: "svg", label: "SVG" }
+];
+
+const audioFormatOptions: Array<{ value: AiAudioFormat; label: string }> = [
+  { value: "mp3", label: "MP3" },
+  { value: "wav", label: "WAV" },
+  { value: "ogg", label: "OGG" },
+  { value: "opus", label: "Opus" },
+  { value: "pcm", label: "PCM" }
 ];
 
 export function installAiAssetDesigner(
@@ -178,11 +196,15 @@ export function installAiAssetDesigner(
   const syncTargetAsset = (assetId: string) => {
     const asset = manifest.assets[assetId];
     const activeVersion = asset.versions[asset.activeVersion];
+    const isAudio = isAudioAsset(asset);
     stopCurrentAnimationPreview?.();
     stopCurrentAnimationPreview = undefined;
     elements.promptInput.value = activeVersion?.prompt ?? asset.prompt;
-    elements.widthInput.value = String(asset.frameGrid?.frameWidth ?? asset.dimensions.width);
-    elements.heightInput.value = String(asset.frameGrid?.frameHeight ?? asset.dimensions.height);
+    elements.widthInput.value = String(asset.frameGrid?.frameWidth ?? asset.dimensions?.width ?? 1);
+    elements.heightInput.value = String(asset.frameGrid?.frameHeight ?? asset.dimensions?.height ?? 1);
+    elements.audioFormatSelect.value = asset.audioSettings?.format ?? "mp3";
+    elements.audioDurationInput.value = String(asset.audioSettings?.durationSeconds ?? activeVersion?.durationSeconds ?? "");
+    elements.audioLoopInput.checked = Boolean(asset.audioSettings?.loop);
     elements.formatSelect.value = effectiveGenerationFormat(
       manifest,
       formatDrafts,
@@ -190,6 +212,11 @@ export function installAiAssetDesigner(
       assetId
     );
     elements.formatField.hidden = !canEditGenerationFormat(manifest, selectedAssetId, assetId);
+    elements.audioFormatField.hidden = !isAudio;
+    elements.audioDurationField.hidden = !isAudio;
+    elements.audioLoopField.hidden = !isAudio;
+    elements.formatField.hidden = isAudio || elements.formatField.hidden;
+    elements.dimensionGrid.hidden = isAudio;
     elements.frameCountInput.value = String(
       asset.frameGrid?.frameCount ??
       (asset.frameGrid ? asset.frameGrid.columns * asset.frameGrid.rows : 1)
@@ -197,6 +224,7 @@ export function installAiAssetDesigner(
     elements.frameCountField.hidden = asset.kind === "image" || !asset.frameGrid;
     elements.versionLabel.textContent = `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
     elements.currentImage.src = activeVersion?.file ?? "";
+    elements.currentAudio.src = activeVersion?.file ?? "";
     elements.currentImage.alt = `${readableAssetName(assetId)} active version`;
     elements.currentPreview.setAttribute(
       "aria-label",
@@ -204,7 +232,8 @@ export function installAiAssetDesigner(
     );
     elements.currentPreview.hidden = !activeVersion?.file;
     elements.currentAnimation.hidden = true;
-    elements.currentImage.hidden = false;
+    elements.currentAudio.hidden = !isAudio;
+    elements.currentImage.hidden = isAudio;
     elements.currentAnimationButton.hidden = !activeVersion?.file || !asset.frameGrid;
     elements.currentAnimationButton.textContent = "Edit...";
     elements.currentPreview.classList.add("is-selected");
@@ -273,6 +302,14 @@ export function installAiAssetDesigner(
     }
   });
 
+  elements.audioFormatSelect.addEventListener("change", () => {
+    const asset = manifest.assets[selectedTargetAssetId];
+    asset.audioSettings = {
+      ...asset.audioSettings,
+      format: normalizeAudioFormat(elements.audioFormatSelect.value)
+    };
+  });
+
   elements.currentPreview.addEventListener("click", () => {
     const asset = manifest.assets[selectedTargetAssetId];
     const activeVersion = asset.versions[asset.activeVersion];
@@ -286,13 +323,15 @@ export function installAiAssetDesigner(
     elements.currentPreview.classList.add("is-selected");
     selectedOption = editedCurrentOption;
     elements.promoteButton.disabled = !selectedOption;
-    previewCurrentAsset({
-      scene: options.scene,
-      manifest,
-      assetId: selectedTargetAssetId,
-      src: activeVersion.file,
-      onPreview: options.onPreview
-    });
+    if (!isAudioAsset(asset)) {
+      previewCurrentAsset({
+        scene: options.scene,
+        manifest,
+        assetId: selectedTargetAssetId,
+        src: activeVersion.file,
+        onPreview: options.onPreview
+      });
+    }
     setStatus(elements, "Previewing active version.", "info");
   });
 
@@ -337,6 +376,7 @@ export function installAiAssetDesigner(
         prompt: elements.promptInput.value,
         count: options.optionCount ?? 3,
         format: generationFormat,
+        audioSettings: audioGenerationOverridesFromInputs(elements, manifest.assets[generationAssetId]),
         styleGuide: await styleGuideRequest(styleGuideDraft),
         ...generationOverridesFromInputs(
           elements,
@@ -398,6 +438,8 @@ export function installAiAssetDesigner(
         frameGrid: selectedOption.frameGrid,
         animations: selectedOption.animations,
         settings: selectedOption.settings,
+        audioSettings: selectedOption.audioSettings,
+        durationSeconds: selectedOption.durationSeconds,
         activate: true,
         notes: "Promoted from the AI asset designer."
       });
@@ -596,6 +638,11 @@ function createDesignerElements(
   const widthInput = numericInput();
   const heightInput = numericInput();
   const frameCountInput = numericInput();
+  const audioDurationInput = numericInput();
+  audioDurationInput.step = "0.1";
+  audioDurationInput.inputMode = "decimal";
+  const audioLoopInput = document.createElement("input");
+  audioLoopInput.type = "checkbox";
   const formatSelect = document.createElement("select");
   formatSelect.className = "ai-game-assets-designer__format-select";
   for (const format of assetFormatOptions) {
@@ -603,6 +650,14 @@ function createDesignerElements(
     option.value = format.value;
     option.textContent = format.label;
     formatSelect.append(option);
+  }
+  const audioFormatSelect = document.createElement("select");
+  audioFormatSelect.className = "ai-game-assets-designer__format-select";
+  for (const format of audioFormatOptions) {
+    const option = document.createElement("option");
+    option.value = format.value;
+    option.textContent = format.label;
+    audioFormatSelect.append(option);
   }
   const dimensionGrid = document.createElement("div");
   dimensionGrid.className = "ai-game-assets-designer__dimensions";
@@ -612,6 +667,9 @@ function createDesignerElements(
   );
   const frameCountField = labelWrap("Frames", frameCountInput);
   const formatField = labelWrap("Format", formatSelect);
+  const audioFormatField = labelWrap("Audio format", audioFormatSelect);
+  const audioDurationField = labelWrap("Length (sec)", audioDurationInput);
+  const audioLoopField = labelWrap("Loop", audioLoopInput);
 
   const currentPreview = document.createElement("div");
   currentPreview.className = "ai-game-assets-designer__current";
@@ -619,6 +677,9 @@ function createDesignerElements(
   currentPreview.tabIndex = 0;
   const currentImage = document.createElement("img");
   currentImage.className = "ai-game-assets-designer__current-image";
+  const currentAudio = document.createElement("audio");
+  currentAudio.className = "ai-game-assets-designer__current-audio";
+  currentAudio.controls = true;
   const currentAnimation = document.createElement("div");
   currentAnimation.className = "ai-game-assets-designer__animation-stage";
   currentAnimation.hidden = true;
@@ -627,7 +688,7 @@ function createDesignerElements(
   currentAnimationButton.className = "ai-game-assets-designer__animate-button";
   currentAnimationButton.textContent = "Animate";
   currentAnimationButton.hidden = true;
-  currentPreview.append(currentImage, currentAnimation, currentAnimationButton);
+  currentPreview.append(currentImage, currentAudio, currentAnimation, currentAnimationButton);
 
   const regenerateButton = document.createElement("button");
   regenerateButton.type = "button";
@@ -662,6 +723,9 @@ function createDesignerElements(
     dimensionGrid,
     frameCountField,
     formatField,
+    audioFormatField,
+    audioDurationField,
+    audioLoopField,
     labelWrap("Current", currentPreview),
     labelWrap("Prompt", promptInput),
     actions,
@@ -681,12 +745,20 @@ function createDesignerElements(
     animationField,
     widthInput,
     heightInput,
+    dimensionGrid,
     frameCountInput,
     frameCountField,
     formatSelect,
     formatField,
+    audioFormatSelect,
+    audioFormatField,
+    audioDurationInput,
+    audioDurationField,
+    audioLoopInput,
+    audioLoopField,
     promptInput,
     currentImage,
+    currentAudio,
     currentAnimation,
     currentAnimationButton,
     currentPreview,
@@ -721,10 +793,19 @@ function renderOptions(options: {
     selectButton.type = "button";
     selectButton.className = "ai-game-assets-designer__option-select";
 
+    const isAudio = isAudioAsset(asset);
     const image = document.createElement("img");
-    image.src = option.dataUrl;
-    image.alt = `${options.assetId} option ${option.index + 1}`;
-    selectButton.append(image);
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = option.dataUrl;
+
+    if (isAudio) {
+      selectButton.textContent = `Select option ${option.index + 1}`;
+    } else {
+      image.src = option.dataUrl;
+      image.alt = `${options.assetId} option ${option.index + 1}`;
+      selectButton.append(image);
+    }
 
     selectButton.addEventListener("click", () => {
       for (const item of options.elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
@@ -733,20 +814,25 @@ function renderOptions(options: {
 
       options.elements.currentPreview.classList.remove("is-selected");
       card.classList.add("is-selected");
-      previewOption({
-        scene: options.scene,
-        manifest: options.manifest,
-        assetId: options.assetId,
-        option,
-        onPreview: options.onPreview
-      });
+      if (!isAudio) {
+        previewOption({
+          scene: options.scene,
+          manifest: options.manifest,
+          assetId: options.assetId,
+          option,
+          onPreview: options.onPreview
+        });
+      }
       options.onSelected(option);
       setStatus(options.elements, `Previewing option ${option.index + 1}.`, "info");
     });
 
     card.append(selectButton);
+    if (isAudio) {
+      card.append(audio);
+    }
 
-    if (optionAsset.frameGrid) {
+    if (!isAudio && optionAsset.frameGrid) {
       const animationStage = document.createElement("div");
       animationStage.className = "ai-game-assets-designer__option-animation";
       animationStage.hidden = true;
@@ -1440,11 +1526,11 @@ function generationOverridesFromInputs(
   const dimensions = {
     width: positiveIntegerInput(
       elements.widthInput,
-      asset.frameGrid?.frameWidth ?? asset.dimensions.width
+      asset.frameGrid?.frameWidth ?? asset.dimensions?.width ?? 1
     ),
     height: positiveIntegerInput(
       elements.heightInput,
-      asset.frameGrid?.frameHeight ?? asset.dimensions.height
+      asset.frameGrid?.frameHeight ?? asset.dimensions?.height ?? 1
     )
   };
 
@@ -1462,6 +1548,23 @@ function generationOverridesFromInputs(
       elements.frameCountInput,
       asset.frameGrid.frameCount ?? asset.frameGrid.columns * asset.frameGrid.rows
     )
+  };
+}
+
+function audioGenerationOverridesFromInputs(
+  elements: DesignerElements,
+  asset: AiAssetDefinition
+): AiAudioGenerationSettings | undefined {
+  if (!isAudioAsset(asset)) return undefined;
+
+  return {
+    ...asset.audioSettings,
+    format: normalizeAudioFormat(elements.audioFormatSelect.value),
+    durationSeconds: positiveNumberInput(
+      elements.audioDurationInput,
+      asset.audioSettings?.durationSeconds ?? (asset.kind === "music" ? 30 : 2)
+    ),
+    loop: elements.audioLoopInput.checked
   };
 }
 
@@ -1498,6 +1601,18 @@ function normalizeAssetFormat(format: string | undefined): AiAssetFormat {
   return "png";
 }
 
+function normalizeAudioFormat(format: string | undefined): AiAudioFormat {
+  if (format === "wav" || format === "ogg" || format === "opus" || format === "pcm") {
+    return format;
+  }
+
+  return "mp3";
+}
+
+function isAudioAsset(asset: AiAssetDefinition | undefined): boolean {
+  return asset?.kind === "sound" || asset?.kind === "music";
+}
+
 function assetWithGeneratedGeometry(
   asset: AiAssetDefinition,
   option: GeneratedDebugOption
@@ -1516,6 +1631,14 @@ function positiveIntegerInput(input: HTMLInputElement, fallback: number): number
   if (!Number.isFinite(value)) return fallback;
 
   return Math.max(1, Math.floor(value));
+}
+
+function positiveNumberInput(input: HTMLInputElement, fallback: number): number {
+  const value = Number(input.value);
+
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+
+  return value;
 }
 
 function integerInput(input: HTMLInputElement, fallback: number): number {
@@ -1567,8 +1690,8 @@ function resolvePreviewDisplaySize(
   }
 
   return {
-    width: asset.frameGrid?.frameWidth ?? asset.dimensions.width,
-    height: asset.frameGrid?.frameHeight ?? asset.dimensions.height
+    width: asset.frameGrid?.frameWidth ?? asset.dimensions?.width ?? 128,
+    height: asset.frameGrid?.frameHeight ?? asset.dimensions?.height ?? 128
   };
 }
 
@@ -1925,6 +2048,11 @@ function ensureDesignerStyles(): void {
   object-fit: contain;
   image-rendering: pixelated;
 }
+.ai-game-assets-designer__current-audio,
+.ai-game-assets-designer__option audio {
+  width: 100%;
+  max-width: 220px;
+}
 .ai-game-assets-designer__animation-stage,
 .ai-game-assets-designer__option-animation {
   position: relative;
@@ -2018,6 +2146,8 @@ function ensureDesignerStyles(): void {
   display: grid;
   place-items: center;
   cursor: pointer;
+  color: #dbeafe;
+  font: inherit;
 }
 .ai-game-assets-designer__option-select img {
   width: 68px;

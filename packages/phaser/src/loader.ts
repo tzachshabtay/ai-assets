@@ -21,8 +21,12 @@ export function loadAiAsset(
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset {
   const assetId = typeof selection === "string" ? selection : selection.assetId;
-  if (manifest.assets[assetId]?.kind === "collection") {
-    throw new Error(`AI asset collection "${assetId}" cannot be loaded as a texture.`);
+  if (
+    manifest.assets[assetId]?.kind === "collection" ||
+    manifest.assets[assetId]?.kind === "sound" ||
+    manifest.assets[assetId]?.kind === "music"
+  ) {
+    throw new Error(`AI asset "${assetId}" cannot be loaded as a texture.`);
   }
 
   const unresolvedAsset = manifest.assets[assetId];
@@ -43,8 +47,8 @@ export function loadAiAsset(
       });
     } else if (scene.load.svg) {
       scene.load.svg(key, url, {
-        width: unresolvedAsset.dimensions.width,
-        height: unresolvedAsset.dimensions.height
+        width: unresolvedAsset.dimensions?.width ?? 1,
+        height: unresolvedAsset.dimensions?.height ?? 1
       });
     } else {
       scene.load.image(key, url);
@@ -91,8 +95,8 @@ export function loadAiAsset(
   } else {
     if (isSvg(url) && scene.load.svg) {
       scene.load.svg(key, url, {
-        width: resolved.asset.dimensions.width,
-        height: resolved.asset.dimensions.height
+        width: resolved.asset.dimensions?.width ?? 1,
+        height: resolved.asset.dimensions?.height ?? 1
       });
     } else {
       scene.load.image(key, url);
@@ -112,7 +116,7 @@ export function loadAiAssets(
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset[] {
   return Object.values(manifest.assets)
-    .filter((asset) => asset.kind !== "collection")
+    .filter((asset) => asset.kind !== "collection" && asset.kind !== "sound" && asset.kind !== "music")
     .map((asset) => loadAiAsset(scene, manifest, asset.id, options));
 }
 

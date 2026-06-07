@@ -1,5 +1,6 @@
 import {
   createAiAssetDevServer,
+  createElevenLabsAudioProvider,
   createOpenAiImageProvider
 } from "@ai-game-assets/dev";
 import { createReadStream } from "node:fs";
@@ -27,12 +28,6 @@ const demoPort = await findAvailablePort(
 
 await mkdir(assetsDir, { recursive: true });
 
-if (!process.env.OPENAI_API_KEY) {
-  throw new Error(
-    "OPENAI_API_KEY is required. The Space Invaders demo now uses real OpenAI image generation."
-  );
-}
-
 const assetDevServer = createAiAssetDevServer({
   manifestPath: path.join(__dirname, "src/assets.ai.json"),
   manifestModulePath: path.join(__dirname, "src/assets.ts"),
@@ -43,6 +38,9 @@ const assetDevServer = createAiAssetDevServer({
     model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2",
     background: "transparent",
     quality: "low"
+  }),
+  audioProvider: createElevenLabsAudioProvider({
+    outputFormat: process.env.ELEVENLABS_OUTPUT_FORMAT
   })
 });
 
@@ -165,6 +163,11 @@ function contentType(filePath) {
   if (filePath.endsWith(".webp")) return "image/webp";
   if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) return "image/jpeg";
   if (filePath.endsWith(".svg")) return "image/svg+xml; charset=utf-8";
+  if (filePath.endsWith(".mp3")) return "audio/mpeg";
+  if (filePath.endsWith(".wav")) return "audio/wav";
+  if (filePath.endsWith(".ogg")) return "audio/ogg";
+  if (filePath.endsWith(".opus")) return "audio/opus";
+  if (filePath.endsWith(".pcm")) return "audio/pcm";
   if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
   return "application/octet-stream";
 }
