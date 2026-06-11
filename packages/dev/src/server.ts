@@ -106,6 +106,7 @@ async function routeRequest(
         animations: option.animations,
         settings: option.settings,
         audioSettings: option.audioSettings,
+        audioPlayback: option.audioPlayback,
         durationSeconds: option.durationSeconds,
         dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
       }))
@@ -193,6 +194,7 @@ async function routeRequest(
       animations?: AiAssetDefinition["animations"];
       settings?: AiAssetDefinition["settings"];
       audioSettings?: AiAssetDefinition["audioSettings"];
+      audioPlayback?: AiAssetDefinition["audioPlayback"];
       durationSeconds?: number;
       activate?: boolean;
       notes?: string;
@@ -208,6 +210,7 @@ async function routeRequest(
         ? body.settings
         : undefined,
       audioSettings: body.audioSettings,
+      audioPlayback: body.audioPlayback,
       durationSeconds: body.durationSeconds
     });
     const result = await saveGeneratedOption(options, {
@@ -507,6 +510,7 @@ function optionFromDataUrl(
     animations?: AiAssetDefinition["animations"];
     settings?: AiAssetDefinition["settings"];
     audioSettings?: AiAssetDefinition["audioSettings"];
+    audioPlayback?: AiAssetDefinition["audioPlayback"];
     durationSeconds?: number;
   }
 ) {
@@ -527,6 +531,7 @@ function optionFromDataUrl(
     animations: metadata.animations,
     settings: metadata.settings,
     audioSettings: metadata.audioSettings,
+    audioPlayback: metadata.audioPlayback,
     durationSeconds: metadata.durationSeconds
   };
 }

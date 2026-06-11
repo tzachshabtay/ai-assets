@@ -84,6 +84,7 @@ export async function saveGeneratedOption(
     revisedPrompt: input.option.revisedPrompt,
     settings: input.option.settings,
     audioSettings: input.option.audioSettings,
+    audioPlayback: input.option.audioPlayback,
     durationSeconds: input.option.durationSeconds,
     parentVersion: asset.activeVersion || undefined,
     notes: input.notes
@@ -107,6 +108,10 @@ export async function saveGeneratedOption(
         audioSettings: {
           ...updatedAsset.audioSettings,
           ...version.audioSettings
+        },
+        audioPlayback: {
+          ...updatedAsset.audioPlayback,
+          ...version.audioPlayback
         }
       }
     : updatedAsset;

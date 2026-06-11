@@ -48,6 +48,7 @@ export type GeneratedAssetOption = {
   revisedPrompt?: string;
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
+  audioPlayback?: AiAssetDefinition["audioPlayback"];
   durationSeconds?: number;
   dimensions?: AiAssetDimensions;
   frameGrid?: AiAssetFrameGrid;

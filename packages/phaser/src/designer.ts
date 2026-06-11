@@ -4,6 +4,7 @@ import type {
   AiAssetDefinition,
   AiAudioFormat,
   AiAudioGenerationSettings,
+  AiAudioPlaybackSettings,
   AiAssetFormat,
   AiAssetGenerationSettings,
   AiAssetManifest
@@ -238,9 +239,9 @@ export function installAiAssetDesigner(
     elements.currentAnimation.hidden = true;
     elements.currentAudio.hidden = !isAudio;
     elements.currentImage.hidden = isAudio;
-    elements.currentAnimationButton.hidden = !activeVersion?.file || !asset.frameGrid;
     elements.currentAnimationButton.textContent = "Edit...";
     elements.currentPreview.classList.add("is-selected");
+    elements.currentAnimationButton.hidden = !activeVersion?.file || (!asset.frameGrid && !isAudio);
     elements.options.innerHTML = "";
     elements.options.classList.remove("is-audio");
     setStatus(elements, "", "idle");
@@ -446,6 +447,7 @@ export function installAiAssetDesigner(
         animations: selectedOption.animations,
         settings: selectedOption.settings,
         audioSettings: selectedOption.audioSettings,
+        audioPlayback: selectedOption.audioPlayback,
         durationSeconds: selectedOption.durationSeconds,
         activate: true,
         notes: "Promoted from the AI asset designer."
@@ -515,7 +517,49 @@ export function installAiAssetDesigner(
     const asset = manifest.assets[selectedTargetAssetId];
     const activeVersion = asset.versions[asset.activeVersion];
 
-    if (!asset.frameGrid || !activeVersion?.file) return;
+    if (!activeVersion?.file) return;
+
+    if (isAudioAsset(asset)) {
+      void openAudioEditor({
+        root: elements.root,
+        asset,
+        assetId: selectedTargetAssetId,
+        src: editedCurrentOption?.dataUrl ?? activeVersion.file,
+        initialPlayback: editedCurrentOption?.audioPlayback ?? activeVersion.audioPlayback ?? asset.audioPlayback,
+        onConfirm: async (audioPlayback) => {
+          const dataUrl = editedCurrentOption?.dataUrl ?? await imageSourceToDataUrl(activeVersion.file);
+          const optionAsset = {
+            ...asset,
+            audioPlayback
+          };
+
+          editedCurrentOption = {
+            index: -1,
+            dataUrl,
+            mimeType: mimeTypeFromDataUrl(dataUrl),
+            prompt: activeVersion.prompt ?? asset.prompt,
+            model: activeVersion.model,
+            revisedPrompt: activeVersion.revisedPrompt,
+            audioSettings: activeVersion.audioSettings ?? asset.audioSettings,
+            audioPlayback,
+            durationSeconds: activeVersion.durationSeconds
+          };
+          selectedOption = editedCurrentOption;
+          elements.promoteButton.disabled = false;
+          manifest.assets[selectedTargetAssetId] = optionAsset;
+          options.onPreview(selectedTargetAssetId, dataUrl, optionAsset);
+          renderAudioPlayer({
+            container: elements.currentAudio,
+            src: dataUrl,
+            label: readableAssetName(selectedTargetAssetId)
+          });
+          setStatus(elements, "Audio edits applied. Promote to save them to code.", "success");
+        }
+      });
+      return;
+    }
+
+    if (!asset.frameGrid) return;
 
     void openAnimationEditor({
       root: elements.root,
@@ -1176,6 +1220,41 @@ function drawAudioWaveform(
   context.fillRect(playheadX, 6, 2, height - 12);
 }
 
+function drawAudioEditorWaveform(
+  canvas: HTMLCanvasElement,
+  options: {
+    peaks: AudioWaveformPeaks | undefined;
+    duration: number;
+    progress: number;
+    trimStart: number;
+    trimEnd: number;
+  }
+): void {
+  drawAudioWaveform(canvas, options.peaks, options.progress);
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const startX = clamp(options.trimStart, 0, 1) * width;
+  const endX = clamp(options.trimEnd, 0, 1) * width;
+
+  context.fillStyle = "rgba(2, 6, 23, 0.68)";
+  context.fillRect(0, 0, startX, height);
+  context.fillRect(endX, 0, width - endX, height);
+  context.strokeStyle = "#fbbf24";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(startX, 0);
+  context.lineTo(startX, height);
+  context.moveTo(endX, 0);
+  context.lineTo(endX, height);
+  context.stroke();
+  context.fillStyle = "#fbbf24";
+  context.fillRect(startX - 5, 0, 10, 18);
+  context.fillRect(endX - 5, 0, 10, 18);
+}
+
 function progressForAudio(audio: HTMLAudioElement): number {
   if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
     return 0;
@@ -1401,6 +1480,289 @@ async function openStyleGuideEditor(options: {
   options.root.append(dialog);
   renderImages();
   promptInput.focus();
+}
+
+async function openAudioEditor(options: {
+  root: HTMLElement;
+  asset: AiAssetDefinition;
+  assetId: string;
+  src: string;
+  initialPlayback?: AiAudioPlaybackSettings;
+  onConfirm(playback: AiAudioPlaybackSettings): void | Promise<void>;
+}): Promise<void> {
+  const dialog = document.createElement("div");
+  dialog.className = "ai-game-assets-designer__modal";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", `Edit ${readableAssetName(options.assetId)} sound`);
+
+  const card = document.createElement("div");
+  card.className = "ai-game-assets-designer__modal-card";
+
+  const title = document.createElement("div");
+  title.className = "ai-game-assets-designer__modal-title";
+  title.textContent = `Edit ${readableAssetName(options.assetId)}`;
+
+  const audio = document.createElement("audio");
+  audio.src = options.src;
+  audio.preload = "auto";
+
+  const stage = document.createElement("div");
+  stage.className = "ai-game-assets-designer__audio-editor-stage";
+  const canvas = document.createElement("canvas");
+  canvas.className = "ai-game-assets-designer__audio-editor-waveform";
+  canvas.width = 720;
+  canvas.height = 160;
+  stage.append(canvas);
+
+  const playButton = document.createElement("button");
+  playButton.type = "button";
+  playButton.textContent = "Play";
+  const stopButton = document.createElement("button");
+  stopButton.type = "button";
+  stopButton.textContent = "Stop";
+  const timeLabel = document.createElement("span");
+  timeLabel.className = "ai-game-assets-designer__audio-editor-time";
+  timeLabel.textContent = "0:00 / 0:00";
+  const transport = document.createElement("div");
+  transport.className = "ai-game-assets-designer__audio-editor-transport";
+  transport.append(playButton, stopButton, timeLabel);
+
+  const seekInput = rangeInput(0, 1, 0.001);
+  const volumeInput = rangeInput(0, 1.5, 0.01);
+  const speedInput = rangeInput(0.5, 2, 0.01);
+  const pitchInput = signedNumberInput();
+  pitchInput.min = "-24";
+  pitchInput.max = "24";
+  pitchInput.step = "1";
+  const reverseInput = document.createElement("input");
+  reverseInput.type = "checkbox";
+
+  const reverbInput = document.createElement("input");
+  reverbInput.type = "checkbox";
+  const reverbAmountInput = rangeInput(0, 1, 0.01);
+  const delayInput = document.createElement("input");
+  delayInput.type = "checkbox";
+  const delayMixInput = rangeInput(0, 1, 0.01);
+  const filterSelect = document.createElement("select");
+  for (const [value, label] of [
+    ["none", "None"],
+    ["lowpass", "Low-pass"],
+    ["highpass", "High-pass"]
+  ]) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    filterSelect.append(option);
+  }
+  const filterFrequencyInput = numericInput();
+  filterFrequencyInput.min = "80";
+  filterFrequencyInput.max = "12000";
+  filterFrequencyInput.step = "10";
+
+  const fields = document.createElement("div");
+  fields.className = "ai-game-assets-designer__audio-editor-fields";
+  fields.append(
+    labelWrap("Playhead", seekInput),
+    labelWrap("Volume", volumeInput),
+    labelWrap("Speed", speedInput),
+    labelWrap("Pitch", pitchInput),
+    labelWrap("Reverse", reverseInput),
+    labelWrap("Reverb", reverbInput),
+    labelWrap("Reverb amount", reverbAmountInput),
+    labelWrap("Delay", delayInput),
+    labelWrap("Delay mix", delayMixInput),
+    labelWrap("Filter", filterSelect),
+    labelWrap("Filter Hz", filterFrequencyInput)
+  );
+
+  const hint = document.createElement("div");
+  hint.className = "ai-game-assets-designer__audio-editor-hint";
+  hint.textContent = "Drag the start and end markers on the waveform to trim the playable region.";
+
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.textContent = "Cancel";
+  const confirmButton = document.createElement("button");
+  confirmButton.type = "button";
+  confirmButton.textContent = "Confirm";
+  const actions = document.createElement("div");
+  actions.className = "ai-game-assets-designer__modal-actions";
+  actions.append(cancelButton, confirmButton);
+
+  card.append(title, stage, transport, fields, hint, actions, audio);
+  dialog.append(card);
+  options.root.append(dialog);
+
+  const initial = options.initialPlayback ?? {};
+  let duration = Math.max(0, options.asset.audioSettings?.durationSeconds ?? 0);
+  let trimStart = Math.max(0, initial.trimStartSeconds ?? 0);
+  let trimEnd = Math.max(trimStart, initial.trimEndSeconds ?? duration);
+  let peaks: AudioWaveformPeaks | undefined;
+  let dragTarget: "start" | "end" | "playhead" | undefined;
+  let animationFrame: number | undefined;
+
+  volumeInput.value = String(clamp(initial.volume ?? 1, 0, 1.5));
+  speedInput.value = String(clamp(initial.playbackRate ?? 1, 0.5, 2));
+  pitchInput.value = String(initial.pitchSemitones ?? 0);
+  reverseInput.checked = Boolean(initial.reverse);
+  reverbInput.checked = Boolean(initial.reverb?.enabled);
+  reverbAmountInput.value = String(clamp(initial.reverb?.amount ?? 0.25, 0, 1));
+  delayInput.checked = Boolean(initial.delay?.enabled);
+  delayMixInput.value = String(clamp(initial.delay?.mix ?? 0.2, 0, 1));
+  filterSelect.value = initial.filter?.type ?? "none";
+  filterFrequencyInput.value = String(initial.filter?.frequencyHz ?? 1200);
+
+  const playback = (): AiAudioPlaybackSettings => ({
+    volume: numberInput(volumeInput, 1),
+    trimStartSeconds: trimStart,
+    trimEndSeconds: trimEnd,
+    playbackRate: numberInput(speedInput, 1),
+    pitchSemitones: integerInput(pitchInput, 0),
+    reverse: reverseInput.checked || undefined,
+    reverb: {
+      enabled: reverbInput.checked,
+      amount: numberInput(reverbAmountInput, 0.25),
+      decaySeconds: 1.2
+    },
+    delay: {
+      enabled: delayInput.checked,
+      timeSeconds: 0.12,
+      feedback: 0.18,
+      mix: numberInput(delayMixInput, 0.2)
+    },
+    filter: {
+      type: normalizeAudioFilterType(filterSelect.value),
+      frequencyHz: positiveNumberInput(filterFrequencyInput, 1200)
+    }
+  });
+
+  const syncAudioSettings = () => {
+    audio.volume = clamp(numberInput(volumeInput, 1), 0, 1);
+    audio.playbackRate = clamp(numberInput(speedInput, 1), 0.5, 2);
+  };
+
+  const seekTo = (value: number) => {
+    audio.currentTime = clamp(value, trimStart, trimEnd || duration);
+  };
+
+  const draw = () => {
+    drawAudioEditorWaveform(canvas, {
+      peaks,
+      duration,
+      progress: duration > 0 ? audio.currentTime / duration : 0,
+      trimStart: duration > 0 ? trimStart / duration : 0,
+      trimEnd: duration > 0 ? trimEnd / duration : 1
+    });
+    timeLabel.textContent = `${formatAudioTime(audio.currentTime)} / ${formatAudioTime(duration)}`;
+    seekInput.value = String(duration > 0 ? audio.currentTime / duration : 0);
+    playButton.textContent = audio.paused ? "Play" : "Pause";
+  };
+
+  const tick = () => {
+    if (!audio.paused && audio.currentTime >= trimEnd) {
+      audio.pause();
+      audio.currentTime = trimStart;
+    }
+    draw();
+    animationFrame = window.requestAnimationFrame(tick);
+  };
+
+  const stopTick = () => {
+    if (animationFrame !== undefined) {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = undefined;
+    }
+  };
+
+  audio.addEventListener("loadedmetadata", () => {
+    duration = Number.isFinite(audio.duration) ? audio.duration : duration;
+    trimEnd = clamp(trimEnd || duration, trimStart, duration);
+    seekInput.max = "1";
+    seekTo(trimStart);
+    draw();
+  });
+  audio.addEventListener("timeupdate", draw);
+  for (const input of [volumeInput, speedInput]) {
+    input.addEventListener("input", syncAudioSettings);
+  }
+  seekInput.addEventListener("input", () => {
+    if (duration <= 0) return;
+    seekTo(Number(seekInput.value) * duration);
+    draw();
+  });
+  playButton.addEventListener("click", async () => {
+    syncAudioSettings();
+    if (audio.paused) {
+      if (audio.currentTime < trimStart || audio.currentTime >= trimEnd) {
+        audio.currentTime = trimStart;
+      }
+      try {
+        await audio.play();
+      } catch {
+        // Browser autoplay policy can reject playback if the click activation is lost.
+      }
+      tick();
+    } else {
+      audio.pause();
+      draw();
+    }
+  });
+  stopButton.addEventListener("click", () => {
+    audio.pause();
+    audio.currentTime = trimStart;
+    draw();
+  });
+  cancelButton.addEventListener("click", () => {
+    audio.pause();
+    stopTick();
+    dialog.remove();
+  });
+  confirmButton.addEventListener("click", async () => {
+    audio.pause();
+    stopTick();
+    await options.onConfirm(playback());
+    dialog.remove();
+  });
+
+  const positionToSeconds = (clientX: number) => {
+    const rect = canvas.getBoundingClientRect();
+    return clamp(((clientX - rect.left) / rect.width) * duration, 0, duration);
+  };
+
+  canvas.addEventListener("pointerdown", (event) => {
+    if (duration <= 0) return;
+
+    const seconds = positionToSeconds(event.clientX);
+    const startDistance = Math.abs(seconds - trimStart);
+    const endDistance = Math.abs(seconds - trimEnd);
+    dragTarget = startDistance < 0.12 || startDistance < endDistance ? "start" : "end";
+    canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener("pointermove", (event) => {
+    if (!dragTarget || duration <= 0) return;
+
+    const seconds = positionToSeconds(event.clientX);
+    if (dragTarget === "start") {
+      trimStart = clamp(seconds, 0, Math.max(0, trimEnd - 0.03));
+      if (audio.currentTime < trimStart) audio.currentTime = trimStart;
+    } else {
+      trimEnd = clamp(seconds, Math.min(duration, trimStart + 0.03), duration);
+      if (audio.currentTime > trimEnd) audio.currentTime = trimEnd;
+    }
+    draw();
+  });
+  canvas.addEventListener("pointerup", (event) => {
+    dragTarget = undefined;
+    canvas.releasePointerCapture(event.pointerId);
+  });
+
+  syncAudioSettings();
+  draw();
+  void audioWaveformPeaks(options.src, 160).then((decodedPeaks) => {
+    peaks = decodedPeaks;
+    draw();
+  });
 }
 
 async function openAnimationEditor(options: {
@@ -1865,6 +2227,14 @@ function isAudioAsset(asset: AiAssetDefinition | undefined): boolean {
   return asset?.kind === "sound" || asset?.kind === "music";
 }
 
+function normalizeAudioFilterType(
+  value: string
+): NonNullable<AiAudioPlaybackSettings["filter"]>["type"] {
+  if (value === "lowpass" || value === "highpass") return value;
+
+  return "none";
+}
+
 function assetWithGeneratedGeometry(
   asset: AiAssetDefinition,
   option: GeneratedDebugOption
@@ -1873,7 +2243,8 @@ function assetWithGeneratedGeometry(
     ...asset,
     dimensions: option.dimensions ?? asset.dimensions,
     frameGrid: option.frameGrid ?? asset.frameGrid,
-    animations: option.animations ?? asset.animations
+    animations: option.animations ?? asset.animations,
+    audioPlayback: option.audioPlayback ?? asset.audioPlayback
   };
 }
 
@@ -1907,6 +2278,16 @@ function numberInput(input: HTMLInputElement, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
 
   return value;
+}
+
+function rangeInput(min: number, max: number, step: number): HTMLInputElement {
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = String(min);
+  input.max = String(max);
+  input.step = String(step);
+
+  return input;
 }
 
 function positiveIntegerValue(value: number | undefined, fallback: number): number {
@@ -2525,6 +2906,62 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__frame-fields .ai-game-assets-designer__field {
   margin-bottom: 0;
+}
+.ai-game-assets-designer__audio-editor-stage {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #384251;
+  border-radius: 6px;
+  background: #0f1218;
+}
+.ai-game-assets-designer__audio-editor-waveform {
+  width: 100%;
+  height: 150px;
+  border: 1px solid #2f3a49;
+  border-radius: 6px;
+  background: #111827;
+  cursor: ew-resize;
+}
+.ai-game-assets-designer__audio-editor-transport {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ai-game-assets-designer__audio-editor-transport button {
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #273142;
+  color: #fff;
+  padding: 7px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+.ai-game-assets-designer__audio-editor-time {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.ai-game-assets-designer__audio-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.ai-game-assets-designer__audio-editor-fields .ai-game-assets-designer__field {
+  margin-bottom: 0;
+}
+.ai-game-assets-designer__audio-editor-fields input[type="range"] {
+  width: 100%;
+}
+.ai-game-assets-designer__audio-editor-hint {
+  margin-top: 10px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.35;
 }
 .ai-game-assets-designer__modal-actions {
   display: flex;

@@ -14,6 +14,7 @@ export type {
   AiAudioFormat,
   AiAudioGenerationSettings,
   AiAudioKind,
+  AiAudioPlaybackSettings,
   AiAssetStyleGuide,
   AiAssetStyleGuideImage,
   AiAssetVersion,

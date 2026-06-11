@@ -1207,7 +1207,32 @@ function startGame(assetManifest: AiAssetManifest): void {
     ): void {
       if (!this.cache.audio.exists(assetId)) return;
 
-      this.sound.play(assetId, config);
+      const asset = assetManifest.assets[assetId];
+      const version = asset?.versions[asset.activeVersion];
+      const playback = {
+        ...asset?.audioPlayback,
+        ...version?.audioPlayback
+      };
+      const rate = playback.playbackRate ?? config?.rate ?? 1;
+      const seek = playback.trimStartSeconds ?? config?.seek ?? 0;
+      const sound = this.sound.add(assetId);
+
+      sound.play({
+        ...config,
+        rate,
+        seek,
+        volume: (config?.volume ?? 1) * (playback.volume ?? 1)
+      });
+
+      if (
+        playback.trimEndSeconds !== undefined &&
+        playback.trimEndSeconds > seek
+      ) {
+        this.time.delayedCall(
+          ((playback.trimEndSeconds - seek) / Math.max(0.01, rate)) * 1000,
+          () => sound.stop()
+        );
+      }
     }
 
     private refreshAudioAsset(assetId: string, source: string): void {

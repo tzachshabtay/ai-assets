@@ -4131,15 +4131,33 @@
     "audio.sfx.alien-laser": {
       "id": "audio.sfx.alien-laser",
       "kind": "sound",
-      "prompt": "Short sharp retro sci-fi red alien laser shot sound effect, hostile arcade blip, quick attack, quick fade, no voice.",
+      "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
       "audioSettings": {
         "provider": "elevenlabs",
         "format": "mp3",
-        "durationSeconds": 0.45,
-        "loop": false
+        "durationSeconds": 0.5,
+        "loop": true
       },
-      "activeVersion": "",
-      "versions": {}
+      "activeVersion": "promoted-1781148834421",
+      "versions": {
+        "promoted-1781148834421": {
+          "name": "promoted-1781148834421",
+          "file": "/assets/audio.sfx.alien-laser.promoted-1781148834421.mp3",
+          "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+          "createdAt": "2026-06-11T03:33:54.439Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 0.5,
+            "loop": true
+          },
+          "durationSeconds": 0.5,
+          "notes": "Promoted from the AI asset designer."
+        }
+      },
+      "settings": {}
     },
     "audio.sfx.hero-explosion": {
       "id": "audio.sfx.hero-explosion",
@@ -4148,11 +4166,29 @@
       "audioSettings": {
         "provider": "elevenlabs",
         "format": "mp3",
-        "durationSeconds": 1.4,
-        "loop": false
+        "durationSeconds": 1.5,
+        "loop": true
       },
-      "activeVersion": "",
-      "versions": {}
+      "activeVersion": "promoted-1781148870260",
+      "versions": {
+        "promoted-1781148870260": {
+          "name": "promoted-1781148870260",
+          "file": "/assets/audio.sfx.hero-explosion.promoted-1781148870260.mp3",
+          "prompt": "Short dramatic hero spaceship explosion sound effect, arcade sci-fi blast with bright energy burst and debris, satisfying but not harsh, no voice.",
+          "createdAt": "2026-06-11T03:34:30.265Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 1.5,
+            "loop": true
+          },
+          "durationSeconds": 1.5,
+          "notes": "Promoted from the AI asset designer."
+        }
+      },
+      "settings": {}
     },
     "audio.music.menu": {
       "id": "audio.music.menu",

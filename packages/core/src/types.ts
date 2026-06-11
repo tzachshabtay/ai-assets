@@ -78,6 +78,30 @@ export type AiAudioGenerationSettings = {
   loop?: boolean;
 };
 
+export type AiAudioPlaybackSettings = {
+  volume?: number;
+  trimStartSeconds?: number;
+  trimEndSeconds?: number;
+  playbackRate?: number;
+  pitchSemitones?: number;
+  reverse?: boolean;
+  reverb?: {
+    enabled?: boolean;
+    amount?: number;
+    decaySeconds?: number;
+  };
+  delay?: {
+    enabled?: boolean;
+    timeSeconds?: number;
+    feedback?: number;
+    mix?: number;
+  };
+  filter?: {
+    type?: "none" | "lowpass" | "highpass";
+    frequencyHz?: number;
+  };
+};
+
 export type AiAssetVersion = {
   name: string;
   file: string;
@@ -87,6 +111,7 @@ export type AiAssetVersion = {
   revisedPrompt?: string;
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
+  audioPlayback?: AiAudioPlaybackSettings;
   durationSeconds?: number;
   parentVersion?: string;
   notes?: string;
@@ -103,6 +128,7 @@ export type AiAssetDefinition = {
   animations?: AiAssetAnimation[];
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
+  audioPlayback?: AiAudioPlaybackSettings;
   linkedAnimationAssets?: Record<string, AiAssetLinkedAnimation>;
   activeVersion: string;
   versions: Record<string, AiAssetVersion>;
