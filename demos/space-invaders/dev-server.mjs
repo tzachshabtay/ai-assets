@@ -82,7 +82,11 @@ const staticServer = createServer(async (request, response) => {
   const stream = createReadStream(filePath);
   stream.on("error", () => response.destroy());
   response.writeHead(200, {
-    "Content-Type": contentType(filePath)
+    "Content-Type": contentType(filePath),
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    "Surrogate-Control": "no-store"
   });
   stream.pipe(response);
 });
