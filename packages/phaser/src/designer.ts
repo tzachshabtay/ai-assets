@@ -96,7 +96,7 @@ type DesignerElements = {
   audioLoopField: HTMLLabelElement;
   promptInput: HTMLTextAreaElement;
   currentImage: HTMLImageElement;
-  currentAudio: HTMLAudioElement;
+  currentAudio: HTMLDivElement;
   currentAnimation: HTMLDivElement;
   currentAnimationButton: HTMLButtonElement;
   currentPreview: HTMLDivElement;
@@ -224,7 +224,11 @@ export function installAiAssetDesigner(
     elements.frameCountField.hidden = asset.kind === "image" || !asset.frameGrid;
     elements.versionLabel.textContent = `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
     elements.currentImage.src = activeVersion?.file ?? "";
-    elements.currentAudio.src = activeVersion?.file ?? "";
+    renderAudioPlayer({
+      container: elements.currentAudio,
+      src: activeVersion?.file ?? "",
+      label: readableAssetName(assetId)
+    });
     elements.currentImage.alt = `${readableAssetName(assetId)} active version`;
     elements.currentPreview.setAttribute(
       "aria-label",
@@ -238,6 +242,7 @@ export function installAiAssetDesigner(
     elements.currentAnimationButton.textContent = "Edit...";
     elements.currentPreview.classList.add("is-selected");
     elements.options.innerHTML = "";
+    elements.options.classList.remove("is-audio");
     setStatus(elements, "", "idle");
     elements.promoteButton.disabled = true;
     selectedOption = undefined;
@@ -690,9 +695,8 @@ function createDesignerElements(
   currentPreview.tabIndex = 0;
   const currentImage = document.createElement("img");
   currentImage.className = "ai-game-assets-designer__current-image";
-  const currentAudio = document.createElement("audio");
+  const currentAudio = document.createElement("div");
   currentAudio.className = "ai-game-assets-designer__current-audio";
-  currentAudio.controls = true;
   const currentAnimation = document.createElement("div");
   currentAnimation.className = "ai-game-assets-designer__animation-stage";
   currentAnimation.hidden = true;
@@ -796,6 +800,8 @@ function renderOptions(options: {
 }): void {
   options.elements.options.innerHTML = "";
   const asset = options.manifest.assets[options.assetId];
+  const isAudio = isAudioAsset(asset);
+  options.elements.options.classList.toggle("is-audio", isAudio);
 
   for (const option of options.generated) {
     const optionAsset = assetWithGeneratedGeometry(asset, option);
@@ -806,14 +812,11 @@ function renderOptions(options: {
     selectButton.type = "button";
     selectButton.className = "ai-game-assets-designer__option-select";
 
-    const isAudio = isAudioAsset(asset);
     const image = document.createElement("img");
-    const audio = document.createElement("audio");
-    audio.controls = true;
-    audio.src = option.dataUrl;
 
     if (isAudio) {
       selectButton.textContent = `Select option ${option.index + 1}`;
+      selectButton.classList.add("ai-game-assets-designer__option-select--audio");
     } else {
       image.src = option.dataUrl;
       image.alt = `${options.assetId} option ${option.index + 1}`;
@@ -844,7 +847,14 @@ function renderOptions(options: {
 
     card.append(selectButton);
     if (isAudio) {
-      card.append(audio);
+      const player = document.createElement("div");
+      player.className = "ai-game-assets-designer__option-audio";
+      renderAudioPlayer({
+        container: player,
+        src: option.dataUrl,
+        label: `${readableAssetName(options.assetId)} option ${option.index + 1}`
+      });
+      card.append(player);
     }
 
     if (!isAudio && optionAsset.frameGrid) {
@@ -959,6 +969,233 @@ function previewImageSource(options: {
     options.onPreview(options.assetId, options.textureKey, asset);
   };
   image.src = options.src;
+}
+
+function renderAudioPlayer(options: {
+  container: HTMLDivElement;
+  src: string;
+  label: string;
+}): void {
+  resetAudioPlayerContainer(options.container);
+
+  if (!options.src) {
+    options.container.hidden = true;
+    return;
+  }
+
+  options.container.hidden = false;
+  const root = document.createElement("div");
+  root.className = "ai-game-assets-designer__audio-player";
+  root.addEventListener("click", (event) => event.stopPropagation());
+  root.addEventListener("keydown", (event) => event.stopPropagation());
+
+  const audio = document.createElement("audio");
+  audio.src = options.src;
+  audio.preload = "metadata";
+
+  const playButton = document.createElement("button");
+  playButton.type = "button";
+  playButton.className = "ai-game-assets-designer__audio-play";
+  playButton.setAttribute("aria-label", `Play ${options.label}`);
+  playButton.textContent = "Play";
+
+  const timeLabel = document.createElement("span");
+  timeLabel.className = "ai-game-assets-designer__audio-time";
+  timeLabel.textContent = "0:00 / 0:00";
+
+  const canvas = document.createElement("canvas");
+  canvas.className = "ai-game-assets-designer__audio-waveform";
+  canvas.width = 420;
+  canvas.height = 72;
+  canvas.setAttribute("aria-label", `${options.label} waveform`);
+  canvas.setAttribute("role", "img");
+
+  const controls = document.createElement("div");
+  controls.className = "ai-game-assets-designer__audio-controls";
+  controls.append(playButton, timeLabel);
+
+  root.append(controls, canvas, audio);
+  options.container.append(root);
+
+  const state = {
+    peaks: undefined as AudioWaveformPeaks | undefined,
+    frame: undefined as number | undefined,
+    disposed: false
+  };
+
+  const draw = () => {
+    drawAudioWaveform(canvas, state.peaks, progressForAudio(audio));
+  };
+
+  const sync = () => {
+    playButton.textContent = audio.paused ? "Play" : "Pause";
+    playButton.setAttribute(
+      "aria-label",
+      `${audio.paused ? "Play" : "Pause"} ${options.label}`
+    );
+    timeLabel.textContent = `${formatAudioTime(audio.currentTime)} / ${formatAudioTime(audio.duration)}`;
+    draw();
+  };
+
+  const tick = () => {
+    if (state.disposed) return;
+    sync();
+
+    if (!audio.paused) {
+      state.frame = window.requestAnimationFrame(tick);
+    }
+  };
+
+  playButton.addEventListener("click", async () => {
+    if (audio.paused) {
+      pauseSiblingAudioPlayers(options.container);
+      try {
+        await audio.play();
+      } catch {
+        // Browsers can reject playback when user activation is unavailable.
+      }
+    } else {
+      audio.pause();
+    }
+    tick();
+  });
+
+  canvas.addEventListener("click", (event) => {
+    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const progress = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    audio.currentTime = progress * audio.duration;
+    sync();
+  });
+
+  audio.addEventListener("loadedmetadata", sync);
+  audio.addEventListener("timeupdate", sync);
+  audio.addEventListener("ended", sync);
+  draw();
+  void audioWaveformPeaks(options.src).then((peaks) => {
+    if (state.disposed) return;
+
+    state.peaks = peaks;
+    draw();
+  });
+  audio.addEventListener("emptied", () => {
+    state.disposed = true;
+    if (state.frame !== undefined) {
+      window.cancelAnimationFrame(state.frame);
+    }
+  });
+}
+
+type AudioWaveformPeaks = Array<{ min: number; max: number }>;
+
+function resetAudioPlayerContainer(container: HTMLDivElement): void {
+  for (const audio of container.querySelectorAll("audio")) {
+    audio.pause();
+    audio.removeAttribute("src");
+    audio.load();
+  }
+  container.innerHTML = "";
+}
+
+function pauseSiblingAudioPlayers(container: HTMLElement): void {
+  const root = container.closest(".ai-game-assets-designer");
+
+  for (const audio of root?.querySelectorAll("audio") ?? []) {
+    audio.pause();
+  }
+}
+
+let sharedAudioContext: AudioContext | undefined;
+
+async function audioWaveformPeaks(src: string, bucketCount = 96): Promise<AudioWaveformPeaks> {
+  const response = await fetch(src);
+  const bytes = await response.arrayBuffer();
+  const context = sharedAudioContext ??= new AudioContext();
+  const buffer = await context.decodeAudioData(bytes.slice(0));
+  const channel = buffer.getChannelData(0);
+  const bucketSize = Math.max(1, Math.floor(channel.length / bucketCount));
+  const peaks: AudioWaveformPeaks = [];
+
+  for (let bucket = 0; bucket < bucketCount; bucket += 1) {
+    const start = bucket * bucketSize;
+    const end = Math.min(channel.length, start + bucketSize);
+    let min = 0;
+    let max = 0;
+
+    for (let index = start; index < end; index += 1) {
+      const sample = channel[index] ?? 0;
+      min = Math.min(min, sample);
+      max = Math.max(max, sample);
+    }
+
+    peaks.push({ min, max });
+  }
+
+  return peaks;
+}
+
+function drawAudioWaveform(
+  canvas: HTMLCanvasElement,
+  peaks: AudioWaveformPeaks | undefined,
+  progress: number
+): void {
+  const context = canvas.getContext("2d");
+  if (!context) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+  const centerY = height / 2;
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = "#111827";
+  context.fillRect(0, 0, width, height);
+  context.strokeStyle = "rgba(148, 163, 184, 0.26)";
+  context.beginPath();
+  context.moveTo(0, centerY);
+  context.lineTo(width, centerY);
+  context.stroke();
+
+  const resolvedPeaks = peaks ?? Array.from({ length: 48 }, () => ({ min: -0.06, max: 0.06 }));
+  const barWidth = width / resolvedPeaks.length;
+  const playheadX = clamp(progress, 0, 1) * width;
+
+  for (const [index, peak] of resolvedPeaks.entries()) {
+    const x = index * barWidth;
+    const minY = centerY + (peak.min * centerY * 0.92);
+    const maxY = centerY + (peak.max * centerY * 0.92);
+    context.fillStyle = x <= playheadX ? "#7dd3fc" : "#64748b";
+    context.fillRect(
+      x + 1,
+      Math.min(minY, maxY),
+      Math.max(1, barWidth - 2),
+      Math.max(2, Math.abs(maxY - minY))
+    );
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(playheadX, 6, 2, height - 12);
+}
+
+function progressForAudio(audio: HTMLAudioElement): number {
+  if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
+    return 0;
+  }
+
+  return audio.currentTime / audio.duration;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatAudioTime(value: number): string {
+  if (!Number.isFinite(value) || value < 0) {
+    return "0:00";
+  }
+
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.floor(value % 60);
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function startSpritesheetPreview(options: {
@@ -2063,10 +2300,47 @@ function ensureDesignerStyles(): void {
   object-fit: contain;
   image-rendering: pixelated;
 }
-.ai-game-assets-designer__current-audio,
-.ai-game-assets-designer__option audio {
+.ai-game-assets-designer__current-audio {
   width: 100%;
-  max-width: 220px;
+}
+.ai-game-assets-designer__audio-player {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+}
+.ai-game-assets-designer__audio-player audio {
+  display: none;
+}
+.ai-game-assets-designer__audio-controls {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.ai-game-assets-designer__audio-play {
+  min-width: 56px;
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #273142;
+  color: #fff;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ai-game-assets-designer__audio-time {
+  color: #cbd5e1;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.ai-game-assets-designer__audio-waveform {
+  width: 100%;
+  height: 58px;
+  border: 1px solid #2f3a49;
+  border-radius: 6px;
+  background: #111827;
+  cursor: pointer;
 }
 .ai-game-assets-designer__animation-stage,
 .ai-game-assets-designer__option-animation {
@@ -2142,6 +2416,9 @@ function ensureDesignerStyles(): void {
   gap: 8px;
   margin-top: 10px;
 }
+.ai-game-assets-designer__options.is-audio {
+  grid-template-columns: 1fr;
+}
 .ai-game-assets-designer__option {
   border: 2px solid #384251;
   border-radius: 8px;
@@ -2153,6 +2430,11 @@ function ensureDesignerStyles(): void {
   padding: 6px;
 }
 .ai-game-assets-designer__option.is-selected { border-color: #6ed3ff; }
+.ai-game-assets-designer__options.is-audio .ai-game-assets-designer__option {
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  min-height: 112px;
+}
 .ai-game-assets-designer__option-select {
   width: 100%;
   min-height: 74px;
@@ -2163,6 +2445,16 @@ function ensureDesignerStyles(): void {
   cursor: pointer;
   color: #dbeafe;
   font: inherit;
+}
+.ai-game-assets-designer__option-select--audio {
+  min-height: 72px;
+  border: 1px solid #344155;
+  border-radius: 6px;
+  background: #172033;
+  padding: 8px;
+}
+.ai-game-assets-designer__option-audio {
+  width: 100%;
 }
 .ai-game-assets-designer__option-select img {
   width: 68px;

@@ -102,6 +102,8 @@ const uiAnimationAssetIds = [
 
 const playerLaserSfxAssetId = "audio.sfx.player-laser";
 const invaderExplosionSfxAssetId = "audio.sfx.invader-explosion";
+const alienLaserSfxAssetId = "audio.sfx.alien-laser";
+const heroExplosionSfxAssetId = "audio.sfx.hero-explosion";
 
 const laserHitDisplaySizes: Record<string, { width: number; height: number }> = {
   "laser.blue.hit": { width: 18, height: 18 },
@@ -316,6 +318,8 @@ function startGame(assetManifest: AiAssetManifest): void {
           "ui.button",
           "audio.sfx.player-laser",
           "audio.sfx.invader-explosion",
+          "audio.sfx.alien-laser",
+          "audio.sfx.hero-explosion",
           "audio.music.menu"
         ],
         onManifestUpdated: (updatedManifest) => {
@@ -900,6 +904,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.detachHeroFrameTransformHandler();
       this.hero.setFlipX(false);
       this.heroAnimationKey = "hero.ship.explosion";
+      this.playAudioAsset(heroExplosionSfxAssetId, { volume: 0.7 });
       this.hero.play("hero.ship.explosion", true);
       this.applyHeroFrameTransform("hero.ship.explosion", 0);
       this.attachHeroFrameTransformHandler("hero.ship.explosion");
@@ -1171,6 +1176,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         }
 
         this.invaderBullets.push(this.spawnLaser("laser.red.flicker", shooter.x, shooter.y + 30));
+        this.playAudioAsset(alienLaserSfxAssetId, { volume: 0.45 });
       });
     }
 

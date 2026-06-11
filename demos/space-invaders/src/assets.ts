@@ -3627,7 +3627,7 @@ export const assets = defineAiAssets(
   "invader.raider.celebration": {
     "id": "invader.raider.celebration",
     "kind": "spritesheet",
-    "prompt": "Alien invader happy dancing celebration animation",
+    "prompt": "Alien invader turning around and doing happy dancing celebration with its well defined butt",
     "dimensions": {
       "width": 256,
       "height": 192
@@ -3669,7 +3669,7 @@ export const assets = defineAiAssets(
         "invader.raider"
       ]
     },
-    "activeVersion": "promoted-1780791426160",
+    "activeVersion": "promoted-1780848061525",
     "versions": {
       "default": {
         "name": "default",
@@ -3695,8 +3695,28 @@ export const assets = defineAiAssets(
         },
         "parentVersion": "default",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780848061525": {
+        "name": "promoted-1780848061525",
+        "file": "/assets/invader.raider.celebration.promoted-1780848061525.png",
+        "prompt": "Alien invader turning around and doing happy dancing celebration with its well defined butt",
+        "createdAt": "2026-06-07T16:01:01.533Z",
+        "model": "gpt-image-2",
+        "settings": {
+          "model": "gpt-image-2",
+          "background": "auto",
+          "quality": "low",
+          "format": "png",
+          "referenceAssetIds": [
+            "invader.raider"
+          ]
+        },
+        "audioSettings": {},
+        "parentVersion": "promoted-1780791426160",
+        "notes": "Promoted from the AI asset designer."
       }
-    }
+    },
+    "audioSettings": {}
   },
   "invader.hunter.celebration": {
     "id": "invader.hunter.celebration",
@@ -4016,14 +4036,14 @@ export const assets = defineAiAssets(
   "audio.sfx.player-laser": {
     "id": "audio.sfx.player-laser",
     "kind": "sound",
-    "prompt": "Short crisp retro sci-fi blue laser shot sound effect for an arcade space shooter, punchy attack, quick fade, no voice.",
+    "prompt": "a satisfying pew pew sound for a shooting laser",
     "audioSettings": {
       "provider": "elevenlabs",
       "format": "mp3",
-      "durationSeconds": 0.8,
-      "loop": false
+      "durationSeconds": 0.5,
+      "loop": true
     },
-    "activeVersion": "promoted-1780841902063",
+    "activeVersion": "promoted-1780848343490",
     "versions": {
       "promoted-1780841902063": {
         "name": "promoted-1780841902063",
@@ -4040,6 +4060,23 @@ export const assets = defineAiAssets(
         },
         "durationSeconds": 0.8,
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780848343490": {
+        "name": "promoted-1780848343490",
+        "file": "/assets/audio.sfx.player-laser.promoted-1780848343490.mp3",
+        "prompt": "a satisfying pew pew sound for a shooting laser",
+        "createdAt": "2026-06-07T16:05:43.505Z",
+        "model": "eleven_text_to_sound_v2",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 0.5,
+          "loop": true
+        },
+        "durationSeconds": 0.5,
+        "parentVersion": "promoted-1780841902063",
+        "notes": "Promoted from the AI asset designer."
       }
     },
     "settings": {}
@@ -4047,14 +4084,14 @@ export const assets = defineAiAssets(
   "audio.sfx.invader-explosion": {
     "id": "audio.sfx.invader-explosion",
     "kind": "sound",
-    "prompt": "Short crunchy alien invader explosion sound effect, should be satisying.",
+    "prompt": "Short soft satisying 8-bit explosion",
     "audioSettings": {
       "provider": "elevenlabs",
       "format": "mp3",
-      "durationSeconds": 1.2,
+      "durationSeconds": 0.5,
       "loop": false
     },
-    "activeVersion": "promoted-1780842819494",
+    "activeVersion": "promoted-1780843618857",
     "versions": {
       "promoted-1780842819494": {
         "name": "promoted-1780842819494",
@@ -4071,9 +4108,52 @@ export const assets = defineAiAssets(
         },
         "durationSeconds": 1.2,
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1780843618857": {
+        "name": "promoted-1780843618857",
+        "file": "/assets/audio.sfx.invader-explosion.promoted-1780843618857.mp3",
+        "prompt": "Short soft satisying 8-bit explosion",
+        "createdAt": "2026-06-07T14:46:58.875Z",
+        "model": "eleven_text_to_sound_v2",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 0.5,
+          "loop": false
+        },
+        "durationSeconds": 0.5,
+        "parentVersion": "promoted-1780842819494",
+        "notes": "Promoted from the AI asset designer."
       }
     },
     "settings": {}
+  },
+  "audio.sfx.alien-laser": {
+    "id": "audio.sfx.alien-laser",
+    "kind": "sound",
+    "prompt": "Short sharp retro sci-fi red alien laser shot sound effect, hostile arcade blip, quick attack, quick fade, no voice.",
+    "audioSettings": {
+      "provider": "elevenlabs",
+      "format": "mp3",
+      "durationSeconds": 0.45,
+      "loop": false
+    },
+    "activeVersion": "",
+    "versions": {}
+  },
+  "audio.sfx.hero-explosion": {
+    "id": "audio.sfx.hero-explosion",
+    "kind": "sound",
+    "prompt": "Short dramatic hero spaceship explosion sound effect, arcade sci-fi blast with bright energy burst and debris, satisfying but not harsh, no voice.",
+    "audioSettings": {
+      "provider": "elevenlabs",
+      "format": "mp3",
+      "durationSeconds": 1.4,
+      "loop": false
+    },
+    "activeVersion": "",
+    "versions": {}
   },
   "audio.music.menu": {
     "id": "audio.music.menu",
