@@ -547,7 +547,16 @@ export function installAiAssetDesigner(
           };
           selectedOption = editedCurrentOption;
           elements.promoteButton.disabled = false;
-          manifest.assets[selectedTargetAssetId] = optionAsset;
+          manifest.assets[selectedTargetAssetId] = {
+            ...optionAsset,
+            versions: {
+              ...asset.versions,
+              [asset.activeVersion]: {
+                ...activeVersion,
+                audioPlayback
+              }
+            }
+          };
           options.onPreview(selectedTargetAssetId, dataUrl, optionAsset);
           renderAudioPlayer({
             container: elements.currentAudio,
@@ -1050,6 +1059,9 @@ function renderAudioPlayer(options: {
   const timeLabel = document.createElement("span");
   timeLabel.className = "ai-game-assets-designer__audio-time";
   timeLabel.textContent = "0:00 / 0:00";
+  const trimLabel = document.createElement("span");
+  trimLabel.className = "ai-game-assets-designer__audio-trim";
+  trimLabel.hidden = true;
 
   const canvas = document.createElement("canvas");
   canvas.className = "ai-game-assets-designer__audio-waveform";
@@ -1062,7 +1074,7 @@ function renderAudioPlayer(options: {
   controls.className = "ai-game-assets-designer__audio-controls";
   controls.append(playButton, timeLabel);
 
-  root.append(controls, canvas, audio);
+  root.append(controls, canvas, trimLabel, audio);
   options.container.append(root);
 
   const state = {
@@ -1144,6 +1156,8 @@ function renderAudioPlayer(options: {
     state.duration = Number.isFinite(audio.duration) ? audio.duration : 0;
     state.trimStart = clamp(options.playback?.trimStartSeconds ?? 0, 0, state.duration);
     state.trimEnd = clamp(options.playback?.trimEndSeconds ?? state.duration, state.trimStart, state.duration);
+    trimLabel.hidden = state.trimStart === 0 && state.trimEnd === state.duration;
+    trimLabel.textContent = `Trim ${formatAudioTime(state.trimStart)} – ${formatAudioTime(state.trimEnd)}`;
     audio.currentTime = state.trimStart;
     sync();
   });
@@ -2377,7 +2391,7 @@ function inlineCheckboxField(label: string, checkbox: HTMLInputElement): HTMLLab
   wrapper.className = "ai-game-assets-designer__inline-checkbox";
   const text = document.createElement("span");
   text.textContent = label;
-  wrapper.append(text, checkbox);
+  wrapper.append(checkbox, text);
 
   return wrapper;
 }
@@ -2807,6 +2821,12 @@ function ensureDesignerStyles(): void {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+.ai-game-assets-designer__audio-trim {
+  color: #fbbf24;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
 .ai-game-assets-designer__audio-waveform {
   width: 100%;
   height: 58px;
@@ -3032,14 +3052,17 @@ function ensureDesignerStyles(): void {
   margin: 0;
 }
 .ai-game-assets-designer__inline-checkbox {
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 7px;
   color: #cbd5e1;
   font-size: 12px;
+  line-height: 1;
   white-space: nowrap;
 }
 .ai-game-assets-designer__inline-checkbox input {
+  width: auto;
   margin: 0;
 }
 .ai-game-assets-designer__audio-editor-transport button {
