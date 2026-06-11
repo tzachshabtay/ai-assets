@@ -1517,18 +1517,21 @@ async function openAudioEditor(options: {
 
   const playButton = document.createElement("button");
   playButton.type = "button";
-  playButton.textContent = "Play";
-  const stopButton = document.createElement("button");
-  stopButton.type = "button";
-  stopButton.textContent = "Stop";
+  playButton.className = "ai-game-assets-designer__audio-editor-play";
+  playButton.setAttribute("aria-label", "Play");
+  playButton.textContent = "▶";
+  const loopInput = document.createElement("input");
+  loopInput.type = "checkbox";
   const timeLabel = document.createElement("span");
   timeLabel.className = "ai-game-assets-designer__audio-editor-time";
   timeLabel.textContent = "0:00 / 0:00";
   const transport = document.createElement("div");
   transport.className = "ai-game-assets-designer__audio-editor-transport";
-  transport.append(playButton, stopButton, timeLabel);
+  transport.append(playButton, labelWrap("Loop", loopInput), timeLabel);
 
   const seekInput = rangeInput(0, 1, 0.001);
+  seekInput.className = "ai-game-assets-designer__audio-editor-scrubber";
+  stage.append(seekInput);
   const volumeInput = rangeInput(0, 1.5, 0.01);
   const speedInput = rangeInput(0.5, 2, 0.01);
   const pitchInput = signedNumberInput();
@@ -1562,16 +1565,15 @@ async function openAudioEditor(options: {
 
   const fields = document.createElement("div");
   fields.className = "ai-game-assets-designer__audio-editor-fields";
+  const reverbControl = pairedAudioEffectControl("Reverb", reverbInput, reverbAmountInput);
+  const delayControl = pairedAudioEffectControl("Delay", delayInput, delayMixInput);
   fields.append(
-    labelWrap("Playhead", seekInput),
     labelWrap("Volume", volumeInput),
     labelWrap("Speed", speedInput),
     labelWrap("Pitch", pitchInput),
     labelWrap("Reverse", reverseInput),
-    labelWrap("Reverb", reverbInput),
-    labelWrap("Reverb amount", reverbAmountInput),
-    labelWrap("Delay", delayInput),
-    labelWrap("Delay mix", delayMixInput),
+    reverbControl,
+    delayControl,
     labelWrap("Filter", filterSelect),
     labelWrap("Filter Hz", filterFrequencyInput)
   );
@@ -1605,6 +1607,7 @@ async function openAudioEditor(options: {
   volumeInput.value = String(clamp(initial.volume ?? 1, 0, 1.5));
   speedInput.value = String(clamp(initial.playbackRate ?? 1, 0.5, 2));
   pitchInput.value = String(initial.pitchSemitones ?? 0);
+  loopInput.checked = Boolean(initial.loop);
   reverseInput.checked = Boolean(initial.reverse);
   reverbInput.checked = Boolean(initial.reverb?.enabled);
   reverbAmountInput.value = String(clamp(initial.reverb?.amount ?? 0.25, 0, 1));
@@ -1619,6 +1622,7 @@ async function openAudioEditor(options: {
     trimEndSeconds: trimEnd,
     playbackRate: numberInput(speedInput, 1),
     pitchSemitones: integerInput(pitchInput, 0),
+    loop: loopInput.checked || undefined,
     reverse: reverseInput.checked || undefined,
     reverb: {
       enabled: reverbInput.checked,
@@ -1640,6 +1644,8 @@ async function openAudioEditor(options: {
   const syncAudioSettings = () => {
     audio.volume = clamp(numberInput(volumeInput, 1), 0, 1);
     audio.playbackRate = clamp(numberInput(speedInput, 1), 0.5, 2);
+    reverbAmountInput.disabled = !reverbInput.checked;
+    delayMixInput.disabled = !delayInput.checked;
   };
 
   const seekTo = (value: number) => {
@@ -1656,13 +1662,16 @@ async function openAudioEditor(options: {
     });
     timeLabel.textContent = `${formatAudioTime(audio.currentTime)} / ${formatAudioTime(duration)}`;
     seekInput.value = String(duration > 0 ? audio.currentTime / duration : 0);
-    playButton.textContent = audio.paused ? "Play" : "Pause";
+    playButton.textContent = audio.paused ? "▶" : "❚❚";
+    playButton.setAttribute("aria-label", audio.paused ? "Play" : "Pause");
   };
 
   const tick = () => {
     if (!audio.paused && audio.currentTime >= trimEnd) {
-      audio.pause();
       audio.currentTime = trimStart;
+      if (!loopInput.checked) {
+        audio.pause();
+      }
     }
     draw();
     animationFrame = window.requestAnimationFrame(tick);
@@ -1686,6 +1695,12 @@ async function openAudioEditor(options: {
   for (const input of [volumeInput, speedInput]) {
     input.addEventListener("input", syncAudioSettings);
   }
+  for (const input of [reverbInput, delayInput]) {
+    input.addEventListener("input", () => {
+      syncAudioSettings();
+      draw();
+    });
+  }
   seekInput.addEventListener("input", () => {
     if (duration <= 0) return;
     seekTo(Number(seekInput.value) * duration);
@@ -1707,11 +1722,6 @@ async function openAudioEditor(options: {
       audio.pause();
       draw();
     }
-  });
-  stopButton.addEventListener("click", () => {
-    audio.pause();
-    audio.currentTime = trimStart;
-    draw();
   });
   cancelButton.addEventListener("click", () => {
     audio.pause();
@@ -2288,6 +2298,23 @@ function rangeInput(min: number, max: number, step: number): HTMLInputElement {
   input.step = String(step);
 
   return input;
+}
+
+function pairedAudioEffectControl(
+  label: string,
+  checkbox: HTMLInputElement,
+  amount: HTMLInputElement
+): HTMLLabelElement {
+  const wrapper = document.createElement("label");
+  wrapper.className = "ai-game-assets-designer__field ai-game-assets-designer__audio-effect-field";
+  const text = document.createElement("span");
+  text.textContent = label;
+  const row = document.createElement("div");
+  row.className = "ai-game-assets-designer__audio-effect-row";
+  row.append(checkbox, amount);
+  wrapper.append(text, row);
+
+  return wrapper;
 }
 
 function positiveIntegerValue(value: number | undefined, fallback: number): number {
@@ -2909,7 +2936,7 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__audio-editor-stage {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   padding: 8px;
   border: 1px solid #384251;
   border-radius: 6px;
@@ -2917,26 +2944,36 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__audio-editor-waveform {
   width: 100%;
-  height: 150px;
+  height: 132px;
   border: 1px solid #2f3a49;
   border-radius: 6px;
   background: #111827;
   cursor: ew-resize;
 }
+.ai-game-assets-designer__audio-editor-scrubber {
+  width: 100%;
+  margin: 0;
+}
 .ai-game-assets-designer__audio-editor-transport {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto minmax(88px, auto) 1fr;
   align-items: center;
   gap: 8px;
   margin-top: 10px;
 }
+.ai-game-assets-designer__audio-editor-transport .ai-game-assets-designer__field {
+  margin: 0;
+}
 .ai-game-assets-designer__audio-editor-transport button {
+  width: 36px;
+  height: 32px;
   border: 1px solid #58657a;
   border-radius: 6px;
   background: #273142;
   color: #fff;
-  padding: 7px 10px;
+  padding: 0;
   font: inherit;
+  font-size: 14px;
   cursor: pointer;
 }
 .ai-game-assets-designer__audio-editor-time {
@@ -2956,6 +2993,21 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__audio-editor-fields input[type="range"] {
   width: 100%;
+}
+.ai-game-assets-designer__audio-effect-field {
+  min-width: 0;
+}
+.ai-game-assets-designer__audio-effect-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.ai-game-assets-designer__audio-effect-row input[type="checkbox"] {
+  margin: 0;
+}
+.ai-game-assets-designer__audio-effect-row input[type="range"]:disabled {
+  opacity: 0.38;
 }
 .ai-game-assets-designer__audio-editor-hint {
   margin-top: 10px;

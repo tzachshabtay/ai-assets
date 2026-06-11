@@ -84,6 +84,7 @@ export type AiAudioPlaybackSettings = {
   trimEndSeconds?: number;
   playbackRate?: number;
   pitchSemitones?: number;
+  loop?: boolean;
   reverse?: boolean;
   reverb?: {
     enabled?: boolean;

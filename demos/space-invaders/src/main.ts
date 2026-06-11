@@ -164,6 +164,7 @@ function startGame(assetManifest: AiAssetManifest): void {
     private heroAnimationKey?: string;
     private heroLockedUntil = 0;
     private heroFrameTransformHandler?: (...args: unknown[]) => void;
+    private audioPlaybackOverrides = new Map<string, AiAssetDefinition["audioPlayback"]>();
     private invaderAnimationSizes = new Map<string, { width: number; height: number }>();
     private invaderAnimations = new Map<string, AiAssetAnimation>();
     private invaderAnimationKeys = new WeakMap<Phaser.GameObjects.Sprite, string>();
@@ -240,6 +241,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         assetManifest.assets[assetId] = asset;
 
         if (asset.kind === "sound" || asset.kind === "music") {
+          this.audioPlaybackOverrides.set(assetId, asset.audioPlayback);
           this.refreshAudioAsset(assetId, textureKey);
           return;
         }
@@ -1211,7 +1213,8 @@ function startGame(assetManifest: AiAssetManifest): void {
       const version = asset?.versions[asset.activeVersion];
       const playback = {
         ...asset?.audioPlayback,
-        ...version?.audioPlayback
+        ...version?.audioPlayback,
+        ...this.audioPlaybackOverrides.get(assetId)
       };
       const rate = playback.playbackRate ?? config?.rate ?? 1;
       const seek = playback.trimStartSeconds ?? config?.seek ?? 0;
@@ -1221,6 +1224,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         ...config,
         rate,
         seek,
+        loop: playback.loop ?? config?.loop,
         volume: (config?.volume ?? 1) * (playback.volume ?? 1)
       });
 
@@ -1228,9 +1232,29 @@ function startGame(assetManifest: AiAssetManifest): void {
         playback.trimEndSeconds !== undefined &&
         playback.trimEndSeconds > seek
       ) {
+        const stopOrLoop = () => {
+          if (!sound.isPlaying) return;
+
+          if (playback.loop) {
+            sound.play({
+              ...config,
+              rate,
+              seek,
+              loop: false,
+              volume: (config?.volume ?? 1) * (playback.volume ?? 1)
+            });
+            this.time.delayedCall(
+              ((playback.trimEndSeconds! - seek) / Math.max(0.01, rate)) * 1000,
+              stopOrLoop
+            );
+            return;
+          }
+
+          sound.stop();
+        };
         this.time.delayedCall(
           ((playback.trimEndSeconds - seek) / Math.max(0.01, rate)) * 1000,
-          () => sound.stop()
+          stopOrLoop
         );
       }
     }

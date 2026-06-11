@@ -4043,7 +4043,7 @@ export const assets = defineAiAssets(
       "durationSeconds": 0.5,
       "loop": true
     },
-    "activeVersion": "promoted-1780848343490",
+    "activeVersion": "promoted-1781150826966",
     "versions": {
       "promoted-1780841902063": {
         "name": "promoted-1780841902063",
@@ -4076,6 +4076,23 @@ export const assets = defineAiAssets(
         },
         "durationSeconds": 0.5,
         "parentVersion": "promoted-1780841902063",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1781150826966": {
+        "name": "promoted-1781150826966",
+        "file": "/assets/audio.sfx.player-laser.promoted-1781150826966.mp3",
+        "prompt": "a satisfying pew pew sound for a shooting laser",
+        "createdAt": "2026-06-11T04:07:06.979Z",
+        "model": "eleven_text_to_sound_v2",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 0.5,
+          "loop": true
+        },
+        "durationSeconds": 0.5,
+        "parentVersion": "promoted-1780848343490",
         "notes": "Promoted from the AI asset designer."
       }
     },
@@ -4139,7 +4156,7 @@ export const assets = defineAiAssets(
       "durationSeconds": 0.5,
       "loop": true
     },
-    "activeVersion": "promoted-1781148834421",
+    "activeVersion": "promoted-1781150900449",
     "versions": {
       "promoted-1781148834421": {
         "name": "promoted-1781148834421",
@@ -4155,6 +4172,40 @@ export const assets = defineAiAssets(
           "loop": true
         },
         "durationSeconds": 0.5,
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1781150849367": {
+        "name": "promoted-1781150849367",
+        "file": "/assets/audio.sfx.alien-laser.promoted-1781150849367.mp3",
+        "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+        "createdAt": "2026-06-11T04:07:29.378Z",
+        "model": "eleven_text_to_sound_v2",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 0.5,
+          "loop": true
+        },
+        "durationSeconds": 0.5,
+        "parentVersion": "promoted-1781148834421",
+        "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1781150900449": {
+        "name": "promoted-1781150900449",
+        "file": "/assets/audio.sfx.alien-laser.promoted-1781150900449.mp3",
+        "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+        "createdAt": "2026-06-11T04:08:20.463Z",
+        "model": "eleven_text_to_sound_v2",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 0.5,
+          "loop": true
+        },
+        "durationSeconds": 0.5,
+        "parentVersion": "promoted-1781150849367",
         "notes": "Promoted from the AI asset designer."
       }
     },
