@@ -4042,7 +4042,7 @@
         "durationSeconds": 0.5,
         "loop": true
       },
-      "activeVersion": "promoted-1781150826966",
+      "activeVersion": "promoted-1781151879086",
       "versions": {
         "promoted-1780841902063": {
           "name": "promoted-1780841902063",
@@ -4093,9 +4093,70 @@
           "durationSeconds": 0.5,
           "parentVersion": "promoted-1780848343490",
           "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1781151879086": {
+          "name": "promoted-1781151879086",
+          "file": "/assets/audio.sfx.player-laser.promoted-1781151879086.mp3",
+          "prompt": "a satisfying pew pew sound for a shooting laser",
+          "createdAt": "2026-06-11T04:24:39.117Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 0.5,
+            "loop": true
+          },
+          "audioPlayback": {
+            "volume": 0.22,
+            "trimStartSeconds": 0.3410325079449153,
+            "trimEndSeconds": 0.8071825344279662,
+            "playbackRate": 1,
+            "pitchSemitones": 0,
+            "reverb": {
+              "enabled": false,
+              "amount": 0.25,
+              "decaySeconds": 1.2
+            },
+            "delay": {
+              "enabled": false,
+              "timeSeconds": 0.12,
+              "feedback": 0.18,
+              "mix": 0.2
+            },
+            "filter": {
+              "type": "none",
+              "frequencyHz": 1200
+            }
+          },
+          "durationSeconds": 0.5,
+          "parentVersion": "promoted-1781150826966",
+          "notes": "Promoted from the AI asset designer."
         }
       },
-      "settings": {}
+      "settings": {},
+      "audioPlayback": {
+        "volume": 0.22,
+        "trimStartSeconds": 0.3410325079449153,
+        "trimEndSeconds": 0.8071825344279662,
+        "playbackRate": 1,
+        "pitchSemitones": 0,
+        "reverb": {
+          "enabled": false,
+          "amount": 0.25,
+          "decaySeconds": 1.2
+        },
+        "delay": {
+          "enabled": false,
+          "timeSeconds": 0.12,
+          "feedback": 0.18,
+          "mix": 0.2
+        },
+        "filter": {
+          "type": "none",
+          "frequencyHz": 1200
+        }
+      }
     },
     "audio.sfx.invader-explosion": {
       "id": "audio.sfx.invader-explosion",
@@ -4155,7 +4216,7 @@
         "durationSeconds": 0.5,
         "loop": true
       },
-      "activeVersion": "promoted-1781150900449",
+      "activeVersion": "promoted-1781151978577",
       "versions": {
         "promoted-1781148834421": {
           "name": "promoted-1781148834421",
@@ -4206,9 +4267,109 @@
           "durationSeconds": 0.5,
           "parentVersion": "promoted-1781150849367",
           "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1781151919060": {
+          "name": "promoted-1781151919060",
+          "file": "/assets/audio.sfx.alien-laser.promoted-1781151919060.mp3",
+          "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+          "createdAt": "2026-06-11T04:25:19.071Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 0.5,
+            "loop": true
+          },
+          "audioPlayback": {
+            "volume": 0.18,
+            "trimStartSeconds": 0.31252739340572033,
+            "trimEndSeconds": 0.6823497914459746,
+            "playbackRate": 1,
+            "pitchSemitones": 0,
+            "reverb": {
+              "enabled": false,
+              "amount": 0.25,
+              "decaySeconds": 1.2
+            },
+            "delay": {
+              "enabled": false,
+              "timeSeconds": 0.12,
+              "feedback": 0.18,
+              "mix": 0.2
+            },
+            "filter": {
+              "type": "none",
+              "frequencyHz": 1200
+            }
+          },
+          "durationSeconds": 0.5,
+          "parentVersion": "promoted-1781150900449",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1781151978577": {
+          "name": "promoted-1781151978577",
+          "file": "/assets/audio.sfx.alien-laser.promoted-1781151978577.mp3",
+          "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+          "createdAt": "2026-06-11T04:26:18.587Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 0.5,
+            "loop": true
+          },
+          "audioPlayback": {
+            "volume": 0.06,
+            "trimStartSeconds": 0.31252739340572033,
+            "trimEndSeconds": 0.6823497914459746,
+            "playbackRate": 1,
+            "pitchSemitones": 0,
+            "reverb": {
+              "enabled": false,
+              "amount": 0.25,
+              "decaySeconds": 1.2
+            },
+            "delay": {
+              "enabled": false,
+              "timeSeconds": 0.12,
+              "feedback": 0.18,
+              "mix": 0.2
+            },
+            "filter": {
+              "type": "none",
+              "frequencyHz": 1200
+            }
+          },
+          "durationSeconds": 0.5,
+          "parentVersion": "promoted-1781151919060",
+          "notes": "Promoted from the AI asset designer."
         }
       },
-      "settings": {}
+      "settings": {},
+      "audioPlayback": {
+        "volume": 0.06,
+        "trimStartSeconds": 0.31252739340572033,
+        "trimEndSeconds": 0.6823497914459746,
+        "playbackRate": 1,
+        "pitchSemitones": 0,
+        "reverb": {
+          "enabled": false,
+          "amount": 0.25,
+          "decaySeconds": 1.2
+        },
+        "delay": {
+          "enabled": false,
+          "timeSeconds": 0.12,
+          "feedback": 0.18,
+          "mix": 0.2
+        },
+        "filter": {
+          "type": "none",
+          "frequencyHz": 1200
+        }
+      }
     },
     "audio.sfx.hero-explosion": {
       "id": "audio.sfx.hero-explosion",
@@ -4220,7 +4381,7 @@
         "durationSeconds": 1.5,
         "loop": true
       },
-      "activeVersion": "promoted-1781148870260",
+      "activeVersion": "promoted-1781152039483",
       "versions": {
         "promoted-1781148870260": {
           "name": "promoted-1781148870260",
@@ -4237,9 +4398,70 @@
           },
           "durationSeconds": 1.5,
           "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1781152039483": {
+          "name": "promoted-1781152039483",
+          "file": "/assets/audio.sfx.hero-explosion.promoted-1781152039483.mp3",
+          "prompt": "Short dramatic hero spaceship explosion sound effect, arcade sci-fi blast with bright energy burst and debris, satisfying but not harsh, no voice.",
+          "createdAt": "2026-06-11T04:27:19.494Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 1.5,
+            "loop": true
+          },
+          "audioPlayback": {
+            "volume": 1,
+            "trimStartSeconds": 0.8315754104872881,
+            "trimEndSeconds": 1.855258871822034,
+            "playbackRate": 1,
+            "pitchSemitones": 0,
+            "reverb": {
+              "enabled": false,
+              "amount": 0.25,
+              "decaySeconds": 1.2
+            },
+            "delay": {
+              "enabled": false,
+              "timeSeconds": 0.12,
+              "feedback": 0.18,
+              "mix": 0.2
+            },
+            "filter": {
+              "type": "none",
+              "frequencyHz": 1200
+            }
+          },
+          "durationSeconds": 1.5,
+          "parentVersion": "promoted-1781148870260",
+          "notes": "Promoted from the AI asset designer."
         }
       },
-      "settings": {}
+      "settings": {},
+      "audioPlayback": {
+        "volume": 1,
+        "trimStartSeconds": 0.8315754104872881,
+        "trimEndSeconds": 1.855258871822034,
+        "playbackRate": 1,
+        "pitchSemitones": 0,
+        "reverb": {
+          "enabled": false,
+          "amount": 0.25,
+          "decaySeconds": 1.2
+        },
+        "delay": {
+          "enabled": false,
+          "timeSeconds": 0.12,
+          "feedback": 0.18,
+          "mix": 0.2
+        },
+        "filter": {
+          "type": "none",
+          "frequencyHz": 1200
+        }
+      }
     },
     "audio.music.menu": {
       "id": "audio.music.menu",

@@ -228,7 +228,8 @@ export function installAiAssetDesigner(
     renderAudioPlayer({
       container: elements.currentAudio,
       src: activeVersion?.file ?? "",
-      label: readableAssetName(assetId)
+      label: readableAssetName(assetId),
+      playback: activeVersion?.audioPlayback
     });
     elements.currentImage.alt = `${readableAssetName(assetId)} active version`;
     elements.currentPreview.setAttribute(
@@ -525,7 +526,7 @@ export function installAiAssetDesigner(
         asset,
         assetId: selectedTargetAssetId,
         src: editedCurrentOption?.dataUrl ?? activeVersion.file,
-        initialPlayback: editedCurrentOption?.audioPlayback ?? activeVersion.audioPlayback ?? asset.audioPlayback,
+        initialPlayback: editedCurrentOption?.audioPlayback ?? activeVersion.audioPlayback,
         onConfirm: async (audioPlayback) => {
           const dataUrl = editedCurrentOption?.dataUrl ?? await imageSourceToDataUrl(activeVersion.file);
           const optionAsset = {
@@ -551,7 +552,8 @@ export function installAiAssetDesigner(
           renderAudioPlayer({
             container: elements.currentAudio,
             src: dataUrl,
-            label: readableAssetName(selectedTargetAssetId)
+            label: readableAssetName(selectedTargetAssetId),
+            playback: audioPlayback
           });
           setStatus(elements, "Audio edits applied. Promote to save them to code.", "success");
         }
@@ -896,7 +898,8 @@ function renderOptions(options: {
       renderAudioPlayer({
         container: player,
         src: option.dataUrl,
-        label: `${readableAssetName(options.assetId)} option ${option.index + 1}`
+        label: `${readableAssetName(options.assetId)} option ${option.index + 1}`,
+        playback: optionAsset.audioPlayback
       });
       card.append(player);
     }
@@ -1019,6 +1022,7 @@ function renderAudioPlayer(options: {
   container: HTMLDivElement;
   src: string;
   label: string;
+  playback?: AiAudioPlaybackSettings;
 }): void {
   resetAudioPlayerContainer(options.container);
 
@@ -1064,11 +1068,20 @@ function renderAudioPlayer(options: {
   const state = {
     peaks: undefined as AudioWaveformPeaks | undefined,
     frame: undefined as number | undefined,
-    disposed: false
+    disposed: false,
+    duration: 0,
+    trimStart: 0,
+    trimEnd: 0
   };
 
   const draw = () => {
-    drawAudioWaveform(canvas, state.peaks, progressForAudio(audio));
+    drawAudioEditorWaveform(canvas, {
+      peaks: state.peaks,
+      duration: state.duration,
+      progress: state.duration > 0 ? audio.currentTime / state.duration : 0,
+      trimStart: state.duration > 0 ? state.trimStart / state.duration : 0,
+      trimEnd: state.duration > 0 ? state.trimEnd / state.duration : 1
+    });
   };
 
   const sync = () => {
@@ -1077,12 +1090,18 @@ function renderAudioPlayer(options: {
       "aria-label",
       `${audio.paused ? "Play" : "Pause"} ${options.label}`
     );
-    timeLabel.textContent = `${formatAudioTime(audio.currentTime)} / ${formatAudioTime(audio.duration)}`;
+    timeLabel.textContent = `${formatAudioTime(audio.currentTime)} / ${formatAudioTime(state.trimEnd || state.duration)}`;
     draw();
   };
 
   const tick = () => {
     if (state.disposed) return;
+    if (!audio.paused && state.trimEnd > 0 && audio.currentTime >= state.trimEnd) {
+      audio.currentTime = state.trimStart;
+      if (!options.playback?.loop) {
+        audio.pause();
+      }
+    }
     sync();
 
     if (!audio.paused) {
@@ -1093,6 +1112,14 @@ function renderAudioPlayer(options: {
   playButton.addEventListener("click", async () => {
     if (audio.paused) {
       pauseSiblingAudioPlayers(options.container);
+      audio.volume = clamp(options.playback?.volume ?? 1, 0, 1);
+      audio.playbackRate = clamp(options.playback?.playbackRate ?? 1, 0.5, 2);
+      if (
+        state.trimEnd > 0 &&
+        (audio.currentTime < state.trimStart || audio.currentTime >= state.trimEnd)
+      ) {
+        audio.currentTime = state.trimStart;
+      }
       try {
         await audio.play();
       } catch {
@@ -1105,15 +1132,21 @@ function renderAudioPlayer(options: {
   });
 
   canvas.addEventListener("click", (event) => {
-    if (!Number.isFinite(audio.duration) || audio.duration <= 0) return;
+    if (state.duration <= 0) return;
 
     const rect = canvas.getBoundingClientRect();
     const progress = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-    audio.currentTime = progress * audio.duration;
+    audio.currentTime = seekableAudioTime(state, progress);
     sync();
   });
 
-  audio.addEventListener("loadedmetadata", sync);
+  audio.addEventListener("loadedmetadata", () => {
+    state.duration = Number.isFinite(audio.duration) ? audio.duration : 0;
+    state.trimStart = clamp(options.playback?.trimStartSeconds ?? 0, 0, state.duration);
+    state.trimEnd = clamp(options.playback?.trimEndSeconds ?? state.duration, state.trimStart, state.duration);
+    audio.currentTime = state.trimStart;
+    sync();
+  });
   audio.addEventListener("timeupdate", sync);
   audio.addEventListener("ended", sync);
   draw();
@@ -1132,6 +1165,19 @@ function renderAudioPlayer(options: {
 }
 
 type AudioWaveformPeaks = Array<{ min: number; max: number }>;
+
+type AudioTrimState = {
+  duration: number;
+  trimStart: number;
+  trimEnd: number;
+};
+
+function seekableAudioTime(state: AudioTrimState, progress: number): number {
+  const start = clamp(state.trimStart, 0, state.duration);
+  const end = clamp(state.trimEnd || state.duration, start, state.duration);
+
+  return start + ((end - start) * clamp(progress, 0, 1));
+}
 
 function resetAudioPlayerContainer(container: HTMLDivElement): void {
   for (const audio of container.querySelectorAll("audio")) {
@@ -1525,9 +1571,10 @@ async function openAudioEditor(options: {
   const timeLabel = document.createElement("span");
   timeLabel.className = "ai-game-assets-designer__audio-editor-time";
   timeLabel.textContent = "0:00 / 0:00";
+  const loopField = inlineCheckboxField("Loop", loopInput);
   const transport = document.createElement("div");
   transport.className = "ai-game-assets-designer__audio-editor-transport";
-  transport.append(playButton, labelWrap("Loop", loopInput), timeLabel);
+  transport.append(playButton, loopField, timeLabel);
 
   const seekInput = rangeInput(0, 1, 0.001);
   seekInput.className = "ai-game-assets-designer__audio-editor-scrubber";
@@ -1597,9 +1644,11 @@ async function openAudioEditor(options: {
   options.root.append(dialog);
 
   const initial = options.initialPlayback ?? {};
+  const hasInitialTrimStart = initial.trimStartSeconds !== undefined;
+  const hasInitialTrimEnd = initial.trimEndSeconds !== undefined;
   let duration = Math.max(0, options.asset.audioSettings?.durationSeconds ?? 0);
-  let trimStart = Math.max(0, initial.trimStartSeconds ?? 0);
-  let trimEnd = Math.max(trimStart, initial.trimEndSeconds ?? duration);
+  let trimStart = hasInitialTrimStart ? Math.max(0, initial.trimStartSeconds ?? 0) : 0;
+  let trimEnd = hasInitialTrimEnd ? Math.max(trimStart, initial.trimEndSeconds ?? duration) : duration;
   let peaks: AudioWaveformPeaks | undefined;
   let dragTarget: "start" | "end" | "playhead" | undefined;
   let animationFrame: number | undefined;
@@ -1661,7 +1710,7 @@ async function openAudioEditor(options: {
       trimEnd: duration > 0 ? trimEnd / duration : 1
     });
     timeLabel.textContent = `${formatAudioTime(audio.currentTime)} / ${formatAudioTime(duration)}`;
-    seekInput.value = String(duration > 0 ? audio.currentTime / duration : 0);
+    seekInput.value = String(trimEnd > trimStart ? (audio.currentTime - trimStart) / (trimEnd - trimStart) : 0);
     playButton.textContent = audio.paused ? "▶" : "❚❚";
     playButton.setAttribute("aria-label", audio.paused ? "Play" : "Pause");
   };
@@ -1686,7 +1735,8 @@ async function openAudioEditor(options: {
 
   audio.addEventListener("loadedmetadata", () => {
     duration = Number.isFinite(audio.duration) ? audio.duration : duration;
-    trimEnd = clamp(trimEnd || duration, trimStart, duration);
+    trimStart = hasInitialTrimStart ? clamp(trimStart, 0, duration) : 0;
+    trimEnd = hasInitialTrimEnd ? clamp(trimEnd, trimStart, duration) : duration;
     seekInput.max = "1";
     seekTo(trimStart);
     draw();
@@ -1703,13 +1753,18 @@ async function openAudioEditor(options: {
   }
   seekInput.addEventListener("input", () => {
     if (duration <= 0) return;
-    seekTo(Number(seekInput.value) * duration);
+    seekTo(seekableAudioTime({ duration, trimStart, trimEnd }, Number(seekInput.value)));
+    draw();
+  });
+  seekInput.addEventListener("change", () => {
+    if (duration <= 0) return;
+    seekTo(seekableAudioTime({ duration, trimStart, trimEnd }, Number(seekInput.value)));
     draw();
   });
   playButton.addEventListener("click", async () => {
     syncAudioSettings();
     if (audio.paused) {
-      if (audio.currentTime < trimStart || audio.currentTime >= trimEnd) {
+      if (audio.currentTime < trimStart || audio.currentTime >= trimEnd || audio.currentTime === 0) {
         audio.currentTime = trimStart;
       }
       try {
@@ -1755,7 +1810,7 @@ async function openAudioEditor(options: {
     const seconds = positionToSeconds(event.clientX);
     if (dragTarget === "start") {
       trimStart = clamp(seconds, 0, Math.max(0, trimEnd - 0.03));
-      if (audio.currentTime < trimStart) audio.currentTime = trimStart;
+      if (audio.currentTime < trimStart || audio.currentTime === 0) audio.currentTime = trimStart;
     } else {
       trimEnd = clamp(seconds, Math.min(duration, trimStart + 0.03), duration);
       if (audio.currentTime > trimEnd) audio.currentTime = trimEnd;
@@ -2313,6 +2368,16 @@ function pairedAudioEffectControl(
   row.className = "ai-game-assets-designer__audio-effect-row";
   row.append(checkbox, amount);
   wrapper.append(text, row);
+
+  return wrapper;
+}
+
+function inlineCheckboxField(label: string, checkbox: HTMLInputElement): HTMLLabelElement {
+  const wrapper = document.createElement("label");
+  wrapper.className = "ai-game-assets-designer__inline-checkbox";
+  const text = document.createElement("span");
+  text.textContent = label;
+  wrapper.append(text, checkbox);
 
   return wrapper;
 }
@@ -2952,7 +3017,9 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__audio-editor-scrubber {
   width: 100%;
+  height: 18px;
   margin: 0;
+  cursor: pointer;
 }
 .ai-game-assets-designer__audio-editor-transport {
   display: grid;
@@ -2962,6 +3029,17 @@ function ensureDesignerStyles(): void {
   margin-top: 10px;
 }
 .ai-game-assets-designer__audio-editor-transport .ai-game-assets-designer__field {
+  margin: 0;
+}
+.ai-game-assets-designer__inline-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #cbd5e1;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.ai-game-assets-designer__inline-checkbox input {
   margin: 0;
 }
 .ai-game-assets-designer__audio-editor-transport button {
