@@ -119,12 +119,12 @@ const invaderWaveSpeedIncrease = 0.3;
 const invaderLaserBaseSpeed = 210;
 const invaderLaserWaveSpeedIncrease = 0.125;
 const menuButtonSize = { width: 190, height: 58 };
-const menuPanelSize = { width: 400, height: 360 };
-const menuTitleY = -126;
-const menuSingleButtonY = -28;
-const menuPauseResumeButtonY = -64;
-const menuPauseNewGameButtonY = 4;
-const menuVolumeSlider = { y: 110, width: 190 };
+const menuPanelSize = { width: 400, height: 400 };
+const menuTitleY = -144;
+const menuSingleButtonY = -54;
+const menuPauseResumeButtonY = -70;
+const menuPauseNewGameButtonY = -8;
+const menuVolumeSlider = { y: 72, width: 190 };
 
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
