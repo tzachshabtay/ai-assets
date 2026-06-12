@@ -101,6 +101,7 @@ type DesignerElements = {
   currentAnimation: HTMLDivElement;
   currentAnimationButton: HTMLButtonElement;
   currentPreview: HTMLDivElement;
+  uploadButton: HTMLButtonElement;
   regenerateButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
   restartButton: HTMLButtonElement;
@@ -428,6 +429,53 @@ export function installAiAssetDesigner(
     }
   });
 
+  elements.uploadButton.addEventListener("click", async () => {
+    const asset = manifest.assets[selectedTargetAssetId];
+
+    try {
+      const file = await pickUploadFile(isAudioAsset(asset) ? "audio/*" : "image/*");
+
+      if (!file) return;
+
+      const uploadedOption = await uploadedOptionFromFile({
+        file,
+        asset,
+        elements,
+        prompt: elements.promptInput.value
+      });
+      renderOptions({
+        elements,
+        generated: [uploadedOption],
+        scene: options.scene,
+        manifest,
+        assetId: selectedTargetAssetId,
+        designerOptions: options,
+        onPreview: options.onPreview,
+        onSelected(option) {
+          selectedOption = option;
+          elements.promoteButton.disabled = false;
+        }
+      });
+      selectedOption = uploadedOption;
+      elements.promoteButton.disabled = false;
+
+      if (isAudioAsset(asset)) {
+        options.onPreview(selectedTargetAssetId, uploadedOption.dataUrl, assetWithGeneratedGeometry(asset, uploadedOption));
+      } else {
+        previewOption({
+          scene: options.scene,
+          manifest,
+          assetId: selectedTargetAssetId,
+          option: uploadedOption,
+          onPreview: options.onPreview
+        });
+      }
+      setStatus(elements, `Uploaded ${file.name}. Promote to save it to code.`, "success");
+    } catch (error) {
+      setStatus(elements, `Upload failed. ${errorMessage(error)}`, "error");
+    }
+  });
+
   elements.promoteButton.addEventListener("click", async () => {
     if (!selectedOption) return;
 
@@ -579,8 +627,10 @@ export function installAiAssetDesigner(
       src: editedCurrentOption?.dataUrl ?? activeVersion.file,
       displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset),
       initialAnimations: editedCurrentOption?.animations ?? asset.animations,
-      onConfirm: async (animations) => {
-        const dataUrl = editedCurrentOption?.dataUrl ?? await imageSourceToDataUrl(activeVersion.file);
+      onConfirm: async ({ animations, dataUrl: editedDataUrl }) => {
+        const dataUrl = editedDataUrl ??
+          editedCurrentOption?.dataUrl ??
+          await imageSourceToDataUrl(activeVersion.file);
         const optionAsset = {
           ...asset,
           animations
@@ -766,6 +816,10 @@ function createDesignerElements(
   regenerateButton.type = "button";
   regenerateButton.textContent = "Regenerate";
 
+  const uploadButton = document.createElement("button");
+  uploadButton.type = "button";
+  uploadButton.textContent = "Upload...";
+
   const promoteButton = document.createElement("button");
   promoteButton.type = "button";
   promoteButton.textContent = "Promote";
@@ -777,7 +831,7 @@ function createDesignerElements(
 
   const actions = document.createElement("div");
   actions.className = "ai-game-assets-designer__actions";
-  actions.append(regenerateButton, promoteButton, restartButton);
+  actions.append(regenerateButton, uploadButton, promoteButton, restartButton);
 
   const versionLabel = document.createElement("div");
   versionLabel.className = "ai-game-assets-designer__meta";
@@ -834,6 +888,7 @@ function createDesignerElements(
     currentAnimation,
     currentAnimationButton,
     currentPreview,
+    uploadButton,
     regenerateButton,
     promoteButton,
     restartButton,
@@ -1025,6 +1080,184 @@ function previewImageSource(options: {
     options.onPreview(options.assetId, options.textureKey, asset);
   };
   image.src = options.src;
+}
+
+async function uploadedOptionFromFile(options: {
+  file: File;
+  asset: AiAssetDefinition;
+  elements: DesignerElements;
+  prompt: string;
+}): Promise<GeneratedDebugOption> {
+  const dataUrl = await fileToDataUrl(options.file);
+  const mimeType = mimeTypeFromDataUrl(dataUrl);
+  const isAudio = isAudioAsset(options.asset);
+  const audioSettings = isAudio
+    ? {
+        ...audioGenerationOverridesFromInputs(options.elements, options.asset),
+        format: audioFormatFromMimeType(mimeType, options.file.name)
+      }
+    : undefined;
+
+  if (isAudio) {
+    return {
+      index: 0,
+      dataUrl,
+      mimeType,
+      prompt: options.prompt || options.asset.prompt,
+      model: "uploaded",
+      audioSettings,
+      audioPlayback: options.asset.audioPlayback,
+      durationSeconds: await audioDurationFromDataUrl(dataUrl)
+    };
+  }
+
+  const imageSize = await imageSizeFromSource(dataUrl);
+  const geometry = uploadedImageGeometry(options.asset, imageSize);
+
+  return {
+    index: 0,
+    dataUrl,
+    mimeType,
+    prompt: options.prompt || options.asset.prompt,
+    model: "uploaded",
+    dimensions: geometry.dimensions,
+    frameGrid: geometry.frameGrid,
+    animations: options.asset.animations,
+    settings: {
+      ...options.asset.settings,
+      format: normalizeAssetFormatFromMimeType(mimeType, options.file.name)
+    }
+  };
+}
+
+function uploadedImageGeometry(
+  asset: AiAssetDefinition,
+  imageSize: AiAssetPreviewDisplaySize
+): {
+  dimensions: NonNullable<GeneratedDebugOption["dimensions"]>;
+  frameGrid?: GeneratedDebugOption["frameGrid"];
+} {
+  if (!asset.frameGrid) {
+    return {
+      dimensions: imageSize
+    };
+  }
+
+  const frameGrid = {
+    ...asset.frameGrid
+  };
+
+  return {
+    dimensions: {
+      width: frameGrid.frameWidth * frameGrid.columns,
+      height: frameGrid.frameHeight * frameGrid.rows
+    },
+    frameGrid
+  };
+}
+
+function pickUploadFile(accept: string): Promise<File | undefined> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = accept;
+    input.addEventListener("change", () => {
+      resolve(input.files?.[0]);
+    }, { once: true });
+    input.click();
+  });
+}
+
+function imageSizeFromSource(src: string): Promise<AiAssetPreviewDisplaySize> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve({
+      width: Math.max(1, image.naturalWidth),
+      height: Math.max(1, image.naturalHeight)
+    });
+    image.onerror = () => reject(new Error("Could not load uploaded image."));
+    image.src = src;
+  });
+}
+
+async function replaceSpriteSheetFrames(options: {
+  src: string;
+  uploadSrc: string;
+  frameGrid: NonNullable<AiAssetDefinition["frameGrid"]>;
+  frames: number[];
+}): Promise<string> {
+  const [sheetImage, frameImage] = await Promise.all([
+    loadImageElement(options.src),
+    loadImageElement(options.uploadSrc)
+  ]);
+  const frameWidth = options.frameGrid.frameWidth;
+  const frameHeight = options.frameGrid.frameHeight;
+  const margin = options.frameGrid.margin ?? 0;
+  const spacing = options.frameGrid.spacing ?? 0;
+  const canvas = document.createElement("canvas");
+  canvas.width = margin * 2 +
+    (options.frameGrid.columns * frameWidth) +
+    (Math.max(0, options.frameGrid.columns - 1) * spacing);
+  canvas.height = margin * 2 +
+    (options.frameGrid.rows * frameHeight) +
+    (Math.max(0, options.frameGrid.rows - 1) * spacing);
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Could not create canvas for frame upload.");
+  }
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(sheetImage, 0, 0, canvas.width, canvas.height);
+
+  for (const frame of options.frames) {
+    const column = frame % options.frameGrid.columns;
+    const row = Math.floor(frame / options.frameGrid.columns);
+    const x = margin + (column * (frameWidth + spacing));
+    const y = margin + (row * (frameHeight + spacing));
+    context.clearRect(x, y, frameWidth, frameHeight);
+    context.drawImage(frameImage, x, y, frameWidth, frameHeight);
+  }
+
+  return canvas.toDataURL("image/png");
+}
+
+function loadImageElement(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not load image."));
+    image.src = src;
+  });
+}
+
+function audioDurationFromDataUrl(src: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const audio = document.createElement("audio");
+    audio.preload = "metadata";
+    audio.addEventListener("loadedmetadata", () => {
+      resolve(Number.isFinite(audio.duration) ? audio.duration : undefined);
+    }, { once: true });
+    audio.addEventListener("error", () => resolve(undefined), { once: true });
+    audio.src = src;
+  });
+}
+
+function audioFormatFromMimeType(mimeType: string, fileName: string): AiAudioFormat {
+  if (mimeType.includes("wav") || /\.wav$/i.test(fileName)) return "wav";
+  if (mimeType.includes("ogg") || /\.ogg$/i.test(fileName)) return "ogg";
+  if (mimeType.includes("opus") || /\.opus$/i.test(fileName)) return "opus";
+  if (mimeType.includes("pcm") || /\.pcm$/i.test(fileName)) return "pcm";
+
+  return "mp3";
+}
+
+function normalizeAssetFormatFromMimeType(mimeType: string, fileName: string): AiAssetFormat {
+  if (mimeType.includes("svg") || /\.svg$/i.test(fileName)) return "svg";
+  if (mimeType.includes("webp") || /\.webp$/i.test(fileName)) return "webp";
+  if (mimeType.includes("jpeg") || /\.jpe?g$/i.test(fileName)) return "jpg";
+
+  return "png";
 }
 
 function renderAudioPlayer(options: {
@@ -1782,7 +2015,7 @@ async function openAnimationEditor(options: {
   src: string;
   displaySize: AiAssetPreviewDisplaySize;
   initialAnimations?: AiAssetAnimation[];
-  onConfirm(animations: AiAssetAnimation[]): void | Promise<void>;
+  onConfirm(result: { animations: AiAssetAnimation[]; dataUrl?: string }): void | Promise<void>;
 }): Promise<void> {
   const frameGrid = options.asset.frameGrid;
   const baseAnimation = options.initialAnimations?.[0] ?? options.asset.animations?.[0];
@@ -1835,13 +2068,17 @@ async function openAnimationEditor(options: {
   cancelButton.type = "button";
   cancelButton.textContent = "Cancel";
 
+  const uploadFrameButton = document.createElement("button");
+  uploadFrameButton.type = "button";
+  uploadFrameButton.textContent = "Upload frame...";
+
   const confirmButton = document.createElement("button");
   confirmButton.type = "button";
   confirmButton.textContent = "Confirm";
 
   const actions = document.createElement("div");
   actions.className = "ai-game-assets-designer__modal-actions";
-  actions.append(cancelButton, confirmButton);
+  actions.append(uploadFrameButton, cancelButton, confirmButton);
 
   card.append(title, stage, strip, fields, actions);
   dialog.append(card);
@@ -1850,6 +2087,8 @@ async function openAnimationEditor(options: {
   let anchorFrameSlot = 0;
   const selectedFrameSlots = new Set<number>([0]);
   let stopPreview: (() => void) | undefined;
+  let spriteSheetSrc = options.src;
+  let editedSpriteSheetSrc: string | undefined;
   const frameTimings = baseAnimation.frames.map((_, index) => ({
     ...baseAnimation.frameTimings?.[index]
   }));
@@ -1876,7 +2115,7 @@ async function openAnimationEditor(options: {
     stopPreview?.();
     stopPreview = startSpritesheetPreview({
       element: stage,
-      src: options.src,
+      src: spriteSheetSrc,
       asset: previewAsset(),
       displaySize: options.displaySize
     });
@@ -1938,7 +2177,7 @@ async function openAnimationEditor(options: {
 
       if (selectedButton) {
         setFrameBackground(selectedButton, {
-          src: options.src,
+          src: spriteSheetSrc,
           frame: baseAnimation.frames[frameSlot] ?? 0,
           frameGrid,
           displaySize: { width: 48, height: 48 },
@@ -2044,7 +2283,7 @@ async function openAnimationEditor(options: {
       button.className = "ai-game-assets-designer__frame-thumb";
       button.setAttribute("aria-label", `Frame ${index + 1}`);
       setFrameBackground(button, {
-        src: options.src,
+        src: spriteSheetSrc,
         frame,
         frameGrid,
         displaySize: { width: 48, height: 48 },
@@ -2065,6 +2304,25 @@ async function openAnimationEditor(options: {
   bindFrameInput(rotationInput, updateSelectedRotation);
   bindFrameInput(tagInput, updateSelectedTag);
 
+  uploadFrameButton.addEventListener("click", async () => {
+    if (selectedFrameSlots.size === 0) return;
+
+    const file = await pickUploadFile("image/*");
+
+    if (!file) return;
+
+    spriteSheetSrc = await replaceSpriteSheetFrames({
+      src: spriteSheetSrc,
+      uploadSrc: await fileToDataUrl(file),
+      frameGrid,
+      frames: selectedFrameSlotsArray().map((frameSlot) => baseAnimation.frames[frameSlot] ?? 0)
+    });
+    editedSpriteSheetSrc = spriteSheetSrc;
+    renderStrip();
+    syncInputs();
+    restartPreview();
+  });
+
   const close = () => {
     stopPreview?.();
     dialog.remove();
@@ -2072,7 +2330,10 @@ async function openAnimationEditor(options: {
 
   cancelButton.addEventListener("click", close);
   confirmButton.addEventListener("click", async () => {
-    await options.onConfirm([animationFromTimings()]);
+    await options.onConfirm({
+      animations: [animationFromTimings()],
+      dataUrl: editedSpriteSheetSrc
+    });
     close();
   });
 
@@ -2481,11 +2742,11 @@ function fileToDataUrl(file: Blob): Promise<string> {
       if (typeof reader.result === "string") {
         resolve(reader.result);
       } else {
-        reject(new Error("Could not read style reference image."));
+        reject(new Error("Could not read uploaded file."));
       }
     });
     reader.addEventListener("error", () => {
-      reject(reader.error ?? new Error("Could not read style reference image."));
+      reject(reader.error ?? new Error("Could not read uploaded file."));
     });
     reader.readAsDataURL(file);
   });

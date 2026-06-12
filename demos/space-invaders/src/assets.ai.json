@@ -4603,8 +4603,46 @@
         "durationSeconds": 12,
         "loop": true
       },
+      "activeVersion": "promoted-1781230051189",
+      "versions": {
+        "promoted-1781230051189": {
+          "name": "promoted-1781230051189",
+          "file": "/assets/audio.music.menu.promoted-1781230051189.mp3",
+          "prompt": "Loopable upbeat retro sci-fi arcade menu music, playful space invaders mood, chiptune-inspired synths, no vocals.",
+          "createdAt": "2026-06-12T02:07:31.367Z",
+          "model": "uploaded",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 12,
+            "loop": true
+          },
+          "audioPlayback": {},
+          "durationSeconds": 324.119979,
+          "notes": "Promoted from the AI asset designer."
+        }
+      },
+      "settings": {},
+      "audioPlayback": {}
+    },
+    "audio.music.game": {
+      "id": "audio.music.game",
+      "kind": "music",
+      "prompt": "Loopable high-energy retro sci-fi arcade gameplay music, driving chiptune bass, tense space battle momentum, no vocals.",
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 24,
+        "loop": true
+      },
       "activeVersion": "",
-      "versions": {}
+      "versions": {},
+      "settings": {},
+      "audioPlayback": {
+        "volume": 0.72,
+        "loop": true
+      }
     }
   },
   "styleGuide": {
