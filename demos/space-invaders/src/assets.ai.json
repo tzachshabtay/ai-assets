@@ -4524,7 +4524,7 @@
         "durationSeconds": 8,
         "loop": false
       },
-      "activeVersion": "promoted-1781228147238",
+      "activeVersion": "promoted-1781228690944",
       "versions": {
         "promoted-1781228147238": {
           "name": "promoted-1781228147238",
@@ -4542,10 +4542,56 @@
           "audioPlayback": {},
           "durationSeconds": 8,
           "notes": "Initial game over effect."
+        },
+        "promoted-1781228625181": {
+          "name": "promoted-1781228625181",
+          "file": "/assets/audio.sfx.game-over.promoted-1781228625181.mp3",
+          "prompt": "Eight-second arcade sci-fi game over sound effect. Dramatic defeat sting that turns into a playful alien victory celebration, retro synths, no voice, no vocals.",
+          "createdAt": "2026-06-12T01:43:45.205Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 8,
+            "loop": false
+          },
+          "audioPlayback": {},
+          "durationSeconds": 8,
+          "parentVersion": "promoted-1781228147238",
+          "notes": "Promoted from the AI asset designer."
+        },
+        "promoted-1781228690944": {
+          "name": "promoted-1781228690944",
+          "file": "/assets/audio.sfx.game-over.promoted-1781228690944.mp3",
+          "prompt": "Eight-second arcade sci-fi game over sound effect. Dramatic defeat sting that turns into a playful alien victory celebration, retro synths, no voice, no vocals.",
+          "createdAt": "2026-06-12T01:44:50.962Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 8,
+            "loop": false
+          },
+          "audioPlayback": {
+            "volume": 0.44,
+            "trimStartSeconds": 0,
+            "trimEndSeconds": 8,
+            "playbackRate": 1
+          },
+          "durationSeconds": 8,
+          "parentVersion": "promoted-1781228625181",
+          "notes": "Promoted from the AI asset designer."
         }
       },
       "settings": {},
-      "audioPlayback": {}
+      "audioPlayback": {
+        "volume": 0.44,
+        "trimStartSeconds": 0,
+        "trimEndSeconds": 8,
+        "playbackRate": 1
+      }
     },
     "audio.music.menu": {
       "id": "audio.music.menu",

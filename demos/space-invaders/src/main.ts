@@ -1110,7 +1110,7 @@ function startGame(assetManifest: AiAssetManifest): void {
     }
 
     private playGameOverEffectThenShowMenu(): void {
-      const sound = this.playAudioAsset(gameOverSfxAssetId, { volume: 0.8 });
+      const sound = this.playAudioAsset(gameOverSfxAssetId, { loop: false, volume: 0.8 });
       const asset = assetManifest.assets[gameOverSfxAssetId];
       const version = asset?.versions[asset.activeVersion];
       const durationSeconds = version?.durationSeconds ??
@@ -1433,13 +1433,14 @@ function startGame(assetManifest: AiAssetManifest): void {
       };
       const rate = playback.playbackRate ?? config?.rate ?? 1;
       const seek = playback.trimStartSeconds ?? config?.seek ?? 0;
+      const loop = config?.loop ?? playback.loop;
       const sound = this.sound.add(assetId);
 
       sound.play({
         ...config,
         rate,
         seek,
-        loop: playback.loop ?? config?.loop,
+        loop,
         volume: (config?.volume ?? 1) * (playback.volume ?? 1)
       });
 
@@ -1450,7 +1451,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         const stopOrLoop = () => {
           if (!sound.isPlaying) return;
 
-          if (playback.loop) {
+          if (loop) {
             sound.play({
               ...config,
               rate,
