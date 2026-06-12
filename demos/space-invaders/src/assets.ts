@@ -4464,6 +4464,39 @@ export const assets = defineAiAssets(
       }
     }
   },
+  "audio.sfx.hero-hit": {
+    "id": "audio.sfx.hero-hit",
+    "kind": "sound",
+    "prompt": "Short sci-fi hero spaceship damage sound effect for losing one life, bright shield impact spark, quick warning chirp, satisfying arcade hit feedback, no voice.",
+    "audioSettings": {
+      "provider": "elevenlabs",
+      "format": "mp3",
+      "durationSeconds": 0.6,
+      "loop": false
+    },
+    "activeVersion": "promoted-1781225495378",
+    "versions": {
+      "promoted-1781225495378": {
+        "name": "promoted-1781225495378",
+        "file": "/assets/audio.sfx.hero-hit.promoted-1781225495378.mp3",
+        "prompt": "Short sci-fi hero spaceship damage sound effect for losing one life, bright shield impact spark, quick warning chirp, satisfying arcade hit feedback, no voice.",
+        "createdAt": "2026-06-12T00:51:35.390Z",
+        "model": "eleven_text_to_sound_v2",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 0.6,
+          "loop": false
+        },
+        "audioPlayback": {},
+        "durationSeconds": 0.6,
+        "notes": "Initial hero hit sound effect."
+      }
+    },
+    "settings": {},
+    "audioPlayback": {}
+  },
   "audio.music.menu": {
     "id": "audio.music.menu",
     "kind": "music",

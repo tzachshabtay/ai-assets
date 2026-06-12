@@ -103,6 +103,7 @@ const uiAnimationAssetIds = [
 const playerLaserSfxAssetId = "audio.sfx.player-laser";
 const invaderExplosionSfxAssetId = "audio.sfx.invader-explosion";
 const alienLaserSfxAssetId = "audio.sfx.alien-laser";
+const heroHitSfxAssetId = "audio.sfx.hero-hit";
 const heroExplosionSfxAssetId = "audio.sfx.hero-explosion";
 
 const laserHitDisplaySizes: Record<string, { width: number; height: number }> = {
@@ -321,6 +322,7 @@ function startGame(assetManifest: AiAssetManifest): void {
           "audio.sfx.player-laser",
           "audio.sfx.invader-explosion",
           "audio.sfx.alien-laser",
+          "audio.sfx.hero-hit",
           "audio.sfx.hero-explosion",
           "audio.music.menu"
         ],
@@ -893,6 +895,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
 
       this.statusText?.setText(`Hit. ${this.heroLives} ${this.heroLives === 1 ? "life" : "lives"} left.`);
+      this.playAudioAsset(heroHitSfxAssetId, { volume: 0.55 });
       this.playHeroActionAnimation("hero.ship.hit");
     }
 
