@@ -1595,48 +1595,12 @@ async function openAudioEditor(options: {
   stage.append(seekInput);
   const volumeInput = rangeInput(0, 1.5, 0.01);
   const speedInput = rangeInput(0.5, 2, 0.01);
-  const pitchInput = signedNumberInput();
-  pitchInput.min = "-24";
-  pitchInput.max = "24";
-  pitchInput.step = "1";
-  const reverseInput = document.createElement("input");
-  reverseInput.type = "checkbox";
-
-  const reverbInput = document.createElement("input");
-  reverbInput.type = "checkbox";
-  const reverbAmountInput = rangeInput(0, 1, 0.01);
-  const delayInput = document.createElement("input");
-  delayInput.type = "checkbox";
-  const delayMixInput = rangeInput(0, 1, 0.01);
-  const filterSelect = document.createElement("select");
-  for (const [value, label] of [
-    ["none", "None"],
-    ["lowpass", "Low-pass"],
-    ["highpass", "High-pass"]
-  ]) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = label;
-    filterSelect.append(option);
-  }
-  const filterFrequencyInput = numericInput();
-  filterFrequencyInput.min = "80";
-  filterFrequencyInput.max = "12000";
-  filterFrequencyInput.step = "10";
 
   const fields = document.createElement("div");
   fields.className = "ai-game-assets-designer__audio-editor-fields";
-  const reverbControl = pairedAudioEffectControl("Reverb", reverbInput, reverbAmountInput);
-  const delayControl = pairedAudioEffectControl("Delay", delayInput, delayMixInput);
   fields.append(
     labelWrap("Volume", volumeInput),
-    labelWrap("Speed", speedInput),
-    labelWrap("Pitch", pitchInput),
-    labelWrap("Reverse", reverseInput),
-    reverbControl,
-    delayControl,
-    labelWrap("Filter", filterSelect),
-    labelWrap("Filter Hz", filterFrequencyInput)
+    labelWrap("Speed", speedInput)
   );
 
   const hint = document.createElement("div");
@@ -1669,46 +1633,19 @@ async function openAudioEditor(options: {
 
   volumeInput.value = String(clamp(initial.volume ?? 1, 0, 1.5));
   speedInput.value = String(clamp(initial.playbackRate ?? 1, 0.5, 2));
-  pitchInput.value = String(initial.pitchSemitones ?? 0);
   loopInput.checked = Boolean(initial.loop);
-  reverseInput.checked = Boolean(initial.reverse);
-  reverbInput.checked = Boolean(initial.reverb?.enabled);
-  reverbAmountInput.value = String(clamp(initial.reverb?.amount ?? 0.25, 0, 1));
-  delayInput.checked = Boolean(initial.delay?.enabled);
-  delayMixInput.value = String(clamp(initial.delay?.mix ?? 0.2, 0, 1));
-  filterSelect.value = initial.filter?.type ?? "none";
-  filterFrequencyInput.value = String(initial.filter?.frequencyHz ?? 1200);
 
   const playback = (): AiAudioPlaybackSettings => ({
     volume: numberInput(volumeInput, 1),
     trimStartSeconds: trimStart,
     trimEndSeconds: trimEnd,
     playbackRate: numberInput(speedInput, 1),
-    pitchSemitones: integerInput(pitchInput, 0),
-    loop: loopInput.checked || undefined,
-    reverse: reverseInput.checked || undefined,
-    reverb: {
-      enabled: reverbInput.checked,
-      amount: numberInput(reverbAmountInput, 0.25),
-      decaySeconds: 1.2
-    },
-    delay: {
-      enabled: delayInput.checked,
-      timeSeconds: 0.12,
-      feedback: 0.18,
-      mix: numberInput(delayMixInput, 0.2)
-    },
-    filter: {
-      type: normalizeAudioFilterType(filterSelect.value),
-      frequencyHz: positiveNumberInput(filterFrequencyInput, 1200)
-    }
+    loop: loopInput.checked || undefined
   });
 
   const syncAudioSettings = () => {
     audio.volume = clamp(numberInput(volumeInput, 1), 0, 1);
     audio.playbackRate = clamp(numberInput(speedInput, 1), 0.5, 2);
-    reverbAmountInput.disabled = !reverbInput.checked;
-    delayMixInput.disabled = !delayInput.checked;
   };
 
   const seekTo = (value: number) => {
@@ -1758,12 +1695,6 @@ async function openAudioEditor(options: {
   audio.addEventListener("timeupdate", draw);
   for (const input of [volumeInput, speedInput]) {
     input.addEventListener("input", syncAudioSettings);
-  }
-  for (const input of [reverbInput, delayInput]) {
-    input.addEventListener("input", () => {
-      syncAudioSettings();
-      draw();
-    });
   }
   seekInput.addEventListener("input", () => {
     if (duration <= 0) return;
@@ -2306,14 +2237,6 @@ function isAudioAsset(asset: AiAssetDefinition | undefined): boolean {
   return asset?.kind === "sound" || asset?.kind === "music";
 }
 
-function normalizeAudioFilterType(
-  value: string
-): NonNullable<AiAudioPlaybackSettings["filter"]>["type"] {
-  if (value === "lowpass" || value === "highpass") return value;
-
-  return "none";
-}
-
 function assetWithGeneratedGeometry(
   asset: AiAssetDefinition,
   option: GeneratedDebugOption
@@ -2367,23 +2290,6 @@ function rangeInput(min: number, max: number, step: number): HTMLInputElement {
   input.step = String(step);
 
   return input;
-}
-
-function pairedAudioEffectControl(
-  label: string,
-  checkbox: HTMLInputElement,
-  amount: HTMLInputElement
-): HTMLLabelElement {
-  const wrapper = document.createElement("label");
-  wrapper.className = "ai-game-assets-designer__field ai-game-assets-designer__audio-effect-field";
-  const text = document.createElement("span");
-  text.textContent = label;
-  const row = document.createElement("div");
-  row.className = "ai-game-assets-designer__audio-effect-row";
-  row.append(checkbox, amount);
-  wrapper.append(text, row);
-
-  return wrapper;
 }
 
 function inlineCheckboxField(label: string, checkbox: HTMLInputElement): HTMLLabelElement {
@@ -3094,21 +3000,6 @@ function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__audio-editor-fields input[type="range"] {
   width: 100%;
-}
-.ai-game-assets-designer__audio-effect-field {
-  min-width: 0;
-}
-.ai-game-assets-designer__audio-effect-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-}
-.ai-game-assets-designer__audio-effect-row input[type="checkbox"] {
-  margin: 0;
-}
-.ai-game-assets-designer__audio-effect-row input[type="range"]:disabled {
-  opacity: 0.38;
 }
 .ai-game-assets-designer__audio-editor-hint {
   margin-top: 10px;
