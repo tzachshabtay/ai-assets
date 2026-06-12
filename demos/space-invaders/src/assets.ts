@@ -4474,7 +4474,7 @@ export const assets = defineAiAssets(
       "durationSeconds": 0.6,
       "loop": false
     },
-    "activeVersion": "promoted-1781225495378",
+    "activeVersion": "promoted-1781225783859",
     "versions": {
       "promoted-1781225495378": {
         "name": "promoted-1781225495378",
@@ -4492,6 +4492,24 @@ export const assets = defineAiAssets(
         "audioPlayback": {},
         "durationSeconds": 0.6,
         "notes": "Initial hero hit sound effect."
+      },
+      "promoted-1781225783859": {
+        "name": "promoted-1781225783859",
+        "file": "/assets/audio.sfx.hero-hit.promoted-1781225783859.mp3",
+        "prompt": "Short sci-fi hero spaceship damage sound effect for losing one life, bright shield impact spark, quick warning chirp, satisfying arcade hit feedback, no voice.",
+        "createdAt": "2026-06-12T00:56:23.872Z",
+        "model": "eleven_text_to_sound_v2",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 0.6,
+          "loop": false
+        },
+        "audioPlayback": {},
+        "durationSeconds": 0.6,
+        "parentVersion": "promoted-1781225495378",
+        "notes": "Promoted from the AI asset designer."
       }
     },
     "settings": {},
