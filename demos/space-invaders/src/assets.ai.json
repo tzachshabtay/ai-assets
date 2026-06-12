@@ -4514,6 +4514,39 @@
       "settings": {},
       "audioPlayback": {}
     },
+    "audio.sfx.game-over": {
+      "id": "audio.sfx.game-over",
+      "kind": "sound",
+      "prompt": "Eight-second arcade sci-fi game over sound effect. Dramatic defeat sting that turns into a playful alien victory celebration, retro synths, no voice, no vocals.",
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 8,
+        "loop": false
+      },
+      "activeVersion": "promoted-1781228147238",
+      "versions": {
+        "promoted-1781228147238": {
+          "name": "promoted-1781228147238",
+          "file": "/assets/audio.sfx.game-over.promoted-1781228147238.mp3",
+          "prompt": "Eight-second arcade sci-fi game over sound effect. Dramatic defeat sting that turns into a playful alien victory celebration, retro synths, no voice, no vocals.",
+          "createdAt": "2026-06-12T01:35:47.245Z",
+          "model": "eleven_text_to_sound_v2",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 8,
+            "loop": false
+          },
+          "audioPlayback": {},
+          "durationSeconds": 8,
+          "notes": "Initial game over effect."
+        }
+      },
+      "settings": {},
+      "audioPlayback": {}
+    },
     "audio.music.menu": {
       "id": "audio.music.menu",
       "kind": "music",

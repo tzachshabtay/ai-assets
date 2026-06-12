@@ -105,6 +105,7 @@ const invaderExplosionSfxAssetId = "audio.sfx.invader-explosion";
 const alienLaserSfxAssetId = "audio.sfx.alien-laser";
 const heroHitSfxAssetId = "audio.sfx.hero-hit";
 const heroExplosionSfxAssetId = "audio.sfx.hero-explosion";
+const gameOverSfxAssetId = "audio.sfx.game-over";
 
 const laserHitDisplaySizes: Record<string, { width: number; height: number }> = {
   "laser.blue.hit": { width: 18, height: 18 },
@@ -364,6 +365,7 @@ function startGame(assetManifest: AiAssetManifest): void {
           "audio.sfx.alien-laser",
           "audio.sfx.hero-hit",
           "audio.sfx.hero-explosion",
+          "audio.sfx.game-over",
           "audio.music.menu"
         ],
         onManifestUpdated: (updatedManifest) => {
@@ -1096,6 +1098,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.hero.setFlipX(false);
       this.heroAnimationKey = "hero.ship.explosion";
       this.playAudioAsset(heroExplosionSfxAssetId, { volume: 0.7 });
+      this.playGameOverEffectThenShowMenu();
       this.hero.play("hero.ship.explosion", true);
       this.applyHeroFrameTransform("hero.ship.explosion", 0);
       this.attachHeroFrameTransformHandler("hero.ship.explosion");
@@ -1103,8 +1106,31 @@ function startGame(assetManifest: AiAssetManifest): void {
         this.detachHeroFrameTransformHandler();
         this.hero?.setVisible(false);
         this.hero?.setActive(false);
-        this.showGameMenu("Game Over");
       });
+    }
+
+    private playGameOverEffectThenShowMenu(): void {
+      const sound = this.playAudioAsset(gameOverSfxAssetId, { volume: 0.8 });
+      const asset = assetManifest.assets[gameOverSfxAssetId];
+      const version = asset?.versions[asset.activeVersion];
+      const durationSeconds = version?.durationSeconds ??
+        asset?.audioSettings?.durationSeconds ??
+        8;
+      let didShowMenu = false;
+      const showMenu = () => {
+        if (didShowMenu) return;
+
+        didShowMenu = true;
+        this.showGameMenu("Game Over");
+      };
+
+      if (!sound) {
+        this.time.delayedCall(durationSeconds * 1000, showMenu);
+        return;
+      }
+
+      sound.once(Phaser.Sound.Events.COMPLETE, showMenu);
+      this.time.delayedCall((durationSeconds + 0.25) * 1000, showMenu);
     }
 
     private startInvaderCelebration(): void {
@@ -1395,8 +1421,8 @@ function startGame(assetManifest: AiAssetManifest): void {
     private playAudioAsset(
       assetId: string,
       config?: Phaser.Types.Sound.SoundConfig
-    ): void {
-      if (!this.cache.audio.exists(assetId)) return;
+    ): Phaser.Sound.BaseSound | undefined {
+      if (!this.cache.audio.exists(assetId)) return undefined;
 
       const asset = assetManifest.assets[assetId];
       const version = asset?.versions[asset.activeVersion];
@@ -1446,6 +1472,8 @@ function startGame(assetManifest: AiAssetManifest): void {
           stopOrLoop
         );
       }
+
+      return sound;
     }
 
     private refreshAudioAsset(assetId: string, source: string): void {
