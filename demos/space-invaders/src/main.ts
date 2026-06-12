@@ -210,12 +210,13 @@ function startGame(assetManifest: AiAssetManifest): void {
     private heroLockedUntil = 0;
     private heroFrameTransformHandler?: (...args: unknown[]) => void;
     private audioPlaybackOverrides = new Map<string, AiAssetDefinition["audioPlayback"]>();
-    private menuMusic?: Phaser.Sound.BaseSound;
-    private gameMusic?: Phaser.Sound.BaseSound;
+    private menuMusic?: HTMLAudioElement;
+    private gameMusic?: HTMLAudioElement;
     private menuMusicVolume = 0;
     private gameMusicVolume = 0;
     private musicMode: "menu" | "game" = "menu";
     private musicFadeEvent?: Phaser.Time.TimerEvent;
+    private musicSourceOverrides = new Map<string, string>();
     private invaderAnimationSizes = new Map<string, { width: number; height: number }>();
     private invaderAnimations = new Map<string, AiAssetAnimation>();
     private invaderAnimationKeys = new WeakMap<Phaser.GameObjects.Sprite, string>();
@@ -233,7 +234,6 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     preload() {
       loadAiAssets(this, assetManifest);
-      loadAiAudioAssets(this, soundOnlyManifest(assetManifest));
     }
 
     create() {
@@ -273,6 +273,7 @@ function startGame(assetManifest: AiAssetManifest): void {
           this.restartAllMusicTracks();
         });
       }
+      this.input.once("pointerdown", () => this.retryMusicPlayback());
 
       this.add.rectangle(320, 320, 640, 640, 0x10131a).setDepth(-100);
       this.background = this.add.image(320, 320, this.aiRuntime.key("background.space"));
@@ -294,6 +295,7 @@ function startGame(assetManifest: AiAssetManifest): void {
 
       this.startNewGame(false);
       this.createGameMenu("AI Assets Invaders");
+      this.loadSoundAssets();
       this.loadMusicAssets();
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
@@ -301,13 +303,12 @@ function startGame(assetManifest: AiAssetManifest): void {
 
         if (asset.kind === "sound" || asset.kind === "music") {
           this.audioPlaybackOverrides.set(assetId, asset.audioPlayback);
-          this.refreshAudioAsset(
-            assetId,
-            textureKey,
-            assetId === menuMusicAssetId || assetId === gameMusicAssetId
-              ? () => this.restartMusicTrack(assetId)
-              : undefined
-          );
+          if (asset.kind === "music") {
+            this.musicSourceOverrides.set(assetId, textureKey);
+            this.restartMusicTrack(assetId);
+          } else {
+            this.refreshAudioAsset(assetId, textureKey);
+          }
           return;
         }
 
@@ -929,6 +930,8 @@ function startGame(assetManifest: AiAssetManifest): void {
     private setMasterVolume(volume: number): void {
       this.masterVolume = Phaser.Math.Clamp(volume, 0, 1);
       this.sound.volume = this.masterVolume;
+      this.setMusicTrackVolume(menuMusicAssetId, this.menuMusicVolume);
+      this.setMusicTrackVolume(gameMusicAssetId, this.gameMusicVolume);
       saveMasterVolume(this.masterVolume);
       this.updateMasterVolumeUi();
     }
@@ -1183,7 +1186,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       for (const invader of this.invaders) {
         if (!invader.active) continue;
 
-        this.playInvaderAnimation(invader, invader.invaderType.celebration);
+        this.playInvaderAnimation(invader, invader.invaderType.celebration, true);
       }
     }
 
@@ -1382,7 +1385,8 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     private playInvaderAnimation(
       invader: Phaser.GameObjects.Sprite,
-      animationKey: string
+      animationKey: string,
+      randomStartFrame = false
     ): void {
       const existingHandler = this.invaderFrameOffsetHandlers.get(invader);
 
@@ -1391,9 +1395,14 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
 
       this.invaderAnimationKeys.set(invader, animationKey);
-      invader.play(animationKey);
+      invader.play(randomStartFrame ? { key: animationKey, randomFrame: true } : animationKey);
       this.applyInvaderAnimationSize(invader, animationKey);
-      this.applyInvaderFrameTransform(invader, animationKey, 0);
+      const currentFrame = invader.anims.currentFrame as { index?: number } | undefined;
+      this.applyInvaderFrameTransform(
+        invader,
+        animationKey,
+        Math.max(0, (currentFrame?.index ?? 1) - 1)
+      );
 
       const handler = (...args: unknown[]) => {
         const frame = args[1] as { index?: number } | undefined;
@@ -1532,53 +1541,73 @@ function startGame(assetManifest: AiAssetManifest): void {
       }
     }
 
+    private loadSoundAssets(): void {
+      const loaded = loadAiAudioAssets(this, soundOnlyManifest(assetManifest));
+      if (loaded.length > 0) this.load.start();
+    }
+
     private loadMusicAssets(): void {
-      const musicAssets = [menuMusicAssetId, gameMusicAssetId]
-        .map((assetId) => assetManifest.assets[assetId])
-        .filter((asset): asset is AiAssetDefinition => Boolean(asset));
-      const assetsToLoad = musicAssets.filter((asset) => {
-        const version = asset.versions[asset.activeVersion];
-
-        return Boolean(version?.file) && !this.cache.audio.exists(asset.id);
-      });
-
-      if (assetsToLoad.length === 0) {
-        this.fadeMusicTo(this.musicMode, 0);
-        return;
-      }
-
-      for (const asset of assetsToLoad) {
-        const version = asset.versions[asset.activeVersion];
-        if (version?.file) this.load.audio(asset.id, version.file);
-      }
-
-      this.load.once(Phaser.Loader.Events.COMPLETE, () => {
-        this.fadeMusicTo(this.musicMode, 0);
-      });
-      this.load.start();
+      this.ensureMusicTracks();
+      this.fadeMusicTo(this.musicMode, 0);
     }
 
     private createLoopingMusicTrack(
       assetId: string,
       volume: number
-    ): Phaser.Sound.BaseSound | undefined {
-      if (!this.cache.audio.exists(assetId)) return undefined;
+    ): HTMLAudioElement | undefined {
+      const source = this.musicSourceForAsset(assetId);
+      if (!source) return undefined;
 
       const playback = this.playbackForAudioAsset(assetId);
-      const sound = this.sound.add(assetId);
-      sound.play({
-        loop: true,
-        rate: playback.playbackRate ?? 1,
-        seek: playback.trimStartSeconds ?? 0,
-        volume
-      });
+      const audio = new Audio(source);
+      audio.loop = true;
+      audio.preload = "auto";
+      audio.playbackRate = playback.playbackRate ?? 1;
+      audio.volume = Phaser.Math.Clamp(volume * this.masterVolume, 0, 1);
+      audio.load();
+      if (playback.trimStartSeconds !== undefined) {
+        audio.addEventListener("loadedmetadata", () => {
+          audio.currentTime = Phaser.Math.Clamp(
+            playback.trimStartSeconds ?? 0,
+            0,
+            Math.max(0, audio.duration || 0)
+          );
+        }, { once: true });
+      }
+      this.playMusicElement(audio);
 
-      return sound;
+      return audio;
+    }
+
+    private musicSourceForAsset(assetId: string): string | undefined {
+      const override = this.musicSourceOverrides.get(assetId);
+      if (override) return override;
+
+      const asset = assetManifest.assets[assetId];
+      const version = asset?.versions[asset.activeVersion];
+
+      return version?.file;
+    }
+
+    private playMusicElement(audio: HTMLAudioElement | undefined): void {
+      if (!audio || !audio.paused) return;
+
+      const playResult = audio.play();
+      if (playResult) {
+        playResult.catch(() => {
+          // Browser autoplay policy may require the next player gesture.
+        });
+      }
+    }
+
+    private retryMusicPlayback(): void {
+      this.playMusicElement(this.menuMusic);
+      this.playMusicElement(this.gameMusic);
     }
 
     private setMusicTrackVolume(assetId: string, volume: number): void {
       const clampedVolume = Phaser.Math.Clamp(volume, 0, 1);
-      const sound = assetId === menuMusicAssetId ? this.menuMusic : this.gameMusic;
+      const audio = assetId === menuMusicAssetId ? this.menuMusic : this.gameMusic;
 
       if (assetId === menuMusicAssetId) {
         this.menuMusicVolume = clampedVolume;
@@ -1586,20 +1615,13 @@ function startGame(assetManifest: AiAssetManifest): void {
         this.gameMusicVolume = clampedVolume;
       }
 
-      const adjustableSound = sound as (Phaser.Sound.BaseSound & {
-        setVolume?: (value: number) => Phaser.Sound.BaseSound;
-        volume?: number;
-      }) | undefined;
-      if (adjustableSound?.setVolume) {
-        adjustableSound.setVolume(clampedVolume);
-      } else if (adjustableSound) {
-        adjustableSound.volume = clampedVolume;
-      }
+      if (audio) audio.volume = Phaser.Math.Clamp(clampedVolume * this.masterVolume, 0, 1);
     }
 
     private fadeMusicTo(mode: "menu" | "game", durationMs = musicFadeDurationMs): void {
       this.musicMode = mode;
       this.ensureMusicTracks();
+      this.retryMusicPlayback();
       this.musicFadeEvent?.remove(false);
 
       const startTime = this.time.now;
@@ -1646,13 +1668,15 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     private restartMusicTrack(assetId: string): void {
       if (assetId === menuMusicAssetId) {
-        this.menuMusic?.stop();
-        this.menuMusic?.destroy();
+        this.menuMusic?.pause();
+        this.menuMusic?.removeAttribute("src");
+        this.menuMusic?.load();
         this.menuMusic = undefined;
         this.menuMusicVolume = 0;
       } else if (assetId === gameMusicAssetId) {
-        this.gameMusic?.stop();
-        this.gameMusic?.destroy();
+        this.gameMusic?.pause();
+        this.gameMusic?.removeAttribute("src");
+        this.gameMusic?.load();
         this.gameMusic = undefined;
         this.gameMusicVolume = 0;
       }
@@ -1662,10 +1686,12 @@ function startGame(assetManifest: AiAssetManifest): void {
     }
 
     private restartAllMusicTracks(): void {
-      this.menuMusic?.stop();
-      this.menuMusic?.destroy();
-      this.gameMusic?.stop();
-      this.gameMusic?.destroy();
+      this.menuMusic?.pause();
+      this.menuMusic?.removeAttribute("src");
+      this.menuMusic?.load();
+      this.gameMusic?.pause();
+      this.gameMusic?.removeAttribute("src");
+      this.gameMusic?.load();
       this.menuMusic = undefined;
       this.gameMusic = undefined;
       this.menuMusicVolume = 0;

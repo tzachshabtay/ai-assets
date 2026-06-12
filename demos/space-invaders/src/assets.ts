@@ -4169,7 +4169,7 @@ export const assets = defineAiAssets(
       "durationSeconds": 0.5,
       "loop": false
     },
-    "activeVersion": "promoted-1780843618857",
+    "activeVersion": "promoted-1781304866527",
     "versions": {
       "promoted-1780842819494": {
         "name": "promoted-1780842819494",
@@ -4203,9 +4203,38 @@ export const assets = defineAiAssets(
         "durationSeconds": 0.5,
         "parentVersion": "promoted-1780842819494",
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1781304866527": {
+        "name": "promoted-1781304866527",
+        "file": "/assets/audio.sfx.invader-explosion.promoted-1781304866527.mp3",
+        "prompt": "Short soft satisying 8-bit explosion",
+        "createdAt": "2026-06-12T22:54:26.565Z",
+        "model": "eleven_text_to_sound_v2",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 0.5,
+          "loop": false
+        },
+        "audioPlayback": {
+          "volume": 1.5,
+          "trimStartSeconds": 0,
+          "trimEndSeconds": 0.48,
+          "playbackRate": 1
+        },
+        "durationSeconds": 0.5,
+        "parentVersion": "promoted-1780843618857",
+        "notes": "Promoted from the AI asset designer."
       }
     },
-    "settings": {}
+    "settings": {},
+    "audioPlayback": {
+      "volume": 1.5,
+      "trimStartSeconds": 0,
+      "trimEndSeconds": 0.48,
+      "playbackRate": 1
+    }
   },
   "audio.sfx.alien-laser": {
     "id": "audio.sfx.alien-laser",
@@ -4637,8 +4666,29 @@ export const assets = defineAiAssets(
       "durationSeconds": 24,
       "loop": true
     },
-    "activeVersion": "",
-    "versions": {},
+    "activeVersion": "promoted-1781304553965",
+    "versions": {
+      "promoted-1781304553965": {
+        "name": "promoted-1781304553965",
+        "file": "/assets/audio.music.game.promoted-1781304553965.mp3",
+        "prompt": "Loopable high-energy retro sci-fi arcade gameplay music, driving chiptune bass, tense space battle momentum, no vocals.",
+        "createdAt": "2026-06-12T22:49:14.113Z",
+        "model": "uploaded",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 24,
+          "loop": true
+        },
+        "audioPlayback": {
+          "volume": 0.72,
+          "loop": true
+        },
+        "durationSeconds": 193.439979,
+        "notes": "Promoted from the AI asset designer."
+      }
+    },
     "settings": {},
     "audioPlayback": {
       "volume": 0.72,
