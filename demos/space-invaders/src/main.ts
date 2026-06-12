@@ -119,10 +119,12 @@ const invaderWaveSpeedIncrease = 0.3;
 const invaderLaserBaseSpeed = 210;
 const invaderLaserWaveSpeedIncrease = 0.125;
 const menuButtonSize = { width: 190, height: 58 };
-const menuPanelSize = { width: 380, height: 300 };
-const menuNewGameButtonY = 82;
-const menuResumeButtonY = 22;
-const menuVolumeSlider = { y: -46, width: 190 };
+const menuPanelSize = { width: 400, height: 360 };
+const menuTitleY = -126;
+const menuSingleButtonY = -28;
+const menuPauseResumeButtonY = -64;
+const menuPauseNewGameButtonY = 4;
+const menuVolumeSlider = { y: 110, width: 190 };
 
 let manifest: AiAssetManifest;
 let sceneRef: DemoScene | undefined;
@@ -708,7 +710,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.menuPanel = this.add.image(0, 0, this.aiRuntime.key("ui.panel"));
       this.menuPanel.setDisplaySize(menuPanelSize.width, menuPanelSize.height);
 
-      this.menuTitle = this.add.text(0, -104, title, {
+      this.menuTitle = this.add.text(0, menuTitleY, title, {
         align: "center",
         color: "#f8fafc",
         fontSize: "24px"
@@ -756,7 +758,7 @@ function startGame(assetManifest: AiAssetManifest): void {
         this.isDraggingVolume = false;
       });
 
-      this.newGameButton = this.add.sprite(0, menuNewGameButtonY, this.aiRuntime.key("ui.button.idle"));
+      this.newGameButton = this.add.sprite(0, menuSingleButtonY, this.aiRuntime.key("ui.button.idle"));
       this.newGameButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
       this.newGameButton.setInteractive({ useHandCursor: true });
       this.newGameButton.on("pointerover", () => this.playNewGameButtonAnimation("hover"));
@@ -768,14 +770,14 @@ function startGame(assetManifest: AiAssetManifest): void {
       });
       this.playNewGameButtonAnimation("idle");
 
-      this.newGameButtonText = this.add.text(0, menuNewGameButtonY, "New Game", {
+      this.newGameButtonText = this.add.text(0, menuSingleButtonY, "New Game", {
         align: "center",
         color: "#f8fafc",
         fontSize: "18px"
       });
       this.newGameButtonText.setOrigin(0.5);
 
-      this.resumeButton = this.add.sprite(0, menuResumeButtonY, this.aiRuntime.key("ui.button.idle"));
+      this.resumeButton = this.add.sprite(0, menuPauseResumeButtonY, this.aiRuntime.key("ui.button.idle"));
       this.resumeButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
       this.resumeButton.setInteractive({ useHandCursor: true });
       this.resumeButton.on("pointerover", () => this.playResumeButtonAnimation("hover"));
@@ -787,7 +789,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       });
       this.playResumeButtonAnimation("idle");
 
-      this.resumeButtonText = this.add.text(0, menuResumeButtonY, "Resume", {
+      this.resumeButtonText = this.add.text(0, menuPauseResumeButtonY, "Resume", {
         align: "center",
         color: "#f8fafc",
         fontSize: "18px"
@@ -816,6 +818,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.gameActive = false;
       this.isPaused = Boolean(options.showResume);
       this.menuTitle?.setText(title);
+      this.layoutMenuControls(Boolean(options.showResume));
       this.playNewGameButtonAnimation("idle");
       this.playResumeButtonAnimation("idle");
       this.newGameButton?.setInteractive({ useHandCursor: true });
@@ -837,6 +840,15 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.resumeButton?.disableInteractive();
       this.menuContainer?.setVisible(false);
       this.menuContainer?.setActive(false);
+    }
+
+    private layoutMenuControls(showResume: boolean): void {
+      const newGameY = showResume ? menuPauseNewGameButtonY : menuSingleButtonY;
+
+      this.newGameButton?.setPosition(0, newGameY);
+      this.newGameButtonText?.setPosition(0, newGameY);
+      this.resumeButton?.setPosition(0, menuPauseResumeButtonY);
+      this.resumeButtonText?.setPosition(0, menuPauseResumeButtonY);
     }
 
     private playNewGameButtonAnimation(state: "idle" | "hover" | "clicked"): void {
