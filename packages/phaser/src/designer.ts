@@ -1314,7 +1314,7 @@ async function openFrameTouchUpEditor(options: {
   const zoomOutButton = touchUpButton("Zoom -");
   const zoomInButton = touchUpButton("Zoom +");
   const brushButton = touchUpButton("Brush");
-  const brushMenuButton = touchUpButton("v");
+  const brushMenuButton = touchUpButton("");
   brushMenuButton.className = "ai-game-assets-designer__touchup-split-arrow";
   brushMenuButton.setAttribute("aria-label", "Brush settings");
   const brushSplit = document.createElement("div");
@@ -4244,6 +4244,16 @@ function ensureDesignerStyles(): void {
   border-left: 0;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
+}
+.ai-game-assets-designer__touchup-split-arrow::before {
+  content: "";
+  display: block;
+  width: 0;
+  height: 0;
+  margin: 0 auto;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid currentColor;
 }
 .ai-game-assets-designer__touchup-brush-menu {
   position: absolute;
