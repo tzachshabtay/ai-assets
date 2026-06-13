@@ -1314,6 +1314,34 @@ async function openFrameTouchUpEditor(options: {
   const zoomOutButton = touchUpButton("Zoom -");
   const zoomInButton = touchUpButton("Zoom +");
   const brushButton = touchUpButton("Brush");
+  const brushMenuButton = touchUpButton("v");
+  brushMenuButton.className = "ai-game-assets-designer__touchup-split-arrow";
+  brushMenuButton.setAttribute("aria-label", "Brush settings");
+  const brushSplit = document.createElement("div");
+  brushSplit.className = "ai-game-assets-designer__touchup-split";
+  brushSplit.append(brushButton, brushMenuButton);
+  const brushMenu = document.createElement("div");
+  brushMenu.className = "ai-game-assets-designer__touchup-brush-menu";
+  brushMenu.hidden = true;
+  const brushSizeInput = document.createElement("input");
+  brushSizeInput.type = "range";
+  brushSizeInput.min = "1";
+  brushSizeInput.max = "32";
+  brushSizeInput.step = "1";
+  brushSizeInput.value = "4";
+  const brushSizeValue = document.createElement("span");
+  brushSizeValue.textContent = brushSizeInput.value;
+  const brushSizeField = document.createElement("label");
+  brushSizeField.className = "ai-game-assets-designer__touchup-brush-size";
+  brushSizeField.append("Size", brushSizeInput, brushSizeValue);
+  const antiAliasInput = document.createElement("input");
+  antiAliasInput.type = "checkbox";
+  antiAliasInput.checked = true;
+  const antiAliasField = document.createElement("label");
+  antiAliasField.className = "ai-game-assets-designer__inline-checkbox";
+  antiAliasField.append(antiAliasInput, "Anti-aliased round tip");
+  brushMenu.append(brushSizeField, antiAliasField);
+  brushSplit.append(brushMenu);
   const eraserButton = touchUpButton("Eraser");
   const pickerButton = touchUpButton("Picker");
   const selectButton = touchUpButton("Select");
@@ -1345,7 +1373,7 @@ async function openFrameTouchUpEditor(options: {
     zoomInButton,
     rgbaLabel,
     pickerButton,
-    brushButton,
+    brushSplit,
     eraserButton,
     selectButton,
     fillButton,
@@ -1435,6 +1463,8 @@ async function openFrameTouchUpEditor(options: {
     return [red, green, blue, alpha];
   };
 
+  const brushSize = () => positiveIntegerInput(brushSizeInput, 1);
+
   const setDirty = (value: boolean) => {
     dirty = value;
     dirtyLabel.hidden = !dirty;
@@ -1512,11 +1542,42 @@ async function openFrameTouchUpEditor(options: {
     };
   };
 
-  const brushRadius = () => Math.max(1, Math.ceil(7 / zoom));
+  const setZoom = (
+    value: number,
+    anchor?: {
+      clientX: number;
+      clientY: number;
+    }
+  ) => {
+    const previousZoom = zoom;
+    let anchorCanvasX: number | undefined;
+    let anchorCanvasY: number | undefined;
+    let anchorOffsetX: number | undefined;
+    let anchorOffsetY: number | undefined;
 
-  const setZoom = (value: number) => {
+    if (anchor) {
+      const canvasBounds = canvas.getBoundingClientRect();
+      const wrapBounds = canvasWrap.getBoundingClientRect();
+      anchorCanvasX = ((anchor.clientX - canvasBounds.left) / canvasBounds.width) * canvas.width;
+      anchorCanvasY = ((anchor.clientY - canvasBounds.top) / canvasBounds.height) * canvas.height;
+      anchorOffsetX = anchor.clientX - wrapBounds.left;
+      anchorOffsetY = anchor.clientY - wrapBounds.top;
+    }
+
     zoom = clamp(value, 1, 32);
+    if (zoom === previousZoom) return;
+
     updateZoom();
+
+    if (
+      anchorCanvasX !== undefined &&
+      anchorCanvasY !== undefined &&
+      anchorOffsetX !== undefined &&
+      anchorOffsetY !== undefined
+    ) {
+      canvasWrap.scrollLeft = (anchorCanvasX * zoom) + canvas.offsetLeft - anchorOffsetX;
+      canvasWrap.scrollTop = (anchorCanvasY * zoom) + canvas.offsetTop - anchorOffsetY;
+    }
   };
 
   const touchPointerDistance = (): number | undefined => {
@@ -1529,37 +1590,93 @@ async function openFrameTouchUpEditor(options: {
     return Math.hypot(second.x - first.x, second.y - first.y);
   };
 
+  const touchPointerCenter = ():
+    | {
+        clientX: number;
+        clientY: number;
+      }
+    | undefined => {
+    const pointers = [...activeTouchPointers.values()];
+    const first = pointers[0];
+    const second = pointers[1];
+
+    if (!first || !second) return undefined;
+
+    return {
+      clientX: (first.x + second.x) / 2,
+      clientY: (first.y + second.y) / 2
+    };
+  };
+
   const paintAt = (point: { x: number; y: number }) => {
-    const radius = brushRadius();
-    const left = clamp(point.x - radius, 0, canvas.width - 1);
-    const top = clamp(point.y - radius, 0, canvas.height - 1);
-    const right = clamp(point.x + radius, 0, canvas.width - 1);
-    const bottom = clamp(point.y + radius, 0, canvas.height - 1);
+    const size = brushSize();
+    const halfSize = Math.floor(size / 2);
+    const left = clamp(point.x - halfSize, 0, canvas.width - 1);
+    const top = clamp(point.y - halfSize, 0, canvas.height - 1);
+    const right = clamp(left + size - 1, 0, canvas.width - 1);
+    const bottom = clamp(top + size - 1, 0, canvas.height - 1);
     const imageData = context.getImageData(left, top, right - left + 1, bottom - top + 1);
     const data = imageData.data;
     const color = selectedColor();
-    const radiusSquared = radius * radius;
+    const antiAliased = antiAliasInput.checked;
+    const radius = size / 2;
+    const centerX = point.x + 0.5;
+    const centerY = point.y + 0.5;
 
     for (let y = 0; y < imageData.height; y += 1) {
       for (let x = 0; x < imageData.width; x += 1) {
         const canvasX = left + x;
         const canvasY = top + y;
-        const deltaX = canvasX - point.x;
-        const deltaY = canvasY - point.y;
+        let coverage = 1;
 
-        if ((deltaX * deltaX) + (deltaY * deltaY) > radiusSquared) continue;
+        if (antiAliased) {
+          const deltaX = (canvasX + 0.5) - centerX;
+          const deltaY = (canvasY + 0.5) - centerY;
+          const distance = Math.hypot(deltaX, deltaY);
+          coverage = clamp(radius + 0.5 - distance, 0, 1);
+
+          if (coverage <= 0) continue;
+        }
 
         const index = ((y * imageData.width) + x) * 4;
         if (tool === "eraser") {
-          data[index] = 0;
-          data[index + 1] = 0;
-          data[index + 2] = 0;
-          data[index + 3] = 0;
+          if (antiAliased && coverage < 1) {
+            data[index + 3] = Math.round(data[index + 3] * (1 - coverage));
+          } else {
+            data[index] = 0;
+            data[index + 1] = 0;
+            data[index + 2] = 0;
+            data[index + 3] = 0;
+          }
         } else {
-          data[index] = color[0];
-          data[index + 1] = color[1];
-          data[index + 2] = color[2];
-          data[index + 3] = color[3];
+          if (antiAliased && coverage < 1) {
+            const sourceAlpha = (color[3] / 255) * coverage;
+            const targetAlpha = data[index + 3] / 255;
+            const outAlpha = sourceAlpha + (targetAlpha * (1 - sourceAlpha));
+
+            if (outAlpha <= 0) {
+              data[index] = 0;
+              data[index + 1] = 0;
+              data[index + 2] = 0;
+              data[index + 3] = 0;
+            } else {
+              data[index] = Math.round(
+                ((color[0] * sourceAlpha) + (data[index] * targetAlpha * (1 - sourceAlpha))) / outAlpha
+              );
+              data[index + 1] = Math.round(
+                ((color[1] * sourceAlpha) + (data[index + 1] * targetAlpha * (1 - sourceAlpha))) / outAlpha
+              );
+              data[index + 2] = Math.round(
+                ((color[2] * sourceAlpha) + (data[index + 2] * targetAlpha * (1 - sourceAlpha))) / outAlpha
+              );
+              data[index + 3] = Math.round(outAlpha * 255);
+            }
+          } else {
+            data[index] = color[0];
+            data[index + 1] = color[1];
+            data[index + 2] = color[2];
+            data[index + 3] = color[3];
+          }
         }
       }
     }
@@ -1691,10 +1808,19 @@ async function openFrameTouchUpEditor(options: {
     );
   };
 
+  const closeBrushMenuOnOutsidePointer = (event: PointerEvent) => {
+    const target = event.target;
+
+    if (brushMenu.hidden || !(target instanceof Node) || brushSplit.contains(target)) return;
+
+    brushMenu.hidden = true;
+  };
+
   const close = () => {
     disposed = true;
     if (animationTimeout !== undefined) window.clearTimeout(animationTimeout);
     window.removeEventListener("keydown", keyHandler);
+    document.removeEventListener("pointerdown", closeBrushMenuOnOutsidePointer);
     dialog.remove();
   };
 
@@ -1787,7 +1913,10 @@ async function openFrameTouchUpEditor(options: {
       if (distance !== undefined && pinchStartDistance !== undefined) {
         event.preventDefault();
         drawing = false;
-        setZoom(pinchStartZoom * (distance / Math.max(1, pinchStartDistance)));
+        setZoom(
+          pinchStartZoom * (distance / Math.max(1, pinchStartDistance)),
+          touchPointerCenter()
+        );
         return;
       }
     }
@@ -1839,7 +1968,10 @@ async function openFrameTouchUpEditor(options: {
 
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
-    setZoom(zoom * (direction > 0 ? 1.12 : 1 / 1.12));
+    setZoom(zoom * (direction > 0 ? 1.12 : 1 / 1.12), {
+      clientX: event.clientX,
+      clientY: event.clientY
+    });
   }, { passive: false });
 
   closeButton.addEventListener("click", requestClose);
@@ -1853,6 +1985,13 @@ async function openFrameTouchUpEditor(options: {
     tool = "brush";
     updateToolButtons();
   });
+  brushMenuButton.addEventListener("click", () => {
+    brushMenu.hidden = !brushMenu.hidden;
+  });
+  brushSizeInput.addEventListener("input", () => {
+    brushSizeValue.textContent = brushSizeInput.value;
+  });
+  document.addEventListener("pointerdown", closeBrushMenuOnOutsidePointer);
   eraserButton.addEventListener("click", () => {
     tool = "eraser";
     updateToolButtons();
@@ -4090,6 +4229,52 @@ function ensureDesignerStyles(): void {
   cursor: not-allowed;
   opacity: 0.45;
 }
+.ai-game-assets-designer__touchup-split {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+.ai-game-assets-designer__touchup-split > button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.ai-game-assets-designer__touchup-toolbar .ai-game-assets-designer__touchup-split-arrow {
+  min-width: 26px;
+  padding: 7px 6px;
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.ai-game-assets-designer__touchup-brush-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 2;
+  width: 210px;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #384251;
+  border-radius: 8px;
+  background: #141820;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.42);
+}
+.ai-game-assets-designer__touchup-brush-size {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+.ai-game-assets-designer__touchup-brush-size input {
+  width: 100%;
+}
+.ai-game-assets-designer__touchup-brush-size span {
+  color: #f8fafc;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
 .ai-game-assets-designer__touchup-color {
   display: grid;
   grid-template-columns: 38px auto 58px;
@@ -4136,12 +4321,14 @@ function ensureDesignerStyles(): void {
     linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.08) 75%);
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
   background-size: 16px 16px;
+  touch-action: none;
 }
 .ai-game-assets-designer__touchup-canvas {
   display: block;
   margin: 24px;
   image-rendering: pixelated;
   cursor: crosshair;
+  touch-action: none;
 }
 .ai-game-assets-designer__touchup-selection {
   position: absolute;
