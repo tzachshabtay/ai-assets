@@ -1222,6 +1222,601 @@ async function replaceSpriteSheetFrames(options: {
   return canvas.toDataURL("image/png");
 }
 
+async function spriteSheetFrameToDataUrl(options: {
+  src: string;
+  frameGrid: NonNullable<AiAssetDefinition["frameGrid"]>;
+  frame: number;
+}): Promise<string> {
+  const sheetImage = await loadImageElement(options.src);
+  const frameWidth = options.frameGrid.frameWidth;
+  const frameHeight = options.frameGrid.frameHeight;
+  const margin = options.frameGrid.margin ?? 0;
+  const spacing = options.frameGrid.spacing ?? 0;
+  const column = options.frame % options.frameGrid.columns;
+  const row = Math.floor(options.frame / options.frameGrid.columns);
+  const sourceX = margin + (column * (frameWidth + spacing));
+  const sourceY = margin + (row * (frameHeight + spacing));
+  const canvas = document.createElement("canvas");
+  canvas.width = frameWidth;
+  canvas.height = frameHeight;
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Could not create canvas for frame touch-up.");
+  }
+
+  context.clearRect(0, 0, frameWidth, frameHeight);
+  context.drawImage(
+    sheetImage,
+    sourceX,
+    sourceY,
+    frameWidth,
+    frameHeight,
+    0,
+    0,
+    frameWidth,
+    frameHeight
+  );
+
+  return canvas.toDataURL("image/png");
+}
+
+function isSvgSource(src: string): boolean {
+  return src.startsWith("data:image/svg+xml") || /\.svg(?:$|\?)/i.test(src);
+}
+
+type FrameTouchUpTool = "brush" | "eraser" | "picker" | "select" | "fill";
+
+type FrameTouchUpSelection = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+async function openFrameTouchUpEditor(options: {
+  root: HTMLElement;
+  asset: AiAssetDefinition;
+  title: string;
+  frameSrc: string;
+  spriteSheetSrc: string;
+  frameSlot: number;
+  frame: number;
+  displaySize: AiAssetPreviewDisplaySize;
+  onSave(dataUrl: string): void | Promise<void>;
+}): Promise<void> {
+  const sourceImage = await loadImageElement(options.frameSrc);
+  const dialog = document.createElement("div");
+  dialog.className = "ai-game-assets-designer__touchup";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", `Touch up ${options.title}`);
+
+  const header = document.createElement("div");
+  header.className = "ai-game-assets-designer__touchup-header";
+  const title = document.createElement("div");
+  title.className = "ai-game-assets-designer__touchup-title";
+  title.textContent = options.title;
+  const dirtyLabel = document.createElement("span");
+  dirtyLabel.className = "ai-game-assets-designer__touchup-dirty";
+  dirtyLabel.hidden = true;
+  dirtyLabel.textContent = "Unsaved changes";
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "ai-game-assets-designer__touchup-close";
+  closeButton.setAttribute("aria-label", "Close touch-up editor");
+  closeButton.textContent = "X";
+  header.append(title, dirtyLabel, closeButton);
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "ai-game-assets-designer__touchup-toolbar";
+
+  const zoomOutButton = touchUpButton("Zoom -");
+  const zoomInButton = touchUpButton("Zoom +");
+  const brushButton = touchUpButton("Brush");
+  const eraserButton = touchUpButton("Eraser");
+  const pickerButton = touchUpButton("Picker");
+  const selectButton = touchUpButton("Select");
+  const fillButton = touchUpButton("Fill");
+  const undoButton = touchUpButton("Undo");
+  const redoButton = touchUpButton("Redo");
+  const saveButton = touchUpButton("Save");
+  saveButton.classList.add("is-primary");
+
+  const colorInput = document.createElement("input");
+  colorInput.type = "color";
+  colorInput.value = "#f8fafc";
+  colorInput.setAttribute("aria-label", "Brush color");
+  const alphaInput = document.createElement("input");
+  alphaInput.type = "number";
+  alphaInput.min = "0";
+  alphaInput.max = "255";
+  alphaInput.step = "1";
+  alphaInput.value = "255";
+  alphaInput.setAttribute("aria-label", "Alpha");
+  const rgbaLabel = document.createElement("label");
+  rgbaLabel.className = "ai-game-assets-designer__touchup-color";
+  const alphaLabel = document.createElement("span");
+  alphaLabel.textContent = "A";
+  rgbaLabel.append(colorInput, alphaLabel, alphaInput);
+
+  toolbar.append(
+    zoomOutButton,
+    zoomInButton,
+    rgbaLabel,
+    pickerButton,
+    brushButton,
+    eraserButton,
+    selectButton,
+    fillButton,
+    undoButton,
+    redoButton,
+    saveButton
+  );
+
+  const workspace = document.createElement("div");
+  workspace.className = "ai-game-assets-designer__touchup-workspace";
+  const canvasWrap = document.createElement("div");
+  canvasWrap.className = "ai-game-assets-designer__touchup-canvas-wrap";
+  const canvas = document.createElement("canvas");
+  canvas.className = "ai-game-assets-designer__touchup-canvas";
+  canvas.width = Math.max(1, sourceImage.naturalWidth);
+  canvas.height = Math.max(1, sourceImage.naturalHeight);
+  const selectionBox = document.createElement("div");
+  selectionBox.className = "ai-game-assets-designer__touchup-selection";
+  selectionBox.hidden = true;
+  canvasWrap.append(canvas, selectionBox);
+
+  const side = document.createElement("div");
+  side.className = "ai-game-assets-designer__touchup-side";
+  const stillPanel = document.createElement("div");
+  stillPanel.className = "ai-game-assets-designer__touchup-panel";
+  const stillTitle = document.createElement("div");
+  stillTitle.textContent = "Frame";
+  const stillPreview = document.createElement("canvas");
+  stillPreview.width = canvas.width;
+  stillPreview.height = canvas.height;
+  stillPanel.append(stillTitle, stillPreview);
+
+  const animationPanel = document.createElement("div");
+  animationPanel.className = "ai-game-assets-designer__touchup-panel";
+  const animationTitle = document.createElement("div");
+  animationTitle.textContent = "Animation";
+  const animationPreview = document.createElement("canvas");
+  animationPreview.width = Math.max(1, Math.round(options.displaySize.width));
+  animationPreview.height = Math.max(1, Math.round(options.displaySize.height));
+  animationPanel.append(animationTitle, animationPreview);
+  side.append(stillPanel, animationPanel);
+  workspace.append(canvasWrap, side);
+  dialog.append(header, toolbar, workspace);
+  options.root.append(dialog);
+
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  const stillContext = stillPreview.getContext("2d");
+  const animationContext = animationPreview.getContext("2d");
+
+  if (!context || !stillContext || !animationContext) {
+    dialog.remove();
+    throw new Error("Could not create touch-up canvas.");
+  }
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+
+  let zoom = Math.max(1, Math.floor(Math.min(8, 480 / Math.max(canvas.width, canvas.height))));
+  let tool: FrameTouchUpTool = "brush";
+  let dirty = false;
+  let drawing = false;
+  let selectionStart: { x: number; y: number } | undefined;
+  let selection: FrameTouchUpSelection | undefined;
+  let animationTimeout: number | undefined;
+  let animationCursor = 0;
+  let disposed = false;
+  const undoStack: ImageData[] = [];
+  const redoStack: ImageData[] = [];
+
+  const frameGrid = options.asset.frameGrid;
+  const animation = options.asset.animations?.[0];
+  const frames = animation?.frames ?? [options.frame];
+  const frameRate = animation?.frameRate ?? 8;
+  const frameTimings = animation?.frameTimings ?? [];
+  const sheetImage = await loadImageElement(options.spriteSheetSrc);
+
+  const selectedColor = (): [number, number, number, number] => {
+    const hex = colorInput.value.replace("#", "");
+    const red = Number.parseInt(hex.slice(0, 2), 16);
+    const green = Number.parseInt(hex.slice(2, 4), 16);
+    const blue = Number.parseInt(hex.slice(4, 6), 16);
+    const alpha = clamp(Math.round(Number(alphaInput.value)), 0, 255);
+
+    return [red, green, blue, alpha];
+  };
+
+  const setDirty = (value: boolean) => {
+    dirty = value;
+    dirtyLabel.hidden = !dirty;
+  };
+
+  const updateZoom = () => {
+    canvas.style.width = `${canvas.width * zoom}px`;
+    canvas.style.height = `${canvas.height * zoom}px`;
+    syncSelectionBox();
+  };
+
+  const updateToolButtons = () => {
+    for (const button of [brushButton, eraserButton, pickerButton, selectButton, fillButton]) {
+      button.classList.remove("is-active");
+    }
+    const activeButton = {
+      brush: brushButton,
+      eraser: eraserButton,
+      picker: pickerButton,
+      select: selectButton,
+      fill: fillButton
+    }[tool];
+    activeButton.classList.add("is-active");
+  };
+
+  const updateUndoRedo = () => {
+    undoButton.disabled = undoStack.length === 0;
+    redoButton.disabled = redoStack.length === 0;
+  };
+
+  const snapshot = () => context.getImageData(0, 0, canvas.width, canvas.height);
+  const pushUndo = () => {
+    undoStack.push(snapshot());
+    if (undoStack.length > 60) undoStack.shift();
+    redoStack.length = 0;
+    updateUndoRedo();
+  };
+  const restore = (imageData: ImageData) => {
+    context.putImageData(imageData, 0, 0);
+    selection = undefined;
+    redrawEditor();
+    setDirty(true);
+  };
+
+  const syncSelectionBox = () => {
+    if (!selection) {
+      selectionBox.hidden = true;
+      return;
+    }
+
+    selectionBox.hidden = false;
+    selectionBox.style.left = `${selection.x * zoom}px`;
+    selectionBox.style.top = `${selection.y * zoom}px`;
+    selectionBox.style.width = `${selection.width * zoom}px`;
+    selectionBox.style.height = `${selection.height * zoom}px`;
+  };
+
+  const refreshPreviews = () => {
+    stillContext.clearRect(0, 0, stillPreview.width, stillPreview.height);
+    stillContext.imageSmoothingEnabled = false;
+    stillContext.drawImage(canvas, 0, 0, stillPreview.width, stillPreview.height);
+  };
+
+  const redrawEditor = () => {
+    refreshPreviews();
+    syncSelectionBox();
+  };
+
+  const canvasPoint = (event: PointerEvent | MouseEvent): { x: number; y: number } => {
+    const bounds = canvas.getBoundingClientRect();
+
+    return {
+      x: clamp(Math.floor(((event.clientX - bounds.left) / bounds.width) * canvas.width), 0, canvas.width - 1),
+      y: clamp(Math.floor(((event.clientY - bounds.top) / bounds.height) * canvas.height), 0, canvas.height - 1)
+    };
+  };
+
+  const paintAt = (point: { x: number; y: number }) => {
+    const [red, green, blue, alpha] = tool === "eraser" ? [0, 0, 0, 0] : selectedColor();
+    context.save();
+    context.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
+    context.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`;
+    context.beginPath();
+    context.arc(point.x + 0.5, point.y + 0.5, Math.max(1, Math.round(canvas.width / 48)), 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+  };
+
+  const pickColorAt = (point: { x: number; y: number }) => {
+    const data = context.getImageData(point.x, point.y, 1, 1).data;
+    colorInput.value = `#${hexByte(data[0])}${hexByte(data[1])}${hexByte(data[2])}`;
+    alphaInput.value = String(data[3]);
+  };
+
+  const fillAt = (point: { x: number; y: number }) => {
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+    const replacement = selectedColor();
+    const startIndex = ((point.y * canvas.width) + point.x) * 4;
+    const target = [
+      data[startIndex],
+      data[startIndex + 1],
+      data[startIndex + 2],
+      data[startIndex + 3]
+    ];
+
+    if (target.every((value, index) => value === replacement[index])) return;
+
+    const stack = [point];
+    const visited = new Uint8Array(canvas.width * canvas.height);
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (!current) continue;
+      if (current.x < 0 || current.y < 0 || current.x >= canvas.width || current.y >= canvas.height) continue;
+      const pixelIndex = (current.y * canvas.width) + current.x;
+      if (visited[pixelIndex]) continue;
+      visited[pixelIndex] = 1;
+      const dataIndex = pixelIndex * 4;
+      if (
+        data[dataIndex] !== target[0] ||
+        data[dataIndex + 1] !== target[1] ||
+        data[dataIndex + 2] !== target[2] ||
+        data[dataIndex + 3] !== target[3]
+      ) {
+        continue;
+      }
+
+      data[dataIndex] = replacement[0];
+      data[dataIndex + 1] = replacement[1];
+      data[dataIndex + 2] = replacement[2];
+      data[dataIndex + 3] = replacement[3];
+      stack.push(
+        { x: current.x + 1, y: current.y },
+        { x: current.x - 1, y: current.y },
+        { x: current.x, y: current.y + 1 },
+        { x: current.x, y: current.y - 1 }
+      );
+    }
+    context.putImageData(imageData, 0, 0);
+  };
+
+  const moveSelection = (deltaX: number, deltaY: number) => {
+    if (!selection) return;
+
+    pushUndo();
+    const nextX = clamp(selection.x + deltaX, 0, canvas.width - selection.width);
+    const nextY = clamp(selection.y + deltaY, 0, canvas.height - selection.height);
+    const imageData = context.getImageData(selection.x, selection.y, selection.width, selection.height);
+    context.clearRect(selection.x, selection.y, selection.width, selection.height);
+    context.putImageData(imageData, nextX, nextY);
+    selection = { ...selection, x: nextX, y: nextY };
+    setDirty(true);
+    redrawEditor();
+  };
+
+  const deleteSelection = () => {
+    if (!selection) return;
+
+    pushUndo();
+    context.clearRect(selection.x, selection.y, selection.width, selection.height);
+    selection = undefined;
+    setDirty(true);
+    redrawEditor();
+  };
+
+  const drawAnimationFrame = () => {
+    if (disposed || !frameGrid || !animation) return;
+
+    const frameSlot = animationCursor % frames.length;
+    const frame = frames[frameSlot] ?? 0;
+    const timing = frameTimings[frameSlot];
+    const column = frame % frameGrid.columns;
+    const row = Math.floor(frame / frameGrid.columns);
+    const sourceX = (frameGrid.margin ?? 0) + (column * (frameGrid.frameWidth + (frameGrid.spacing ?? 0)));
+    const sourceY = (frameGrid.margin ?? 0) + (row * (frameGrid.frameHeight + (frameGrid.spacing ?? 0)));
+    animationContext.clearRect(0, 0, animationPreview.width, animationPreview.height);
+    animationContext.imageSmoothingEnabled = false;
+    animationContext.save();
+    animationContext.translate(animationPreview.width / 2, animationPreview.height / 2);
+    animationContext.translate(timing?.offsetX ?? 0, timing?.offsetY ?? 0);
+    animationContext.scale(timing?.scaleX ?? 1, timing?.scaleY ?? 1);
+    animationContext.rotate(((timing?.rotation ?? 0) * Math.PI) / 180);
+
+    if (frameSlot === options.frameSlot) {
+      animationContext.drawImage(
+        canvas,
+        -options.displaySize.width / 2,
+        -options.displaySize.height / 2,
+        options.displaySize.width,
+        options.displaySize.height
+      );
+    } else {
+      animationContext.drawImage(
+        sheetImage,
+        sourceX,
+        sourceY,
+        frameGrid.frameWidth,
+        frameGrid.frameHeight,
+        -options.displaySize.width / 2,
+        -options.displaySize.height / 2,
+        options.displaySize.width,
+        options.displaySize.height
+      );
+    }
+    animationContext.restore();
+    animationCursor += 1;
+    animationTimeout = window.setTimeout(
+      drawAnimationFrame,
+      timing?.delayMs ?? 1000 / frameRate
+    );
+  };
+
+  const close = () => {
+    disposed = true;
+    if (animationTimeout !== undefined) window.clearTimeout(animationTimeout);
+    window.removeEventListener("keydown", keyHandler);
+    dialog.remove();
+  };
+
+  const requestClose = () => {
+    if (dirty && !window.confirm("You have unsaved changes. Close without saving?")) return;
+    close();
+  };
+
+  const keyHandler = (event: KeyboardEvent) => {
+    if (!dialog.isConnected) return;
+    if (event.key === "Escape") {
+      requestClose();
+      return;
+    }
+    if (event.key === "Backspace" || event.key === "Delete") {
+      event.preventDefault();
+      deleteSelection();
+      return;
+    }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      moveSelection(-1, 0);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      moveSelection(1, 0);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveSelection(0, -1);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveSelection(0, 1);
+    }
+  };
+
+  canvas.addEventListener("pointerdown", (event) => {
+    const point = canvasPoint(event);
+    if (tool === "picker") {
+      pickColorAt(point);
+      return;
+    }
+
+    pushUndo();
+    drawing = true;
+    canvas.setPointerCapture(event.pointerId);
+
+    if (tool === "select") {
+      selectionStart = point;
+      selection = { x: point.x, y: point.y, width: 1, height: 1 };
+      redrawEditor();
+      return;
+    }
+
+    if (tool === "fill") {
+      fillAt(point);
+      drawing = false;
+      setDirty(true);
+      redrawEditor();
+      return;
+    }
+
+    paintAt(point);
+    setDirty(true);
+    redrawEditor();
+  });
+
+  canvas.addEventListener("pointermove", (event) => {
+    if (!drawing) return;
+
+    const point = canvasPoint(event);
+    if (tool === "select" && selectionStart) {
+      const x = Math.min(selectionStart.x, point.x);
+      const y = Math.min(selectionStart.y, point.y);
+      selection = {
+        x,
+        y,
+        width: Math.max(1, Math.abs(point.x - selectionStart.x) + 1),
+        height: Math.max(1, Math.abs(point.y - selectionStart.y) + 1)
+      };
+      redrawEditor();
+      return;
+    }
+
+    if (tool === "brush" || tool === "eraser") {
+      paintAt(point);
+      setDirty(true);
+      redrawEditor();
+    }
+  });
+
+  const finishPointer = (event: PointerEvent) => {
+    drawing = false;
+    selectionStart = undefined;
+    canvas.releasePointerCapture(event.pointerId);
+    redrawEditor();
+  };
+  canvas.addEventListener("pointerup", finishPointer);
+  canvas.addEventListener("pointercancel", finishPointer);
+
+  closeButton.addEventListener("click", requestClose);
+  zoomOutButton.addEventListener("click", () => {
+    zoom = Math.max(1, zoom - 1);
+    updateZoom();
+  });
+  zoomInButton.addEventListener("click", () => {
+    zoom = Math.min(32, zoom + 1);
+    updateZoom();
+  });
+  brushButton.addEventListener("click", () => {
+    tool = "brush";
+    updateToolButtons();
+  });
+  eraserButton.addEventListener("click", () => {
+    tool = "eraser";
+    updateToolButtons();
+  });
+  pickerButton.addEventListener("click", () => {
+    tool = "picker";
+    updateToolButtons();
+  });
+  selectButton.addEventListener("click", () => {
+    tool = "select";
+    updateToolButtons();
+  });
+  fillButton.addEventListener("click", () => {
+    tool = "fill";
+    updateToolButtons();
+  });
+  undoButton.addEventListener("click", () => {
+    const previous = undoStack.pop();
+    if (!previous) return;
+
+    redoStack.push(snapshot());
+    restore(previous);
+    updateUndoRedo();
+  });
+  redoButton.addEventListener("click", () => {
+    const next = redoStack.pop();
+    if (!next) return;
+
+    undoStack.push(snapshot());
+    restore(next);
+    updateUndoRedo();
+  });
+  saveButton.addEventListener("click", async () => {
+    await options.onSave(canvas.toDataURL("image/png"));
+    setDirty(false);
+    close();
+  });
+  window.addEventListener("keydown", keyHandler);
+
+  updateZoom();
+  updateToolButtons();
+  updateUndoRedo();
+  refreshPreviews();
+  drawAnimationFrame();
+}
+
+function touchUpButton(label: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+
+  return button;
+}
+
+function hexByte(value: number): string {
+  return Math.max(0, Math.min(255, value)).toString(16).padStart(2, "0");
+}
+
 function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -2072,13 +2667,17 @@ async function openAnimationEditor(options: {
   uploadFrameButton.type = "button";
   uploadFrameButton.textContent = "Upload frame...";
 
+  const touchUpFrameButton = document.createElement("button");
+  touchUpFrameButton.type = "button";
+  touchUpFrameButton.textContent = "Touch up...";
+
   const confirmButton = document.createElement("button");
   confirmButton.type = "button";
   confirmButton.textContent = "Confirm";
 
   const actions = document.createElement("div");
   actions.className = "ai-game-assets-designer__modal-actions";
-  actions.append(uploadFrameButton, cancelButton, confirmButton);
+  actions.append(uploadFrameButton, touchUpFrameButton, cancelButton, confirmButton);
 
   card.append(title, stage, strip, fields, actions);
   dialog.append(card);
@@ -2139,6 +2738,10 @@ async function openAnimationEditor(options: {
       const frameSlot = Number((button as HTMLButtonElement).dataset.frameSlot);
       button.classList.toggle("is-selected", selectedFrameSlots.has(frameSlot));
     }
+
+    touchUpFrameButton.disabled = selectedFrameSlots.size !== 1 ||
+      normalizeAssetFormat(options.asset.settings?.format) === "svg" ||
+      isSvgSource(spriteSheetSrc);
   };
 
   const selectedFrameSlotsArray = () => [...selectedFrameSlots].sort((left, right) => left - right);
@@ -2321,6 +2924,41 @@ async function openAnimationEditor(options: {
     renderStrip();
     syncInputs();
     restartPreview();
+  });
+
+  touchUpFrameButton.addEventListener("click", async () => {
+    if (touchUpFrameButton.disabled || selectedFrameSlots.size !== 1) return;
+
+    const [frameSlot] = selectedFrameSlotsArray();
+    const frame = baseAnimation.frames[frameSlot] ?? 0;
+    const frameSrc = await spriteSheetFrameToDataUrl({
+      src: spriteSheetSrc,
+      frameGrid,
+      frame
+    });
+
+    await openFrameTouchUpEditor({
+      root: options.root,
+      asset: previewAsset(),
+      title: `${readableAssetName(options.assetId)} frame ${frameSlot + 1}`,
+      frameSrc,
+      spriteSheetSrc,
+      frameSlot,
+      frame,
+      displaySize: options.displaySize,
+      onSave: async (editedFrameSrc) => {
+        spriteSheetSrc = await replaceSpriteSheetFrames({
+          src: spriteSheetSrc,
+          uploadSrc: editedFrameSrc,
+          frameGrid,
+          frames: [frame]
+        });
+        editedSpriteSheetSrc = spriteSheetSrc;
+        renderStrip();
+        syncInputs();
+        restartPreview();
+      }
+    });
   });
 
   const close = () => {
@@ -3282,6 +3920,174 @@ function ensureDesignerStyles(): void {
   padding: 9px 11px;
   font: inherit;
   cursor: pointer;
+}
+.ai-game-assets-designer__modal-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.ai-game-assets-designer__touchup {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px;
+  background: #0b0f16;
+  color: #f5f7fb;
+}
+.ai-game-assets-designer__touchup-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 34px;
+}
+.ai-game-assets-designer__touchup-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+.ai-game-assets-designer__touchup-dirty {
+  border: 1px solid #fbbf24;
+  border-radius: 999px;
+  color: #fde68a;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.ai-game-assets-designer__touchup-close {
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #273142;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.ai-game-assets-designer__touchup-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid #303949;
+  border-radius: 8px;
+  background: #141820;
+}
+.ai-game-assets-designer__touchup-toolbar button {
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #273142;
+  color: #fff;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ai-game-assets-designer__touchup-toolbar button.is-active {
+  border-color: #6ed3ff;
+  background: #17425a;
+}
+.ai-game-assets-designer__touchup-toolbar button.is-primary {
+  border-color: #86efac;
+  background: #14532d;
+}
+.ai-game-assets-designer__touchup-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.ai-game-assets-designer__touchup-color {
+  display: grid;
+  grid-template-columns: 38px auto 58px;
+  align-items: center;
+  gap: 6px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+.ai-game-assets-designer__touchup-color input[type="color"] {
+  width: 38px;
+  height: 30px;
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #101319;
+  padding: 2px;
+}
+.ai-game-assets-designer__touchup-color input[type="number"] {
+  width: 58px;
+  border: 1px solid #3a4352;
+  border-radius: 6px;
+  background: #101319;
+  color: #f5f7fb;
+  padding: 6px;
+  font: inherit;
+  font-size: 12px;
+}
+.ai-game-assets-designer__touchup-workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 12px;
+}
+.ai-game-assets-designer__touchup-canvas-wrap {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid #303949;
+  border-radius: 8px;
+  background-color: #111827;
+  background-image:
+    linear-gradient(45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.08) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.08) 75%);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
+}
+.ai-game-assets-designer__touchup-canvas {
+  display: block;
+  margin: 24px;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+.ai-game-assets-designer__touchup-selection {
+  position: absolute;
+  pointer-events: none;
+  border: 1px dashed #f8fafc;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9);
+  transform: translate(24px, 24px);
+}
+.ai-game-assets-designer__touchup-side {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 10px;
+}
+.ai-game-assets-designer__touchup-panel {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #303949;
+  border-radius: 8px;
+  background: #141820;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+.ai-game-assets-designer__touchup-panel canvas {
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  border: 1px solid #263243;
+  border-radius: 6px;
+  background: #0f1218;
+  image-rendering: pixelated;
+}
+@media (max-width: 760px) {
+  .ai-game-assets-designer__touchup-workspace {
+    grid-template-columns: 1fr;
+  }
+  .ai-game-assets-designer__touchup-side {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 .ai-game-assets-designer__style-drop {
   display: grid;
