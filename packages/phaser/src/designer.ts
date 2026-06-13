@@ -1412,6 +1412,9 @@ async function openFrameTouchUpEditor(options: {
   let animationTimeout: number | undefined;
   let animationCursor = 0;
   let disposed = false;
+  const activeTouchPointers = new Map<number, { x: number; y: number }>();
+  let pinchStartDistance: number | undefined;
+  let pinchStartZoom = zoom;
   const undoStack: ImageData[] = [];
   const redoStack: ImageData[] = [];
 
@@ -1509,15 +1512,59 @@ async function openFrameTouchUpEditor(options: {
     };
   };
 
+  const brushRadius = () => Math.max(1, Math.ceil(7 / zoom));
+
+  const setZoom = (value: number) => {
+    zoom = clamp(value, 1, 32);
+    updateZoom();
+  };
+
+  const touchPointerDistance = (): number | undefined => {
+    const pointers = [...activeTouchPointers.values()];
+    const first = pointers[0];
+    const second = pointers[1];
+
+    if (!first || !second) return undefined;
+
+    return Math.hypot(second.x - first.x, second.y - first.y);
+  };
+
   const paintAt = (point: { x: number; y: number }) => {
-    const [red, green, blue, alpha] = tool === "eraser" ? [0, 0, 0, 0] : selectedColor();
-    context.save();
-    context.globalCompositeOperation = tool === "eraser" ? "destination-out" : "source-over";
-    context.fillStyle = `rgba(${red}, ${green}, ${blue}, ${alpha / 255})`;
-    context.beginPath();
-    context.arc(point.x + 0.5, point.y + 0.5, Math.max(1, Math.round(canvas.width / 48)), 0, Math.PI * 2);
-    context.fill();
-    context.restore();
+    const radius = brushRadius();
+    const left = clamp(point.x - radius, 0, canvas.width - 1);
+    const top = clamp(point.y - radius, 0, canvas.height - 1);
+    const right = clamp(point.x + radius, 0, canvas.width - 1);
+    const bottom = clamp(point.y + radius, 0, canvas.height - 1);
+    const imageData = context.getImageData(left, top, right - left + 1, bottom - top + 1);
+    const data = imageData.data;
+    const color = selectedColor();
+    const radiusSquared = radius * radius;
+
+    for (let y = 0; y < imageData.height; y += 1) {
+      for (let x = 0; x < imageData.width; x += 1) {
+        const canvasX = left + x;
+        const canvasY = top + y;
+        const deltaX = canvasX - point.x;
+        const deltaY = canvasY - point.y;
+
+        if ((deltaX * deltaX) + (deltaY * deltaY) > radiusSquared) continue;
+
+        const index = ((y * imageData.width) + x) * 4;
+        if (tool === "eraser") {
+          data[index] = 0;
+          data[index + 1] = 0;
+          data[index + 2] = 0;
+          data[index + 3] = 0;
+        } else {
+          data[index] = color[0];
+          data[index + 1] = color[1];
+          data[index + 2] = color[2];
+          data[index + 3] = color[3];
+        }
+      }
+    }
+
+    context.putImageData(imageData, left, top);
   };
 
   const pickColorAt = (point: { x: number; y: number }) => {
@@ -1683,6 +1730,22 @@ async function openFrameTouchUpEditor(options: {
   };
 
   canvas.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "touch") {
+      activeTouchPointers.set(event.pointerId, {
+        x: event.clientX,
+        y: event.clientY
+      });
+
+      if (activeTouchPointers.size >= 2) {
+        drawing = false;
+        selectionStart = undefined;
+        pinchStartDistance = touchPointerDistance();
+        pinchStartZoom = zoom;
+        canvas.setPointerCapture(event.pointerId);
+        return;
+      }
+    }
+
     const point = canvasPoint(event);
     if (tool === "picker") {
       pickColorAt(point);
@@ -1714,6 +1777,21 @@ async function openFrameTouchUpEditor(options: {
   });
 
   canvas.addEventListener("pointermove", (event) => {
+    if (event.pointerType === "touch" && activeTouchPointers.has(event.pointerId)) {
+      activeTouchPointers.set(event.pointerId, {
+        x: event.clientX,
+        y: event.clientY
+      });
+
+      const distance = touchPointerDistance();
+      if (distance !== undefined && pinchStartDistance !== undefined) {
+        event.preventDefault();
+        drawing = false;
+        setZoom(pinchStartZoom * (distance / Math.max(1, pinchStartDistance)));
+        return;
+      }
+    }
+
     if (!drawing) return;
 
     const point = canvasPoint(event);
@@ -1738,22 +1816,38 @@ async function openFrameTouchUpEditor(options: {
   });
 
   const finishPointer = (event: PointerEvent) => {
+    if (event.pointerType === "touch") {
+      activeTouchPointers.delete(event.pointerId);
+      if (activeTouchPointers.size < 2) {
+        pinchStartDistance = undefined;
+      } else {
+        pinchStartDistance = touchPointerDistance();
+        pinchStartZoom = zoom;
+      }
+    }
     drawing = false;
     selectionStart = undefined;
-    canvas.releasePointerCapture(event.pointerId);
+    if (canvas.hasPointerCapture(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
     redrawEditor();
   };
   canvas.addEventListener("pointerup", finishPointer);
   canvas.addEventListener("pointercancel", finishPointer);
+  canvasWrap.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -1 : 1;
+    setZoom(zoom * (direction > 0 ? 1.12 : 1 / 1.12));
+  }, { passive: false });
 
   closeButton.addEventListener("click", requestClose);
   zoomOutButton.addEventListener("click", () => {
-    zoom = Math.max(1, zoom - 1);
-    updateZoom();
+    setZoom(zoom - 1);
   });
   zoomInButton.addEventListener("click", () => {
-    zoom = Math.min(32, zoom + 1);
-    updateZoom();
+    setZoom(zoom + 1);
   });
   brushButton.addEventListener("click", () => {
     tool = "brush";
