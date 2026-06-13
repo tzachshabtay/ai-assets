@@ -4698,12 +4698,12 @@ export const assets = defineAiAssets(
 }
 , {
   "styleGuide": {
-    "prompt": "Hand-painted 1990s cartoon adventure game background, exaggerated perspective, whimsical architecture, bright saturated colors, smooth ink outlines, highly expressive shapes, playful visual humor, stylized proportions, curved and distorted geometry, detailed environmental storytelling, clean cel-animation aesthetic, retro PC adventure game art, professionally illustrated, high detail, colorful and cheerful atmosphere.",
+    "prompt": "Style: crisp architectural blueprint vector illustration, axonometric/isometric drafting view, white background, deep cobalt-blue linework and shadow fills, clean technical CAD precision, dense geometric detail, thin outlines, hard-edged flat shapes, minimal two-tone palette, modern schematic design, no gradients, no texture, no realism",
     "images": [
       {
-        "name": "style.png",
-        "file": "/assets/style-guide.1780542427743.1.png",
-        "mimeType": "image/png"
+        "name": "style.jpg",
+        "file": "/assets/style-guide.1781307340570.1.jpg",
+        "mimeType": "image/jpeg"
       }
     ]
   }
