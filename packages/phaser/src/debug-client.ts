@@ -2,7 +2,8 @@ import type {
   AiAssetGenerationSettings,
   AiAssetManifest,
   AiAudioPlaybackSettings,
-  AiAudioGenerationSettings
+  AiAudioGenerationSettings,
+  AiVoiceGenerationSettings
 } from "@ai-game-assets/core";
 
 export type GenerateDebugOptionsRequest = {
@@ -16,6 +17,7 @@ export type GenerateDebugOptionsRequest = {
   frameCount?: number;
   format?: AiAssetGenerationSettings["format"];
   audioSettings?: AiAudioGenerationSettings;
+  voiceSettings?: AiVoiceGenerationSettings;
   styleGuide?: DebugStyleGuideDraft;
 };
 
@@ -66,6 +68,7 @@ export type GeneratedDebugOption = {
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
   audioPlayback?: AiAudioPlaybackSettings;
+  voiceSettings?: AiVoiceGenerationSettings;
   durationSeconds?: number;
 };
 
@@ -85,6 +88,7 @@ export type SaveDebugOptionRequest = {
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
   audioPlayback?: AiAudioPlaybackSettings;
+  voiceSettings?: AiVoiceGenerationSettings;
   durationSeconds?: number;
   activate?: boolean;
   notes?: string;

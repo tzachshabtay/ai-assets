@@ -2,6 +2,7 @@ import type {
   AiAssetDefinition,
   AiAudioPlaybackSettings,
   AiAudioGenerationSettings,
+  AiVoiceGenerationSettings,
   AiAssetGenerationSettings,
   AiAssetVersion
 } from "./types.js";
@@ -15,6 +16,7 @@ export type CreateVersionInput = {
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
   audioPlayback?: AiAudioPlaybackSettings;
+  voiceSettings?: AiVoiceGenerationSettings;
   durationSeconds?: number;
   parentVersion?: string;
   notes?: string;
@@ -43,6 +45,10 @@ export function createAiAssetVersion(
     audioPlayback: {
       ...asset.audioPlayback,
       ...input.audioPlayback
+    },
+    voiceSettings: {
+      ...asset.voiceSettings,
+      ...input.voiceSettings
     },
     durationSeconds: input.durationSeconds ?? input.audioSettings?.durationSeconds,
     parentVersion: input.parentVersion,

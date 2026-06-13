@@ -4694,6 +4694,45 @@ export const assets = defineAiAssets(
       "volume": 0.72,
       "loop": true
     }
+  },
+  "voice.announcer": {
+    "id": "voice.announcer",
+    "kind": "voice",
+    "prompt": "Energetic retro arcade announcer voice, confident and playful, clear game-host delivery, medium pitch, warm but punchy.",
+    "audioSettings": {
+      "provider": "elevenlabs",
+      "format": "mp3"
+    },
+    "voiceSettings": {
+      "provider": "elevenlabs",
+      "previewText": "Wave incoming. Keep your shields ready, pilot. The invaders are descending fast, the lasers are hot, and this sector needs a hero with steady hands."
+    },
+    "activeVersion": "",
+    "versions": {},
+    "audioPlayback": {
+      "volume": 0.9
+    },
+    "settings": {}
+  },
+  "voice.line.new-wave": {
+    "id": "voice.line.new-wave",
+    "kind": "voice-line",
+    "prompt": "Excited arcade announcer direction, quick and punchy, celebratory but urgent.",
+    "audioSettings": {
+      "provider": "elevenlabs",
+      "format": "mp3"
+    },
+    "voiceSettings": {
+      "provider": "elevenlabs",
+      "voiceAssetId": "voice.announcer",
+      "text": "New wave incoming!"
+    },
+    "activeVersion": "",
+    "versions": {},
+    "audioPlayback": {
+      "volume": 0.85
+    },
+    "settings": {}
   }
 }
 , {

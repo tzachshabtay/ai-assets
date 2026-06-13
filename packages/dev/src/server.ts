@@ -7,7 +7,8 @@ import {
   type AiAssetFormat,
   type AiAssetFrameGrid,
   type AiAssetManifest,
-  type AiAssetStyleGuide
+  type AiAssetStyleGuide,
+  type AiVoiceGenerationSettings
 } from "@ai-game-assets/core";
 import type { AiImageProvider } from "./provider.js";
 import type { AiAudioProvider } from "./audio-provider.js";
@@ -83,6 +84,7 @@ async function routeRequest(
       frameCount?: number;
       format?: AiAssetFormat;
       audioSettings?: AiAudioGenerationSettings;
+      voiceSettings?: AiVoiceGenerationSettings;
       styleGuide?: DebugStyleGuide;
     }>(request);
     const manifest = await readManifest(options.manifestPath);
@@ -91,7 +93,7 @@ async function routeRequest(
       frameCount: body.frameCount
     });
     const generated = isAudioAsset(asset)
-      ? await generateAudio(options, asset, body)
+      ? await generateAudio(options, manifest, asset, body)
       : await generateImage(options, manifest, asset, body);
 
     sendJson(response, 200, {
@@ -105,9 +107,10 @@ async function routeRequest(
         frameGrid: option.frameGrid,
         animations: option.animations,
         settings: option.settings,
-        audioSettings: option.audioSettings,
-        audioPlayback: option.audioPlayback,
-        durationSeconds: option.durationSeconds,
+      audioSettings: option.audioSettings,
+      audioPlayback: option.audioPlayback,
+      voiceSettings: option.voiceSettings,
+      durationSeconds: option.durationSeconds,
         dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
       }))
     });
@@ -195,11 +198,12 @@ async function routeRequest(
       settings?: AiAssetDefinition["settings"];
       audioSettings?: AiAssetDefinition["audioSettings"];
       audioPlayback?: AiAssetDefinition["audioPlayback"];
+      voiceSettings?: AiAssetDefinition["voiceSettings"];
       durationSeconds?: number;
       activate?: boolean;
       notes?: string;
     }>(request);
-    const option = optionFromDataUrl(body.dataUrl, {
+    let option = optionFromDataUrl(body.dataUrl, {
       prompt: body.prompt,
       model: body.model,
       revisedPrompt: body.revisedPrompt,
@@ -211,8 +215,24 @@ async function routeRequest(
         : undefined,
       audioSettings: body.audioSettings,
       audioPlayback: body.audioPlayback,
+      voiceSettings: body.voiceSettings,
       durationSeconds: body.durationSeconds
     });
+    const asset = getAsset(await readManifest(options.manifestPath), body.assetId);
+    if (asset.kind === "voice" && options.audioProvider?.createVoice) {
+      const voiceSettings = await options.audioProvider.createVoice({
+        asset,
+        option,
+        versionName: body.versionName
+      });
+      option = {
+        ...option,
+        voiceSettings: {
+          ...option.voiceSettings,
+          ...voiceSettings
+        }
+      };
+    }
     const result = await saveGeneratedOption(options, {
       assetId: body.assetId,
       versionName: body.versionName,
@@ -273,11 +293,13 @@ async function generateImage(
 
 async function generateAudio(
   options: AiAssetDevServerOptions,
+  manifest: AiAssetManifest,
   asset: AiAssetDefinition,
   body: {
     prompt?: string;
     count?: number;
     audioSettings?: AiAudioGenerationSettings;
+    voiceSettings?: AiVoiceGenerationSettings;
   }
 ) {
   if (!options.audioProvider) {
@@ -290,12 +312,21 @@ async function generateAudio(
     asset,
     prompt: body.prompt,
     count: body.count,
-    audioSettings: body.audioSettings
+    audioSettings: body.audioSettings,
+    voiceSettings: body.voiceSettings,
+    resolveVoiceId: (voiceAssetId) => {
+      const voiceAsset = manifest.assets[voiceAssetId];
+      const activeVoice = voiceAsset?.versions[voiceAsset.activeVersion];
+      return activeVoice?.voiceSettings?.voiceId ?? voiceAsset?.voiceSettings?.voiceId;
+    }
   });
 }
 
 function isAudioAsset(asset: AiAssetDefinition): boolean {
-  return asset.kind === "sound" || asset.kind === "music";
+  return asset.kind === "sound" ||
+    asset.kind === "music" ||
+    asset.kind === "voice" ||
+    asset.kind === "voice-line";
 }
 
 export function planFirstDraftGeneration(
@@ -511,6 +542,7 @@ function optionFromDataUrl(
     settings?: AiAssetDefinition["settings"];
     audioSettings?: AiAssetDefinition["audioSettings"];
     audioPlayback?: AiAssetDefinition["audioPlayback"];
+    voiceSettings?: AiAssetDefinition["voiceSettings"];
     durationSeconds?: number;
   }
 ) {
@@ -532,6 +564,7 @@ function optionFromDataUrl(
     settings: metadata.settings,
     audioSettings: metadata.audioSettings,
     audioPlayback: metadata.audioPlayback,
+    voiceSettings: metadata.voiceSettings,
     durationSeconds: metadata.durationSeconds
   };
 }

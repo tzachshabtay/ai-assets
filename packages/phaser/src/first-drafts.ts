@@ -189,6 +189,8 @@ function isMissingLoadableAsset(asset: AiAssetDefinition | undefined): boolean {
     asset.kind !== "collection" &&
     asset.kind !== "sound" &&
     asset.kind !== "music" &&
+    asset.kind !== "voice" &&
+    asset.kind !== "voice-line" &&
     Object.keys(asset.versions).length === 0
   );
 }

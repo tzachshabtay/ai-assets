@@ -55,7 +55,7 @@ export function assertAsset(asset: AiAssetDefinition): void {
   if (asset.dimensions) {
     assertPositiveInteger(asset.dimensions.width, `${asset.id}.dimensions.width`);
     assertPositiveInteger(asset.dimensions.height, `${asset.id}.dimensions.height`);
-  } else if (asset.kind !== "sound" && asset.kind !== "music") {
+  } else if (!isAudioLikeAsset(asset.kind)) {
     throw new Error(`${asset.id}.dimensions is required for graphical assets.`);
   }
 
@@ -109,6 +109,10 @@ export function assertAsset(asset: AiAssetDefinition): void {
   for (const [versionName, version] of Object.entries(asset.versions)) {
     assertVersion(asset.id, versionName, version);
   }
+}
+
+function isAudioLikeAsset(kind: AiAssetDefinition["kind"]): boolean {
+  return kind === "sound" || kind === "music" || kind === "voice" || kind === "voice-line";
 }
 
 export function resolveAiAsset(

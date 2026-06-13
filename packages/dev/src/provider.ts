@@ -5,6 +5,7 @@ import type {
   AiAssetFormat,
   AiAssetFrameGrid,
   AiAudioGenerationSettings,
+  AiVoiceGenerationSettings,
   AiAssetGenerationSettings
 } from "@ai-game-assets/core";
 import { randomUUID } from "node:crypto";
@@ -49,6 +50,7 @@ export type GeneratedAssetOption = {
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
   audioPlayback?: AiAssetDefinition["audioPlayback"];
+  voiceSettings?: AiVoiceGenerationSettings;
   durationSeconds?: number;
   dimensions?: AiAssetDimensions;
   frameGrid?: AiAssetFrameGrid;

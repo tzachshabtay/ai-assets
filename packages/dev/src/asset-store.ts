@@ -85,6 +85,7 @@ export async function saveGeneratedOption(
     settings: input.option.settings,
     audioSettings: input.option.audioSettings,
     audioPlayback: input.option.audioPlayback,
+    voiceSettings: input.option.voiceSettings,
     durationSeconds: input.option.durationSeconds,
     parentVersion: asset.activeVersion || undefined,
     notes: input.notes
@@ -112,6 +113,10 @@ export async function saveGeneratedOption(
         audioPlayback: {
           ...updatedAsset.audioPlayback,
           ...version.audioPlayback
+        },
+        voiceSettings: {
+          ...updatedAsset.voiceSettings,
+          ...version.voiceSettings
         }
       }
     : updatedAsset;

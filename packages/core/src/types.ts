@@ -1,4 +1,4 @@
-export type AiAssetKind = "image" | "spritesheet" | "animation" | "collection" | "sound" | "music";
+export type AiAssetKind = "image" | "spritesheet" | "animation" | "collection" | "sound" | "music" | "voice" | "voice-line";
 
 export type AiAssetBackground = "transparent" | "opaque" | "auto";
 
@@ -78,6 +78,19 @@ export type AiAudioGenerationSettings = {
   loop?: boolean;
 };
 
+export type AiVoiceGenerationSettings = {
+  provider?: "elevenlabs" | string;
+  voiceAssetId?: string;
+  voiceId?: string;
+  generatedVoiceId?: string;
+  previewText?: string;
+  text?: string;
+  direction?: string;
+  model?: string;
+  loudness?: number;
+  seed?: number;
+};
+
 export type AiAudioPlaybackSettings = {
   volume?: number;
   trimStartSeconds?: number;
@@ -113,6 +126,7 @@ export type AiAssetVersion = {
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
   audioPlayback?: AiAudioPlaybackSettings;
+  voiceSettings?: AiVoiceGenerationSettings;
   durationSeconds?: number;
   parentVersion?: string;
   notes?: string;
@@ -130,6 +144,7 @@ export type AiAssetDefinition = {
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
   audioPlayback?: AiAudioPlaybackSettings;
+  voiceSettings?: AiVoiceGenerationSettings;
   linkedAnimationAssets?: Record<string, AiAssetLinkedAnimation>;
   activeVersion: string;
   versions: Record<string, AiAssetVersion>;

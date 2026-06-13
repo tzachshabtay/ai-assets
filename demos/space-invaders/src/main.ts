@@ -394,7 +394,9 @@ function startGame(assetManifest: AiAssetManifest): void {
           "audio.sfx.hero-explosion",
           "audio.sfx.game-over",
           menuMusicAssetId,
-          gameMusicAssetId
+          gameMusicAssetId,
+          "voice.announcer",
+          "voice.line.new-wave"
         ],
         onManifestUpdated: (updatedManifest) => {
           manifest = updatedManifest;

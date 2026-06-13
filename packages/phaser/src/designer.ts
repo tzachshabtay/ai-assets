@@ -5,6 +5,7 @@ import type {
   AiAudioFormat,
   AiAudioGenerationSettings,
   AiAudioPlaybackSettings,
+  AiVoiceGenerationSettings,
   AiAssetFormat,
   AiAssetGenerationSettings,
   AiAssetManifest
@@ -95,6 +96,8 @@ type DesignerElements = {
   audioDurationField: HTMLLabelElement;
   audioLoopInput: HTMLInputElement;
   audioLoopField: HTMLLabelElement;
+  voiceTextInput: HTMLTextAreaElement;
+  voiceTextField: HTMLLabelElement;
   promptInput: HTMLTextAreaElement;
   currentImage: HTMLImageElement;
   currentAudio: HTMLDivElement;
@@ -200,6 +203,8 @@ export function installAiAssetDesigner(
     const asset = manifest.assets[assetId];
     const activeVersion = asset.versions[asset.activeVersion];
     const isAudio = isAudioAsset(asset);
+    const isVoice = isVoiceAsset(asset);
+    const isVoiceLine = asset.kind === "voice-line";
     stopCurrentAnimationPreview?.();
     stopCurrentAnimationPreview = undefined;
     elements.promptInput.value = activeVersion?.prompt ?? asset.prompt;
@@ -208,6 +213,12 @@ export function installAiAssetDesigner(
     elements.audioFormatSelect.value = asset.audioSettings?.format ?? "mp3";
     elements.audioDurationInput.value = String(asset.audioSettings?.durationSeconds ?? activeVersion?.durationSeconds ?? "");
     elements.audioLoopInput.checked = Boolean(asset.audioSettings?.loop);
+    elements.voiceTextInput.value =
+      activeVersion?.voiceSettings?.text ??
+      activeVersion?.voiceSettings?.previewText ??
+      asset.voiceSettings?.text ??
+      asset.voiceSettings?.previewText ??
+      "";
     elements.formatSelect.value = effectiveGenerationFormat(
       manifest,
       formatDrafts,
@@ -218,6 +229,8 @@ export function installAiAssetDesigner(
     elements.audioFormatField.hidden = !isAudio;
     elements.audioDurationField.hidden = !isAudio;
     elements.audioLoopField.hidden = !isAudio;
+    elements.voiceTextField.hidden = !isVoice;
+    elements.voiceTextField.firstChild!.textContent = isVoiceLine ? "Text to say" : "Demo sentence";
     elements.formatField.hidden = isAudio || elements.formatField.hidden;
     elements.dimensionGrid.hidden = isAudio;
     elements.frameCountInput.value = String(
@@ -393,6 +406,7 @@ export function installAiAssetDesigner(
         count: options.optionCount ?? 3,
         format: generationFormat,
         audioSettings: audioGenerationOverridesFromInputs(elements, manifest.assets[generationAssetId]),
+        voiceSettings: voiceGenerationOverridesFromInputs(elements, manifest.assets[generationAssetId]),
         styleGuide: await styleGuideRequest(styleGuideDraft),
         ...generationOverridesFromInputs(
           elements,
@@ -503,6 +517,7 @@ export function installAiAssetDesigner(
         settings: selectedOption.settings,
         audioSettings: selectedOption.audioSettings,
         audioPlayback: selectedOption.audioPlayback,
+        voiceSettings: selectedOption.voiceSettings,
         durationSeconds: selectedOption.durationSeconds,
         activate: true,
         notes: "Promoted from the AI asset designer."
@@ -597,6 +612,7 @@ export function installAiAssetDesigner(
             revisedPrompt: activeVersion.revisedPrompt,
             audioSettings: activeVersion.audioSettings ?? asset.audioSettings,
             audioPlayback,
+            voiceSettings: activeVersion.voiceSettings ?? asset.voiceSettings,
             durationSeconds: activeVersion.durationSeconds
           };
           selectedOption = editedCurrentOption;
@@ -826,6 +842,9 @@ function createDesignerElements(
   audioDurationInput.inputMode = "decimal";
   const audioLoopInput = document.createElement("input");
   audioLoopInput.type = "checkbox";
+  const voiceTextInput = document.createElement("textarea");
+  voiceTextInput.className = "ai-game-assets-designer__prompt";
+  voiceTextInput.rows = 3;
   const formatSelect = document.createElement("select");
   formatSelect.className = "ai-game-assets-designer__format-select";
   for (const format of assetFormatOptions) {
@@ -853,6 +872,7 @@ function createDesignerElements(
   const audioFormatField = labelWrap("Audio format", audioFormatSelect);
   const audioDurationField = labelWrap("Length (sec)", audioDurationInput);
   const audioLoopField = labelWrap("Loop", audioLoopInput);
+  const voiceTextField = labelWrap("Demo sentence", voiceTextInput);
 
   const currentPreview = document.createElement("div");
   currentPreview.className = "ai-game-assets-designer__current";
@@ -923,6 +943,7 @@ function createDesignerElements(
     audioFormatField,
     audioDurationField,
     audioLoopField,
+    voiceTextField,
     labelWrap("Current", currentPreview),
     labelWrap("Prompt", promptInput),
     actions,
@@ -953,6 +974,8 @@ function createDesignerElements(
     audioDurationField,
     audioLoopInput,
     audioLoopField,
+    voiceTextInput,
+    voiceTextField,
     promptInput,
     currentImage,
     currentAudio,
@@ -1179,6 +1202,7 @@ async function uploadedOptionFromFile(options: {
       model: "uploaded",
       audioSettings,
       audioPlayback: options.asset.audioPlayback,
+      voiceSettings: voiceGenerationOverridesFromInputs(options.elements, options.asset),
       durationSeconds: await audioDurationFromDataUrl(dataUrl)
     };
   }
@@ -3412,6 +3436,28 @@ function audioGenerationOverridesFromInputs(
   };
 }
 
+function voiceGenerationOverridesFromInputs(
+  elements: DesignerElements,
+  asset: AiAssetDefinition
+): AiVoiceGenerationSettings | undefined {
+  if (!isVoiceAsset(asset)) return asset.voiceSettings;
+
+  const text = elements.voiceTextInput.value.trim();
+
+  if (asset.kind === "voice") {
+    return {
+      ...asset.voiceSettings,
+      previewText: text || asset.voiceSettings?.previewText
+    };
+  }
+
+  return {
+    ...asset.voiceSettings,
+    text: text || asset.voiceSettings?.text,
+    direction: elements.promptInput.value.trim() || asset.voiceSettings?.direction
+  };
+}
+
 function canEditGenerationFormat(
   manifest: AiAssetManifest,
   selectedAssetId: string,
@@ -3454,7 +3500,14 @@ function normalizeAudioFormat(format: string | undefined): AiAudioFormat {
 }
 
 function isAudioAsset(asset: AiAssetDefinition | undefined): boolean {
-  return asset?.kind === "sound" || asset?.kind === "music";
+  return asset?.kind === "sound" ||
+    asset?.kind === "music" ||
+    asset?.kind === "voice" ||
+    asset?.kind === "voice-line";
+}
+
+function isVoiceAsset(asset: AiAssetDefinition | undefined): boolean {
+  return asset?.kind === "voice" || asset?.kind === "voice-line";
 }
 
 function assetWithGeneratedGeometry(
@@ -3466,7 +3519,8 @@ function assetWithGeneratedGeometry(
     dimensions: option.dimensions ?? asset.dimensions,
     frameGrid: option.frameGrid ?? asset.frameGrid,
     animations: option.animations ?? asset.animations,
-    audioPlayback: option.audioPlayback ?? asset.audioPlayback
+    audioPlayback: option.audioPlayback ?? asset.audioPlayback,
+    voiceSettings: option.voiceSettings ?? asset.voiceSettings
   };
 }
 

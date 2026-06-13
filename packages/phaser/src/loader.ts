@@ -24,7 +24,9 @@ export function loadAiAsset(
   if (
     manifest.assets[assetId]?.kind === "collection" ||
     manifest.assets[assetId]?.kind === "sound" ||
-    manifest.assets[assetId]?.kind === "music"
+    manifest.assets[assetId]?.kind === "music" ||
+    manifest.assets[assetId]?.kind === "voice" ||
+    manifest.assets[assetId]?.kind === "voice-line"
   ) {
     throw new Error(`AI asset "${assetId}" cannot be loaded as a texture.`);
   }
@@ -115,7 +117,7 @@ export function loadAiAudioAsset(
   const assetId = typeof selection === "string" ? selection : selection.assetId;
   const asset = manifest.assets[assetId];
 
-  if (!asset || (asset.kind !== "sound" && asset.kind !== "music")) {
+  if (!asset || !isAudioLikeAsset(asset.kind)) {
     throw new Error(`AI asset "${assetId}" is not an audio asset.`);
   }
 
@@ -150,7 +152,7 @@ export function loadAiAudioAssets(
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset[] {
   return Object.values(manifest.assets)
-    .filter((asset) => asset.kind === "sound" || asset.kind === "music")
+    .filter((asset) => isAudioLikeAsset(asset.kind))
     .map((asset) => loadAiAudioAsset(scene, manifest, asset.id, options))
     .filter((asset): asset is ResolvedAiAsset => Boolean(asset));
 }
@@ -165,8 +167,12 @@ export function loadAiAssets(
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset[] {
   return Object.values(manifest.assets)
-    .filter((asset) => asset.kind !== "collection" && asset.kind !== "sound" && asset.kind !== "music")
+    .filter((asset) => asset.kind !== "collection" && !isAudioLikeAsset(asset.kind))
     .map((asset) => loadAiAsset(scene, manifest, asset.id, options));
+}
+
+function isAudioLikeAsset(kind: string): boolean {
+  return kind === "sound" || kind === "music" || kind === "voice" || kind === "voice-line";
 }
 
 function joinUrl(baseUrl: string | undefined, file: string): string {
