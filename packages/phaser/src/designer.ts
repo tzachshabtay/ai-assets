@@ -100,6 +100,7 @@ type DesignerElements = {
   currentAudio: HTMLDivElement;
   currentAnimation: HTMLDivElement;
   currentAnimationButton: HTMLButtonElement;
+  currentTouchUpButton: HTMLButtonElement;
   currentPreview: HTMLDivElement;
   uploadButton: HTMLButtonElement;
   regenerateButton: HTMLButtonElement;
@@ -244,6 +245,11 @@ export function installAiAssetDesigner(
     elements.currentAnimationButton.textContent = "Edit...";
     elements.currentPreview.classList.add("is-selected");
     elements.currentAnimationButton.hidden = !activeVersion?.file || (!asset.frameGrid && !isAudio);
+    elements.currentTouchUpButton.hidden = !activeVersion?.file ||
+      isAudio ||
+      Boolean(asset.frameGrid) ||
+      normalizeAssetFormat(asset.settings?.format) === "svg" ||
+      isSvgSource(activeVersion?.file ?? "");
     elements.options.innerHTML = "";
     elements.options.classList.remove("is-audio");
     setStatus(elements, "", "idle");
@@ -663,6 +669,60 @@ export function installAiAssetDesigner(
     });
   });
 
+  elements.currentTouchUpButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const asset = manifest.assets[selectedTargetAssetId];
+    const activeVersion = asset.versions[asset.activeVersion];
+
+    if (
+      !activeVersion?.file ||
+      isAudioAsset(asset) ||
+      asset.frameGrid ||
+      normalizeAssetFormat(asset.settings?.format) === "svg" ||
+      isSvgSource(activeVersion.file)
+    ) {
+      return;
+    }
+
+    void openFrameTouchUpEditor({
+      root: elements.root,
+      asset,
+      title: readableAssetName(selectedTargetAssetId),
+      frameSrc: editedCurrentOption?.dataUrl ?? activeVersion.file,
+      displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset),
+      onSave: async (dataUrl) => {
+        const optionAsset = {
+          ...asset,
+          dimensions: asset.dimensions
+        };
+
+        editedCurrentOption = {
+          index: -1,
+          dataUrl,
+          mimeType: mimeTypeFromDataUrl(dataUrl),
+          prompt: activeVersion.prompt ?? asset.prompt,
+          model: activeVersion.model,
+          revisedPrompt: activeVersion.revisedPrompt,
+          dimensions: asset.dimensions
+        };
+        selectedOption = editedCurrentOption;
+        elements.currentImage.src = dataUrl;
+        elements.currentPreview.classList.add("is-selected");
+        elements.promoteButton.disabled = false;
+        previewImageSource({
+          scene: options.scene,
+          manifest,
+          assetId: selectedTargetAssetId,
+          src: dataUrl,
+          textureKey: `ai-current-touchup:${selectedTargetAssetId}:${Date.now()}`,
+          assetOverride: optionAsset,
+          onPreview: options.onPreview
+        });
+        setStatus(elements, "Image touch-up applied. Promote to save it to code.", "success");
+      }
+    });
+  });
+
   syncAsset(selectedAssetId);
 
   if (options.autoFirstDrafts !== false) {
@@ -810,7 +870,18 @@ function createDesignerElements(
   currentAnimationButton.className = "ai-game-assets-designer__animate-button";
   currentAnimationButton.textContent = "Animate";
   currentAnimationButton.hidden = true;
-  currentPreview.append(currentImage, currentAudio, currentAnimation, currentAnimationButton);
+  const currentTouchUpButton = document.createElement("button");
+  currentTouchUpButton.type = "button";
+  currentTouchUpButton.className = "ai-game-assets-designer__animate-button";
+  currentTouchUpButton.textContent = "Touch up...";
+  currentTouchUpButton.hidden = true;
+  currentPreview.append(
+    currentImage,
+    currentAudio,
+    currentAnimation,
+    currentAnimationButton,
+    currentTouchUpButton
+  );
 
   const regenerateButton = document.createElement("button");
   regenerateButton.type = "button";
@@ -887,6 +958,7 @@ function createDesignerElements(
     currentAudio,
     currentAnimation,
     currentAnimationButton,
+    currentTouchUpButton,
     currentPreview,
     uploadButton,
     regenerateButton,
@@ -1279,9 +1351,9 @@ async function openFrameTouchUpEditor(options: {
   asset: AiAssetDefinition;
   title: string;
   frameSrc: string;
-  spriteSheetSrc: string;
-  frameSlot: number;
-  frame: number;
+  spriteSheetSrc?: string;
+  frameSlot?: number;
+  frame?: number;
   displaySize: AiAssetPreviewDisplaySize;
   onSave(dataUrl: string): void | Promise<void>;
 }): Promise<void> {
@@ -1448,10 +1520,12 @@ async function openFrameTouchUpEditor(options: {
 
   const frameGrid = options.asset.frameGrid;
   const animation = options.asset.animations?.[0];
-  const frames = animation?.frames ?? [options.frame];
+  const frames = animation?.frames ?? [options.frame ?? 0];
   const frameRate = animation?.frameRate ?? 8;
   const frameTimings = animation?.frameTimings ?? [];
-  const sheetImage = await loadImageElement(options.spriteSheetSrc);
+  const sheetImage = options.spriteSheetSrc
+    ? await loadImageElement(options.spriteSheetSrc)
+    : undefined;
 
   const selectedColor = (): [number, number, number, number] => {
     const hex = colorInput.value.replace("#", "");
@@ -1762,7 +1836,21 @@ async function openFrameTouchUpEditor(options: {
   };
 
   const drawAnimationFrame = () => {
-    if (disposed || !frameGrid || !animation) return;
+    if (disposed) return;
+
+    if (!frameGrid || !animation || !sheetImage) {
+      animationContext.clearRect(0, 0, animationPreview.width, animationPreview.height);
+      animationContext.imageSmoothingEnabled = false;
+      animationContext.drawImage(
+        canvas,
+        0,
+        0,
+        animationPreview.width,
+        animationPreview.height
+      );
+      animationTimeout = window.setTimeout(drawAnimationFrame, 250);
+      return;
+    }
 
     const frameSlot = animationCursor % frames.length;
     const frame = frames[frameSlot] ?? 0;
