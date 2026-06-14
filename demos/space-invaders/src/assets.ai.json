@@ -4755,15 +4755,46 @@
       "prompt": "Excited arcade announcer direction, quick and punchy, celebratory but urgent.",
       "audioSettings": {
         "provider": "elevenlabs",
-        "format": "mp3"
+        "format": "mp3",
+        "durationSeconds": 2,
+        "loop": false
       },
       "voiceSettings": {
         "provider": "elevenlabs",
         "voiceAssetId": "voice.announcer",
-        "text": "New wave incoming!"
+        "text": "New wave incoming!",
+        "direction": "Excited arcade announcer direction, quick and punchy, celebratory but urgent.",
+        "voiceId": "YlLxFuTEUlgMjWZ6bSA1"
       },
-      "activeVersion": "",
-      "versions": {},
+      "activeVersion": "promoted-1781408131259",
+      "versions": {
+        "promoted-1781408131259": {
+          "name": "promoted-1781408131259",
+          "file": "/assets/voice.line.new-wave.promoted-1781408131259.mp3",
+          "prompt": "Excited arcade announcer direction, quick and punchy, celebratory but urgent.",
+          "createdAt": "2026-06-14T03:35:31.293Z",
+          "model": "eleven_v3",
+          "settings": {},
+          "audioSettings": {
+            "provider": "elevenlabs",
+            "format": "mp3",
+            "durationSeconds": 2,
+            "loop": false
+          },
+          "audioPlayback": {
+            "volume": 0.85
+          },
+          "voiceSettings": {
+            "provider": "elevenlabs",
+            "voiceAssetId": "voice.announcer",
+            "text": "New wave incoming!",
+            "direction": "Excited arcade announcer direction, quick and punchy, celebratory but urgent.",
+            "voiceId": "YlLxFuTEUlgMjWZ6bSA1"
+          },
+          "durationSeconds": 2,
+          "notes": "Promoted from the AI asset designer."
+        }
+      },
       "audioPlayback": {
         "volume": 0.85
       },

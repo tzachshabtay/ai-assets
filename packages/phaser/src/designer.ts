@@ -801,7 +801,7 @@ function createDesignerElements(
   toggle.className = "ai-game-assets-designer__toggle";
   toggle.setAttribute("aria-label", "Toggle AI asset designer");
   toggle.setAttribute("aria-expanded", "false");
-  toggle.textContent = "AI";
+  toggle.textContent = "Assets";
 
   const panel = document.createElement("div");
   panel.className = "ai-game-assets-designer__panel";

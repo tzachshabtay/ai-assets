@@ -6,6 +6,7 @@ import {
   bindAiAnimationFrameTransforms,
   createAiAnimations,
   installAiAssetDesigner,
+  loadAiAudioAsset,
   loadAiAudioAssets,
   loadAiAssets,
 } from "@ai-game-assets/phaser";
@@ -108,6 +109,7 @@ const heroExplosionSfxAssetId = "audio.sfx.hero-explosion";
 const gameOverSfxAssetId = "audio.sfx.game-over";
 const menuMusicAssetId = "audio.music.menu";
 const gameMusicAssetId = "audio.music.game";
+const newWaveVoiceLineAssetId = "voice.line.new-wave";
 const musicFadeDurationMs = 1200;
 
 const laserHitDisplaySizes: Record<string, { width: number; height: number }> = {
@@ -154,6 +156,12 @@ function soundOnlyManifest(manifest: AiAssetManifest): AiAssetManifest {
       Object.entries(manifest.assets).filter(([, asset]) => asset.kind === "sound")
     )
   };
+}
+
+function isRuntimeAudioAsset(asset: AiAssetDefinition): boolean {
+  return asset.kind === "sound" ||
+    asset.kind === "music" ||
+    asset.kind === "voice-line";
 }
 
 async function boot(): Promise<void> {
@@ -298,7 +306,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.applyAssetTexture = (assetId, textureKey, asset) => {
         assetManifest.assets[assetId] = asset;
 
-        if (asset.kind === "sound" || asset.kind === "music") {
+        if (isRuntimeAudioAsset(asset)) {
           this.audioPlaybackOverrides.set(assetId, asset.audioPlayback);
           this.refreshAudioAsset(
             assetId,
@@ -1027,6 +1035,7 @@ function startGame(assetManifest: AiAssetManifest): void {
       this.invaderBullets = [];
       this.waveIndex += 1;
       this.spawnInvaders();
+      this.playAudioAsset(newWaveVoiceLineAssetId, { volume: 0.8 });
       this.statusText?.setText(
         `${message} Wave ${this.waveIndex + 1}. Speed x${this.invaderSpeedMultiplier().toFixed(1)}.`
       );
@@ -1540,6 +1549,12 @@ function startGame(assetManifest: AiAssetManifest): void {
 
     private loadSoundAssets(): void {
       const loaded = loadAiAudioAssets(this, soundOnlyManifest(assetManifest));
+      const voiceLine = assetManifest.assets[newWaveVoiceLineAssetId];
+
+      if (voiceLine?.versions[voiceLine.activeVersion]?.file) {
+        loaded.push(loadAiAudioAsset(this, assetManifest, newWaveVoiceLineAssetId)!);
+      }
+
       if (loaded.length > 0) this.load.start();
     }
 
