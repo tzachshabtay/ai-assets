@@ -231,7 +231,12 @@ async function generateElevenLabsVoiceLine(
 
   for (let index = 0; index < count; index += 1) {
     const line = voiceSettings.text ?? request.asset.prompt;
-    const direction = request.prompt ?? voiceSettings.direction;
+    const direction = (request.prompt ?? voiceSettings.direction)?.trim();
+    const model =
+      voiceSettings.model ??
+      audioSettings.model ??
+      (direction ? "eleven_v3" : "eleven_multilingual_v2");
+    const text = direction ? `[${sanitizeElevenLabsAudioTag(direction)}]\n${line}` : line;
     const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`);
     url.searchParams.set("output_format", options.outputFormat ?? elevenLabsOutputFormat(format));
     const response = await fetch(url, {
@@ -241,8 +246,8 @@ async function generateElevenLabsVoiceLine(
         "xi-api-key": apiKey
       },
       body: JSON.stringify({
-        text: line,
-        model_id: voiceSettings.model ?? audioSettings.model ?? "eleven_multilingual_v2"
+        text,
+        model_id: model
       })
     });
 
@@ -256,7 +261,7 @@ async function generateElevenLabsVoiceLine(
       image: new Uint8Array(await response.arrayBuffer()),
       mimeType: mimeTypeForAudioFormat(format),
       prompt: direction ?? request.asset.prompt,
-      model: voiceSettings.model ?? audioSettings.model ?? "eleven_multilingual_v2",
+      model,
       audioSettings: {
         provider: "elevenlabs",
         ...audioSettings,
@@ -274,6 +279,14 @@ async function generateElevenLabsVoiceLine(
   }
 
   return generated;
+}
+
+function sanitizeElevenLabsAudioTag(direction: string): string {
+  return direction
+    .replace(/[\r\n]+/g, " ")
+    .replace(/[\[\]]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function generateElevenLabsAudio(
