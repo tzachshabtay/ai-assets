@@ -3884,6 +3884,17 @@ function ensureDesignerStyles(): void {
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+.ai-game-assets-designer__toggle:hover,
+.ai-game-assets-designer__toggle:focus-visible {
+  border-color: #8bb8ff;
+  background: #253149;
+  box-shadow:
+    0 0 0 3px rgba(74, 144, 255, 0.24),
+    0 0 22px rgba(74, 144, 255, 0.42),
+    0 12px 30px rgba(0, 0, 0, 0.42);
+  transform: translateY(-1px);
 }
 .ai-game-assets-designer__panel {
   display: none;
