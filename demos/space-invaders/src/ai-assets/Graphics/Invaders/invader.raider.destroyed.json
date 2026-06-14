@@ -1,0 +1,142 @@
+{
+  "id": "invader.raider.destroyed",
+  "kind": "spritesheet",
+  "prompt": "Alien invader raider destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+  "dimensions": {
+    "width": 192,
+    "height": 192
+  },
+  "frameGrid": {
+    "frameCount": 8,
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "columns": 3,
+    "rows": 3
+  },
+  "animations": [
+    {
+      "key": "invader.raider.destroyed",
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "frameRate": 12,
+      "repeat": 0
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "invader.raider"
+    ]
+  },
+  "activeVersion": "promoted-1780781981622",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/invader.raider.destroyed.default.svg",
+      "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+      "createdAt": "2026-05-31T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "generated-destroyed-1780239070336": {
+      "name": "generated-destroyed-1780239070336",
+      "file": "/assets/invader.raider.destroyed.generated-destroyed-1780239070336.png",
+      "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+      "createdAt": "2026-05-31T14:51:10.359Z",
+      "model": "gpt-image-1.5",
+      "settings": {
+        "model": "gpt-image-1.5",
+        "background": "transparent",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Generated for the Space Invaders animation demo."
+    },
+    "promoted-1780365215588": {
+      "name": "promoted-1780365215588",
+      "file": "/assets/invader.raider.destroyed.promoted-1780365215588.png",
+      "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+      "createdAt": "2026-06-02T01:53:35.619Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "generated-destroyed-1780239070336",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780450920237": {
+      "name": "promoted-1780450920237",
+      "file": "/assets/invader.raider.destroyed.promoted-1780450920237.png",
+      "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+      "createdAt": "2026-06-03T01:42:00.310Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "promoted-1780365215588",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780542613732": {
+      "name": "promoted-1780542613732",
+      "file": "/assets/invader.raider.destroyed.promoted-1780542613732.png",
+      "prompt": "Alien invader scout destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+      "createdAt": "2026-06-04T03:10:13.745Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "promoted-1780450920237",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780781981622": {
+      "name": "promoted-1780781981622",
+      "file": "/assets/invader.raider.destroyed.promoted-1780781981622.png",
+      "prompt": "Alien invader raider destroyed animation. Cracking armor, energy burst, fragments dissolving, final smoke flicker, transparent background.",
+      "createdAt": "2026-06-06T21:39:41.642Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "promoted-1780542613732",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

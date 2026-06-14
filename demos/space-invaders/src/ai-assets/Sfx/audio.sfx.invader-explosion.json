@@ -1,0 +1,77 @@
+{
+  "id": "audio.sfx.invader-explosion",
+  "kind": "sound",
+  "prompt": "Short soft satisying 8-bit explosion",
+  "audioSettings": {
+    "provider": "elevenlabs",
+    "format": "mp3",
+    "durationSeconds": 0.5,
+    "loop": false
+  },
+  "activeVersion": "promoted-1781304866527",
+  "versions": {
+    "promoted-1780842819494": {
+      "name": "promoted-1780842819494",
+      "file": "/assets/audio.sfx.invader-explosion.promoted-1780842819494.mp3",
+      "prompt": "Short crunchy alien invader explosion sound effect, should be satisying.",
+      "createdAt": "2026-06-07T14:33:39.508Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 1.2,
+        "loop": false
+      },
+      "durationSeconds": 1.2,
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780843618857": {
+      "name": "promoted-1780843618857",
+      "file": "/assets/audio.sfx.invader-explosion.promoted-1780843618857.mp3",
+      "prompt": "Short soft satisying 8-bit explosion",
+      "createdAt": "2026-06-07T14:46:58.875Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": false
+      },
+      "durationSeconds": 0.5,
+      "parentVersion": "promoted-1780842819494",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1781304866527": {
+      "name": "promoted-1781304866527",
+      "file": "/assets/audio.sfx.invader-explosion.promoted-1781304866527.mp3",
+      "prompt": "Short soft satisying 8-bit explosion",
+      "createdAt": "2026-06-12T22:54:26.565Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": false
+      },
+      "audioPlayback": {
+        "volume": 1.5,
+        "trimStartSeconds": 0,
+        "trimEndSeconds": 0.48,
+        "playbackRate": 1
+      },
+      "durationSeconds": 0.5,
+      "parentVersion": "promoted-1780843618857",
+      "notes": "Promoted from the AI asset designer."
+    }
+  },
+  "settings": {},
+  "audioPlayback": {
+    "volume": 1.5,
+    "trimStartSeconds": 0,
+    "trimEndSeconds": 0.48,
+    "playbackRate": 1
+  }
+}

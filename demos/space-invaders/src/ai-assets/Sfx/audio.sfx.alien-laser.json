@@ -1,0 +1,165 @@
+{
+  "id": "audio.sfx.alien-laser",
+  "kind": "sound",
+  "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+  "audioSettings": {
+    "provider": "elevenlabs",
+    "format": "mp3",
+    "durationSeconds": 0.5,
+    "loop": true
+  },
+  "activeVersion": "promoted-1781151978577",
+  "versions": {
+    "promoted-1781148834421": {
+      "name": "promoted-1781148834421",
+      "file": "/assets/audio.sfx.alien-laser.promoted-1781148834421.mp3",
+      "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+      "createdAt": "2026-06-11T03:33:54.439Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": true
+      },
+      "durationSeconds": 0.5,
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1781150849367": {
+      "name": "promoted-1781150849367",
+      "file": "/assets/audio.sfx.alien-laser.promoted-1781150849367.mp3",
+      "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+      "createdAt": "2026-06-11T04:07:29.378Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": true
+      },
+      "durationSeconds": 0.5,
+      "parentVersion": "promoted-1781148834421",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1781150900449": {
+      "name": "promoted-1781150900449",
+      "file": "/assets/audio.sfx.alien-laser.promoted-1781150900449.mp3",
+      "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+      "createdAt": "2026-06-11T04:08:20.463Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": true
+      },
+      "durationSeconds": 0.5,
+      "parentVersion": "promoted-1781150849367",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1781151919060": {
+      "name": "promoted-1781151919060",
+      "file": "/assets/audio.sfx.alien-laser.promoted-1781151919060.mp3",
+      "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+      "createdAt": "2026-06-11T04:25:19.071Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": true
+      },
+      "audioPlayback": {
+        "volume": 0.18,
+        "trimStartSeconds": 0.31252739340572033,
+        "trimEndSeconds": 0.6823497914459746,
+        "playbackRate": 1,
+        "pitchSemitones": 0,
+        "reverb": {
+          "enabled": false,
+          "amount": 0.25,
+          "decaySeconds": 1.2
+        },
+        "delay": {
+          "enabled": false,
+          "timeSeconds": 0.12,
+          "feedback": 0.18,
+          "mix": 0.2
+        },
+        "filter": {
+          "type": "none",
+          "frequencyHz": 1200
+        }
+      },
+      "durationSeconds": 0.5,
+      "parentVersion": "promoted-1781150900449",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1781151978577": {
+      "name": "promoted-1781151978577",
+      "file": "/assets/audio.sfx.alien-laser.promoted-1781151978577.mp3",
+      "prompt": "Short sharp but satisfying pew pew sound for a shooting laser",
+      "createdAt": "2026-06-11T04:26:18.587Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": true
+      },
+      "audioPlayback": {
+        "volume": 0.06,
+        "trimStartSeconds": 0.31252739340572033,
+        "trimEndSeconds": 0.6823497914459746,
+        "playbackRate": 1,
+        "pitchSemitones": 0,
+        "reverb": {
+          "enabled": false,
+          "amount": 0.25,
+          "decaySeconds": 1.2
+        },
+        "delay": {
+          "enabled": false,
+          "timeSeconds": 0.12,
+          "feedback": 0.18,
+          "mix": 0.2
+        },
+        "filter": {
+          "type": "none",
+          "frequencyHz": 1200
+        }
+      },
+      "durationSeconds": 0.5,
+      "parentVersion": "promoted-1781151919060",
+      "notes": "Promoted from the AI asset designer."
+    }
+  },
+  "settings": {},
+  "audioPlayback": {
+    "volume": 0.06,
+    "trimStartSeconds": 0.31252739340572033,
+    "trimEndSeconds": 0.6823497914459746,
+    "playbackRate": 1,
+    "pitchSemitones": 0,
+    "reverb": {
+      "enabled": false,
+      "amount": 0.25,
+      "decaySeconds": 1.2
+    },
+    "delay": {
+      "enabled": false,
+      "timeSeconds": 0.12,
+      "feedback": 0.18,
+      "mix": 0.2
+    },
+    "filter": {
+      "type": "none",
+      "frequencyHz": 1200
+    }
+  }
+}

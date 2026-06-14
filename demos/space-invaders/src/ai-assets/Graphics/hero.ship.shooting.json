@@ -1,0 +1,99 @@
+{
+  "id": "hero.ship.shooting",
+  "kind": "spritesheet",
+  "prompt": "Hero starfighter shooting animation (without the actual laser being shot). Weapon charge, muzzle flash from the cannon at the top, recoil recovery, same ship identity, transparent background.",
+  "dimensions": {
+    "width": 256,
+    "height": 256
+  },
+  "frameGrid": {
+    "frameCount": 4,
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "columns": 2,
+    "rows": 2
+  },
+  "animations": [
+    {
+      "key": "hero.ship.shooting",
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "frameRate": 12,
+      "repeat": 0,
+      "frameTimings": [
+        {
+          "delayMs": 70
+        },
+        {
+          "delayMs": 70,
+          "tag": "shoot"
+        },
+        {
+          "delayMs": 90
+        },
+        {
+          "delayMs": 90
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "hero.ship"
+    ]
+  },
+  "activeVersion": "promoted-1780542959748",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/hero.ship.shooting.default.svg",
+      "prompt": "Hero starfighter shooting animation. Weapon charge, muzzle flash from nose cannon, recoil recovery, same ship identity, transparent background.",
+      "createdAt": "2026-06-03T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "promoted-1780536687601": {
+      "name": "promoted-1780536687601",
+      "file": "/assets/hero.ship.shooting.promoted-1780536687601.png",
+      "prompt": "Hero starfighter shooting animation (without the actual laser being shot). Weapon charge, muzzle flash from the cannon at the top, recoil recovery, same ship identity, transparent background.",
+      "createdAt": "2026-06-04T01:31:27.616Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780542959748": {
+      "name": "promoted-1780542959748",
+      "file": "/assets/hero.ship.shooting.promoted-1780542959748.png",
+      "prompt": "Hero starfighter shooting animation (without the actual laser being shot). Weapon charge, muzzle flash from the cannon at the top, recoil recovery, same ship identity, transparent background.",
+      "createdAt": "2026-06-04T03:15:59.799Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "promoted-1780536687601",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

@@ -155,6 +155,7 @@ export type AiAssetManifest = {
   schemaVersion: 1;
   assets: Record<string, AiAssetDefinition>;
   styleGuide?: AiAssetStyleGuide;
+  assetPaths?: Record<string, string[]>;
 };
 
 export type AiAssetSelection = {

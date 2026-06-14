@@ -1,0 +1,39 @@
+{
+  "id": "audio.music.game",
+  "kind": "music",
+  "prompt": "Loopable high-energy retro sci-fi arcade gameplay music, driving chiptune bass, tense space battle momentum, no vocals.",
+  "audioSettings": {
+    "provider": "elevenlabs",
+    "format": "mp3",
+    "durationSeconds": 24,
+    "loop": true
+  },
+  "activeVersion": "promoted-1781304553965",
+  "versions": {
+    "promoted-1781304553965": {
+      "name": "promoted-1781304553965",
+      "file": "/assets/audio.music.game.promoted-1781304553965.mp3",
+      "prompt": "Loopable high-energy retro sci-fi arcade gameplay music, driving chiptune bass, tense space battle momentum, no vocals.",
+      "createdAt": "2026-06-12T22:49:14.113Z",
+      "model": "uploaded",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 24,
+        "loop": true
+      },
+      "audioPlayback": {
+        "volume": 0.72,
+        "loop": true
+      },
+      "durationSeconds": 193.439979,
+      "notes": "Promoted from the AI asset designer."
+    }
+  },
+  "settings": {},
+  "audioPlayback": {
+    "volume": 0.72,
+    "loop": true
+  }
+}

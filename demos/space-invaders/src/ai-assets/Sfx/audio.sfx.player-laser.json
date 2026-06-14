@@ -1,0 +1,126 @@
+{
+  "id": "audio.sfx.player-laser",
+  "kind": "sound",
+  "prompt": "a satisfying pew pew sound for a shooting laser",
+  "audioSettings": {
+    "provider": "elevenlabs",
+    "format": "mp3",
+    "durationSeconds": 0.5,
+    "loop": true
+  },
+  "activeVersion": "promoted-1781151879086",
+  "versions": {
+    "promoted-1780841902063": {
+      "name": "promoted-1780841902063",
+      "file": "/assets/audio.sfx.player-laser.promoted-1780841902063.mp3",
+      "prompt": "Short crisp retro sci-fi blue laser shot sound effect for an arcade space shooter, punchy attack, quick fade, no voice.",
+      "createdAt": "2026-06-07T14:18:22.079Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.8,
+        "loop": false
+      },
+      "durationSeconds": 0.8,
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780848343490": {
+      "name": "promoted-1780848343490",
+      "file": "/assets/audio.sfx.player-laser.promoted-1780848343490.mp3",
+      "prompt": "a satisfying pew pew sound for a shooting laser",
+      "createdAt": "2026-06-07T16:05:43.505Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": true
+      },
+      "durationSeconds": 0.5,
+      "parentVersion": "promoted-1780841902063",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1781150826966": {
+      "name": "promoted-1781150826966",
+      "file": "/assets/audio.sfx.player-laser.promoted-1781150826966.mp3",
+      "prompt": "a satisfying pew pew sound for a shooting laser",
+      "createdAt": "2026-06-11T04:07:06.979Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": true
+      },
+      "durationSeconds": 0.5,
+      "parentVersion": "promoted-1780848343490",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1781151879086": {
+      "name": "promoted-1781151879086",
+      "file": "/assets/audio.sfx.player-laser.promoted-1781151879086.mp3",
+      "prompt": "a satisfying pew pew sound for a shooting laser",
+      "createdAt": "2026-06-11T04:24:39.117Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 0.5,
+        "loop": true
+      },
+      "audioPlayback": {
+        "volume": 0.22,
+        "trimStartSeconds": 0.3410325079449153,
+        "trimEndSeconds": 0.8071825344279662,
+        "playbackRate": 1,
+        "pitchSemitones": 0,
+        "reverb": {
+          "enabled": false,
+          "amount": 0.25,
+          "decaySeconds": 1.2
+        },
+        "delay": {
+          "enabled": false,
+          "timeSeconds": 0.12,
+          "feedback": 0.18,
+          "mix": 0.2
+        },
+        "filter": {
+          "type": "none",
+          "frequencyHz": 1200
+        }
+      },
+      "durationSeconds": 0.5,
+      "parentVersion": "promoted-1781150826966",
+      "notes": "Promoted from the AI asset designer."
+    }
+  },
+  "settings": {},
+  "audioPlayback": {
+    "volume": 0.22,
+    "trimStartSeconds": 0.3410325079449153,
+    "trimEndSeconds": 0.8071825344279662,
+    "playbackRate": 1,
+    "pitchSemitones": 0,
+    "reverb": {
+      "enabled": false,
+      "amount": 0.25,
+      "decaySeconds": 1.2
+    },
+    "delay": {
+      "enabled": false,
+      "timeSeconds": 0.12,
+      "feedback": 0.18,
+      "mix": 0.2
+    },
+    "filter": {
+      "type": "none",
+      "frequencyHz": 1200
+    }
+  }
+}

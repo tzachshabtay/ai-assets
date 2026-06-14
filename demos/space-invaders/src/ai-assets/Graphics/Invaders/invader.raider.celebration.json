@@ -1,0 +1,94 @@
+{
+  "id": "invader.raider.celebration",
+  "kind": "spritesheet",
+  "prompt": "Alien invader turning around and doing happy dancing celebration with its well defined butt",
+  "dimensions": {
+    "width": 256,
+    "height": 192
+  },
+  "frameGrid": {
+    "frameCount": 12,
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "columns": 4,
+    "rows": 3
+  },
+  "animations": [
+    {
+      "key": "invader.raider.celebration",
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "frameRate": 7,
+      "repeat": -1
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "invader.raider"
+    ]
+  },
+  "activeVersion": "promoted-1780848061525",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/invader.raider.celebration.default.svg",
+      "prompt": "Alien invader raider celebration animation. The same gold alien cheers, bounces, waves antennae, flashes victory energy, readable silhouette, transparent background.",
+      "createdAt": "2026-06-06T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "promoted-1780791426160": {
+      "name": "promoted-1780791426160",
+      "file": "/assets/invader.raider.celebration.promoted-1780791426160.png",
+      "prompt": "Alien invader happy dancing celebration animation",
+      "createdAt": "2026-06-07T00:17:06.178Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780848061525": {
+      "name": "promoted-1780848061525",
+      "file": "/assets/invader.raider.celebration.promoted-1780848061525.png",
+      "prompt": "Alien invader turning around and doing happy dancing celebration with its well defined butt",
+      "createdAt": "2026-06-07T16:01:01.533Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "audioSettings": {},
+      "parentVersion": "promoted-1780791426160",
+      "notes": "Promoted from the AI asset designer."
+    }
+  },
+  "audioSettings": {}
+}

@@ -1,0 +1,88 @@
+{
+  "id": "hero.ship.explosion",
+  "kind": "spritesheet",
+  "prompt": "Hero starfighter explosion animation. Ship erupts into a bright energy blast, expanding fireball, sparks, then fading smoke and embers, transparent background.",
+  "dimensions": {
+    "width": 384,
+    "height": 256
+  },
+  "frameGrid": {
+    "frameCount": 6,
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "columns": 3,
+    "rows": 2
+  },
+  "animations": [
+    {
+      "key": "hero.ship.explosion",
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "frameRate": 12,
+      "repeat": 0,
+      "frameTimings": [
+        {
+          "delayMs": 70
+        },
+        {
+          "delayMs": 80
+        },
+        {
+          "delayMs": 95
+        },
+        {
+          "delayMs": 110
+        },
+        {
+          "delayMs": 130
+        },
+        {
+          "delayMs": 150
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "hero.ship"
+    ]
+  },
+  "activeVersion": "promoted-1780789451269",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/hero.ship.explosion.default.svg",
+      "prompt": "Hero starfighter explosion animation. Ship erupts into a bright energy blast, expanding fireball, sparks, then fading smoke and embers, transparent background.",
+      "createdAt": "2026-06-06T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "promoted-1780789451269": {
+      "name": "promoted-1780789451269",
+      "file": "/assets/hero.ship.explosion.promoted-1780789451269.png",
+      "prompt": "Hero starfighter explosion animation. Ship erupts into a bright energy blast, expanding fireball, sparks, then fading smoke and embers, transparent background.",
+      "createdAt": "2026-06-06T23:44:11.286Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

@@ -1,0 +1,229 @@
+{
+  "id": "invader.raider.shooting",
+  "kind": "spritesheet",
+  "prompt": "shooting animation, the alien is turning around and shooting from its butt (should have a well defined butt) and then turns back, the laser itself should not be in the animation but a small spark from the butt when the shot starts",
+  "dimensions": {
+    "width": 256,
+    "height": 192
+  },
+  "frameGrid": {
+    "frameCount": 12,
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "columns": 4,
+    "rows": 3
+  },
+  "animations": [
+    {
+      "key": "invader.raider.shooting",
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "frameRate": 10,
+      "repeat": 0,
+      "frameTimings": [
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 2,
+          "offsetY": -1
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0,
+          "tag": "shoot"
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {},
+        {},
+        {},
+        {}
+      ]
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "invader.raider"
+    ]
+  },
+  "activeVersion": "promoted-1780781825356",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/invader.raider.shooting.default.svg",
+      "prompt": "Alien invader scout shooting animation. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+      "createdAt": "2026-05-31T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "generated-shooting-1780239052135": {
+      "name": "generated-shooting-1780239052135",
+      "file": "/assets/invader.raider.shooting.generated-shooting-1780239052135.png",
+      "prompt": "Alien invader scout shooting animation. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+      "createdAt": "2026-05-31T14:50:52.158Z",
+      "model": "gpt-image-1.5",
+      "settings": {
+        "model": "gpt-image-1.5",
+        "background": "transparent",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Generated for the Space Invaders animation demo."
+    },
+    "promoted-1780365025144": {
+      "name": "promoted-1780365025144",
+      "file": "/assets/invader.raider.shooting.promoted-1780365025144.png",
+      "prompt": "shooting animation",
+      "createdAt": "2026-06-02T01:50:25.177Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "generated-shooting-1780239052135",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780450422695": {
+      "name": "promoted-1780450422695",
+      "file": "/assets/invader.raider.shooting.promoted-1780450422695.png",
+      "prompt": "shooting animation",
+      "createdAt": "2026-06-03T01:33:42.714Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "promoted-1780365025144",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780454683156": {
+      "name": "promoted-1780454683156",
+      "file": "/assets/invader.raider.shooting.promoted-1780454683156.png",
+      "prompt": "shooting animation",
+      "createdAt": "2026-06-03T02:44:43.169Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "promoted-1780450422695",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780456444685": {
+      "name": "promoted-1780456444685",
+      "file": "/assets/invader.raider.shooting.promoted-1780456444685.png",
+      "prompt": "shooting animation",
+      "createdAt": "2026-06-03T03:14:04.703Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "promoted-1780454683156",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780542418532": {
+      "name": "promoted-1780542418532",
+      "file": "/assets/invader.raider.shooting.promoted-1780542418532.png",
+      "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
+      "createdAt": "2026-06-04T03:06:58.549Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "promoted-1780456444685",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780781825356": {
+      "name": "promoted-1780781825356",
+      "file": "/assets/invader.raider.shooting.promoted-1780781825356.png",
+      "prompt": "shooting animation, the alien is turning around and shooting from its butt (should have a well defined butt) and then turns back, the laser itself should not be in the animation but a small spark from the butt when the shot starts",
+      "createdAt": "2026-06-06T21:37:05.366Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.raider"
+        ]
+      },
+      "parentVersion": "promoted-1780542418532",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

@@ -81,6 +81,7 @@ type DesignerElements = {
   panel: HTMLDivElement;
   styleButton: HTMLButtonElement;
   assetSelect: HTMLSelectElement;
+  assetBrowser: HTMLDivElement;
   animationSelect: HTMLSelectElement;
   animationField: HTMLLabelElement;
   widthInput: HTMLInputElement;
@@ -276,6 +277,20 @@ export function installAiAssetDesigner(
   const syncAsset = (assetId: string) => {
     syncAnimationChoices(assetId);
     syncTargetAsset(selectedTargetAssetId);
+    renderAssetBrowser();
+  };
+
+  const renderAssetBrowser = () => {
+    renderAssetFolderBrowser({
+      container: elements.assetBrowser,
+      manifest,
+      selectedAssetId,
+      assetIds: options.assetIds,
+      onSelect(assetId) {
+        selectedAssetId = assetId;
+        syncAsset(selectedAssetId);
+      }
+    });
   };
 
   const handleFirstDraftProgress = (progress: EnsureMissingAiAssetFirstDraftsProgress) => {
@@ -819,6 +834,9 @@ function createDesignerElements(
 
   const assetSelect = document.createElement("select");
   assetSelect.className = "ai-game-assets-designer__select";
+  assetSelect.hidden = true;
+  const assetBrowser = document.createElement("div");
+  assetBrowser.className = "ai-game-assets-designer__asset-browser";
 
   for (const assetId of options.assetIds ?? Object.keys(manifest.assets)) {
     const option = document.createElement("option");
@@ -937,7 +955,7 @@ function createDesignerElements(
 
   panel.append(
     header,
-    labelWrap("Asset", assetSelect),
+    labelWrap("Asset", assetBrowser),
     animationField,
     dimensionGrid,
     frameCountField,
@@ -961,6 +979,7 @@ function createDesignerElements(
     panel,
     styleButton,
     assetSelect,
+    assetBrowser,
     animationSelect,
     animationField,
     widthInput,
@@ -993,6 +1012,135 @@ function createDesignerElements(
     options: optionsGrid,
     status
   };
+}
+
+function renderAssetFolderBrowser(options: {
+  container: HTMLDivElement;
+  manifest: AiAssetManifest;
+  selectedAssetId: string;
+  assetIds?: string[];
+  onSelect(assetId: string): void;
+}): void {
+  const visibleAssetIds = options.assetIds ?? Object.keys(options.manifest.assets);
+  const assetPathEntries = visibleAssetIds
+    .filter((assetId) => options.manifest.assets[assetId])
+    .map((assetId) => ({
+      assetId,
+      path: folderPathForAsset(options.manifest, assetId)
+    }));
+  const selectedPath = folderPathForAsset(options.manifest, options.selectedAssetId);
+  const storedPath = options.container.dataset.path
+    ? options.container.dataset.path.split("/").filter(Boolean)
+    : selectedPath;
+  const currentPath = pathHasAnyAsset(storedPath, assetPathEntries)
+    ? storedPath
+    : selectedPath;
+
+  options.container.dataset.path = currentPath.join("/");
+  options.container.innerHTML = "";
+
+  const breadcrumbs = document.createElement("div");
+  breadcrumbs.className = "ai-game-assets-designer__asset-breadcrumbs";
+  breadcrumbs.append(assetCrumbButton("Assets", [], options));
+
+  currentPath.forEach((part, index) => {
+    const separator = document.createElement("span");
+    separator.textContent = "/";
+    separator.className = "ai-game-assets-designer__asset-breadcrumb-separator";
+    breadcrumbs.append(separator, assetCrumbButton(part, currentPath.slice(0, index + 1), options));
+  });
+
+  const list = document.createElement("div");
+  list.className = "ai-game-assets-designer__asset-list";
+  const childFolders = new Set<string>();
+  const childAssets: string[] = [];
+
+  for (const entry of assetPathEntries) {
+    if (!isPathPrefix(currentPath, entry.path)) continue;
+
+    const nextPart = entry.path[currentPath.length];
+    if (nextPart) {
+      childFolders.add(nextPart);
+    } else {
+      childAssets.push(entry.assetId);
+    }
+  }
+
+  for (const folderName of [...childFolders].sort((a, b) => a.localeCompare(b))) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ai-game-assets-designer__asset-folder";
+    button.textContent = folderName;
+    button.addEventListener("click", () => {
+      options.container.dataset.path = [...currentPath, folderName].join("/");
+      renderAssetFolderBrowser(options);
+    });
+    list.append(button);
+  }
+
+  for (const assetId of childAssets.sort((a, b) => readableAssetName(a).localeCompare(readableAssetName(b)))) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ai-game-assets-designer__asset-item";
+    button.classList.toggle("is-selected", assetId === options.selectedAssetId);
+    button.textContent = readableAssetName(assetId);
+    button.addEventListener("click", () => {
+      options.container.dataset.path = folderPathForAsset(options.manifest, assetId).join("/");
+      options.onSelect(assetId);
+    });
+    list.append(button);
+  }
+
+  options.container.append(breadcrumbs, list);
+}
+
+function assetCrumbButton(
+  label: string,
+  pathParts: string[],
+  options: {
+    container: HTMLDivElement;
+    manifest: AiAssetManifest;
+    selectedAssetId: string;
+    assetIds?: string[];
+    onSelect(assetId: string): void;
+  }
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ai-game-assets-designer__asset-breadcrumb";
+  button.textContent = label;
+  button.addEventListener("click", () => {
+    options.container.dataset.path = pathParts.join("/");
+    renderAssetFolderBrowser(options);
+  });
+  return button;
+}
+
+function folderPathForAsset(manifest: AiAssetManifest, assetId: string): string[] {
+  const configuredPath = manifest.assetPaths?.[assetId];
+  if (configuredPath) return configuredPath;
+
+  const asset = manifest.assets[assetId];
+  if (!asset) return [];
+  if (asset.kind === "sound") return ["Sfx"];
+  if (asset.kind === "music") return ["Music"];
+  if (asset.kind === "voice" || asset.kind === "voice-line") return ["Voices"];
+  if (asset.id.startsWith("invader.")) return ["Graphics", "Invaders"];
+  if (asset.id.startsWith("ui.")) return ["Graphics", "UI"];
+  if (asset.id.startsWith("laser.")) return ["Graphics", "Lasers"];
+  if (asset.id.startsWith("background.")) return ["Graphics", "Background"];
+  return ["Graphics"];
+}
+
+function pathHasAnyAsset(
+  pathParts: string[],
+  entries: Array<{ path: string[] }>
+): boolean {
+  return entries.some((entry) => isPathPrefix(pathParts, entry.path));
+}
+
+function isPathPrefix(prefix: string[], fullPath: string[]): boolean {
+  return prefix.every((part, index) => fullPath[index] === part);
 }
 
 function renderOptions(options: {
@@ -3949,6 +4097,66 @@ function ensureDesignerStyles(): void {
   font: inherit;
 }
 .ai-game-assets-designer__field textarea { resize: vertical; }
+.ai-game-assets-designer__asset-browser {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #303949;
+  border-radius: 8px;
+  background: rgba(11, 15, 22, 0.58);
+}
+.ai-game-assets-designer__asset-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  color: #8f9cb5;
+  font-size: 12px;
+}
+.ai-game-assets-designer__asset-breadcrumb,
+.ai-game-assets-designer__asset-folder,
+.ai-game-assets-designer__asset-item {
+  border: 1px solid #374155;
+  border-radius: 6px;
+  background: #151c29;
+  color: #eef4ff;
+  cursor: pointer;
+}
+.ai-game-assets-designer__asset-breadcrumb {
+  padding: 3px 7px;
+  font-size: 12px;
+}
+.ai-game-assets-designer__asset-breadcrumb:hover,
+.ai-game-assets-designer__asset-folder:hover,
+.ai-game-assets-designer__asset-item:hover {
+  border-color: #6ea6ff;
+  background: #202b40;
+}
+.ai-game-assets-designer__asset-breadcrumb-separator { opacity: 0.65; }
+.ai-game-assets-designer__asset-list {
+  display: grid;
+  gap: 6px;
+  max-height: 145px;
+  overflow-y: auto;
+}
+.ai-game-assets-designer__asset-folder,
+.ai-game-assets-designer__asset-item {
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 8px;
+  text-align: left;
+}
+.ai-game-assets-designer__asset-folder::before {
+  content: ">";
+  display: inline-block;
+  margin-right: 7px;
+  color: #92b8ff;
+}
+.ai-game-assets-designer__asset-item.is-selected {
+  border-color: #8bb8ff;
+  background: #263450;
+  box-shadow: inset 3px 0 0 #8bb8ff;
+}
 .ai-game-assets-designer__dimensions {
   display: grid;
   grid-template-columns: 1fr 1fr;

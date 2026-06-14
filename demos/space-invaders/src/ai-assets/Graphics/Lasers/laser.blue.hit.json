@@ -1,0 +1,145 @@
+{
+  "id": "laser.blue.hit",
+  "kind": "spritesheet",
+  "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+  "dimensions": {
+    "width": 36,
+    "height": 36
+  },
+  "frameGrid": {
+    "frameCount": 4,
+    "frameWidth": 18,
+    "frameHeight": 18,
+    "columns": 2,
+    "rows": 2
+  },
+  "animations": [
+    {
+      "key": "laser.blue.hit",
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "frameRate": 8,
+      "repeat": 0,
+      "frameTimings": [
+        {
+          "delayMs": 110,
+          "offsetX": 0,
+          "offsetY": -5,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0
+        },
+        {
+          "delayMs": 130,
+          "offsetX": 0,
+          "offsetY": -5,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0
+        },
+        {
+          "delayMs": 130,
+          "offsetX": 0,
+          "offsetY": -5,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0
+        },
+        {
+          "delayMs": 130,
+          "offsetX": 0,
+          "offsetY": -5,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotation": 0
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "model": "gpt-5",
+    "background": "auto",
+    "quality": "low",
+    "format": "svg",
+    "referenceAssetIds": [
+      "laser.blue"
+    ]
+  },
+  "activeVersion": "promoted-1780778373125",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/laser.blue.hit.default.svg",
+      "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+      "createdAt": "2026-06-06T00:00:00.000Z",
+      "model": "starter-asset",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "laser.blue"
+        ]
+      }
+    },
+    "promoted-1780768681503": {
+      "name": "promoted-1780768681503",
+      "file": "/assets/laser.blue.hit.promoted-1780768681503.svg",
+      "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+      "createdAt": "2026-06-06T17:58:01.539Z",
+      "model": "starter-asset",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "laser.blue"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780778333620": {
+      "name": "promoted-1780778333620",
+      "file": "/assets/laser.blue.hit.promoted-1780778333620.svg",
+      "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+      "createdAt": "2026-06-06T20:38:53.657Z",
+      "model": "gpt-5",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "laser.blue"
+        ]
+      },
+      "parentVersion": "promoted-1780768681503",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780778373125": {
+      "name": "promoted-1780778373125",
+      "file": "/assets/laser.blue.hit.promoted-1780778373125.svg",
+      "prompt": "Blue player laser hit animation. Small electric impact spark where the laser hits at the top, transparent background.",
+      "createdAt": "2026-06-06T20:39:33.137Z",
+      "model": "gpt-5",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "laser.blue"
+        ]
+      },
+      "parentVersion": "promoted-1780778333620",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

@@ -1,0 +1,221 @@
+{
+  "id": "invader.hunter.shooting",
+  "kind": "spritesheet",
+  "prompt": "shooting animation, the alien looks down and shooting from its mouth, the laser itself should not be in the animation but a small spark from the mouth when the shot starts",
+  "dimensions": {
+    "width": 192,
+    "height": 192
+  },
+  "frameGrid": {
+    "frameCount": 8,
+    "frameWidth": 64,
+    "frameHeight": 64,
+    "columns": 3,
+    "rows": 3
+  },
+  "animations": [
+    {
+      "key": "invader.hunter.shooting",
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "frameRate": 10,
+      "repeat": 0,
+      "frameTimings": [
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 2,
+          "offsetY": -1
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0,
+          "tag": "shoot"
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        },
+        {
+          "delayMs": 100,
+          "offsetX": 0,
+          "offsetY": 0
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "invader.hunter"
+    ]
+  },
+  "activeVersion": "promoted-1780782548529",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/invader.hunter.shooting.default.svg",
+      "prompt": "Alien invader scout shooting animation. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+      "createdAt": "2026-05-31T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "generated-shooting-1780239052135": {
+      "name": "generated-shooting-1780239052135",
+      "file": "/assets/invader.hunter.shooting.generated-shooting-1780239052135.png",
+      "prompt": "Alien invader scout shooting animation. Charge up, open mandibles, bright muzzle flash downward, recoil recovery, transparent background.",
+      "createdAt": "2026-05-31T14:50:52.158Z",
+      "model": "gpt-image-1.5",
+      "settings": {
+        "model": "gpt-image-1.5",
+        "background": "transparent",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Generated for the Space Invaders animation demo."
+    },
+    "promoted-1780365025144": {
+      "name": "promoted-1780365025144",
+      "file": "/assets/invader.hunter.shooting.promoted-1780365025144.png",
+      "prompt": "shooting animation",
+      "createdAt": "2026-06-02T01:50:25.177Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "parentVersion": "generated-shooting-1780239052135",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780450422695": {
+      "name": "promoted-1780450422695",
+      "file": "/assets/invader.hunter.shooting.promoted-1780450422695.png",
+      "prompt": "shooting animation",
+      "createdAt": "2026-06-03T01:33:42.714Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "parentVersion": "promoted-1780365025144",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780454683156": {
+      "name": "promoted-1780454683156",
+      "file": "/assets/invader.hunter.shooting.promoted-1780454683156.png",
+      "prompt": "shooting animation",
+      "createdAt": "2026-06-03T02:44:43.169Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "parentVersion": "promoted-1780450422695",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780456444685": {
+      "name": "promoted-1780456444685",
+      "file": "/assets/invader.hunter.shooting.promoted-1780456444685.png",
+      "prompt": "shooting animation",
+      "createdAt": "2026-06-03T03:14:04.703Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "parentVersion": "promoted-1780454683156",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780542418532": {
+      "name": "promoted-1780542418532",
+      "file": "/assets/invader.hunter.shooting.promoted-1780542418532.png",
+      "prompt": "shooting animation, the alien is shooting to the bottom using its eye, the laser itself should not be in the animation but a small spark from the eye when the shot starts",
+      "createdAt": "2026-06-04T03:06:58.549Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "parentVersion": "promoted-1780456444685",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780782548529": {
+      "name": "promoted-1780782548529",
+      "file": "/assets/invader.hunter.shooting.promoted-1780782548529.png",
+      "prompt": "shooting animation, the alien looks down and shooting from its mouth, the laser itself should not be in the animation but a small spark from the mouth when the shot starts",
+      "createdAt": "2026-06-06T21:49:08.581Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "invader.hunter"
+        ]
+      },
+      "parentVersion": "promoted-1780542418532",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

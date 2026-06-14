@@ -1,0 +1,127 @@
+{
+  "id": "laser.red.flicker",
+  "kind": "spritesheet",
+  "prompt": "Red enemy laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+  "dimensions": {
+    "width": 10,
+    "height": 32
+  },
+  "frameGrid": {
+    "frameCount": 4,
+    "frameWidth": 5,
+    "frameHeight": 16,
+    "columns": 2,
+    "rows": 2
+  },
+  "animations": [
+    {
+      "key": "laser.red.flicker",
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "frameRate": 8,
+      "repeat": -1,
+      "frameTimings": [
+        {
+          "delayMs": 125,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 2,
+          "scaleY": 1.5,
+          "rotation": 0
+        },
+        {
+          "delayMs": 125,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 2,
+          "scaleY": 1.5,
+          "rotation": 0
+        },
+        {
+          "delayMs": 125,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 2,
+          "scaleY": 1.5,
+          "rotation": 0
+        },
+        {
+          "delayMs": 125,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 2,
+          "scaleY": 1.5,
+          "rotation": 0
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "model": "gpt-5",
+    "background": "auto",
+    "quality": "low",
+    "format": "svg",
+    "referenceAssetIds": [
+      "laser.red"
+    ]
+  },
+  "activeVersion": "promoted-1780778436408",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/laser.red.flicker.default.svg",
+      "prompt": "Red enemy laser slow flicker animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+      "createdAt": "2026-06-06T00:00:00.000Z",
+      "model": "starter-asset",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "laser.red"
+        ]
+      }
+    },
+    "promoted-1780770882406": {
+      "name": "promoted-1780770882406",
+      "file": "/assets/laser.red.flicker.promoted-1780770882406.svg",
+      "prompt": "Red enemy laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+      "createdAt": "2026-06-06T18:34:42.423Z",
+      "model": "gpt-5",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "laser.red"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780778436408": {
+      "name": "promoted-1780778436408",
+      "file": "/assets/laser.red.flicker.promoted-1780778436408.svg",
+      "prompt": "Red enemy laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+      "createdAt": "2026-06-06T20:40:36.417Z",
+      "model": "gpt-5",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "laser.red"
+        ]
+      },
+      "parentVersion": "promoted-1780770882406",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

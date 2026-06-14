@@ -1,0 +1,172 @@
+{
+  "id": "hero.ship.moving-left",
+  "kind": "spritesheet",
+  "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+  "dimensions": {
+    "width": 256,
+    "height": 256
+  },
+  "frameGrid": {
+    "frameCount": 4,
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "columns": 2,
+    "rows": 2
+  },
+  "animations": [
+    {
+      "key": "hero.ship.moving-left",
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "frameRate": 10,
+      "repeat": -1,
+      "frameTimings": [
+        {
+          "delayMs": 50,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1.1,
+          "scaleY": 1.1,
+          "rotation": 0
+        },
+        {
+          "delayMs": 50,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1.1,
+          "scaleY": 1.1,
+          "rotation": 0
+        },
+        {
+          "delayMs": 50,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1.1,
+          "scaleY": 1.1,
+          "rotation": 0
+        },
+        {
+          "delayMs": 2000,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1.1,
+          "scaleY": 1.1,
+          "rotation": 0
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "hero.ship"
+    ]
+  },
+  "activeVersion": "promoted-1780625227073",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/hero.ship.moving-left.default.svg",
+      "prompt": "Hero starfighter moving left animation. Slight banking tilt to the left, bright rear jets, energetic thrust, same ship identity, transparent background.",
+      "createdAt": "2026-06-03T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "promoted-1780536121815": {
+      "name": "promoted-1780536121815",
+      "file": "/assets/hero.ship.moving.promoted-1780536121815.png",
+      "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+      "createdAt": "2026-06-04T01:22:01.877Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780536722820": {
+      "name": "promoted-1780536722820",
+      "file": "/assets/hero.ship.moving.promoted-1780536722820.png",
+      "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+      "createdAt": "2026-06-04T01:32:02.832Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "promoted-1780536121815",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780537093274": {
+      "name": "promoted-1780537093274",
+      "file": "/assets/hero.ship.moving.promoted-1780537093274.png",
+      "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+      "createdAt": "2026-06-04T01:38:13.316Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "promoted-1780536722820",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780543214092": {
+      "name": "promoted-1780543214092",
+      "file": "/assets/hero.ship.moving-left.promoted-1780543214092.png",
+      "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+      "createdAt": "2026-06-04T03:20:14.110Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "promoted-1780537093274",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780625227073": {
+      "name": "promoted-1780625227073",
+      "file": "/assets/hero.ship.moving-left.promoted-1780625227073.png",
+      "prompt": "Hero starfighter moving animation to the left. All of the frames should be with a slight tilt to the left (the front is the top of the spaceship), and the rear jets in bright yellow, transparent background.",
+      "createdAt": "2026-06-05T02:07:07.130Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "promoted-1780543214092",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

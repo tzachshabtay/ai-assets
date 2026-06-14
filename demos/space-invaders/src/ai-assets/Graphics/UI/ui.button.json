@@ -1,0 +1,45 @@
+{
+  "id": "ui.button",
+  "kind": "image",
+  "prompt": "Reusable sci-fi arcade button base, rounded blue illuminated panel, no text, transparent background.",
+  "dimensions": {
+    "width": 190,
+    "height": 58
+  },
+  "settings": {
+    "model": "gpt-5",
+    "background": "auto",
+    "quality": "low",
+    "format": "svg"
+  },
+  "linkedAnimationAssets": {
+    "idle": {
+      "label": "Idle",
+      "assetId": "ui.button.idle"
+    },
+    "hover": {
+      "label": "Hover",
+      "assetId": "ui.button.hover"
+    },
+    "clicked": {
+      "label": "Clicked",
+      "assetId": "ui.button.clicked"
+    }
+  },
+  "activeVersion": "default",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/ui.button.default.svg",
+      "prompt": "Reusable sci-fi arcade button base, rounded blue illuminated panel, no text, transparent background.",
+      "createdAt": "2026-06-06T00:00:00.000Z",
+      "model": "starter-asset",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg"
+      }
+    }
+  }
+}

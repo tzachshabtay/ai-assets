@@ -1,0 +1,55 @@
+{
+  "id": "ui.button.idle",
+  "kind": "spritesheet",
+  "prompt": "Reusable sci-fi arcade button idle animation. Subtle blue glow pulse, no text, transparent background.",
+  "dimensions": {
+    "width": 380,
+    "height": 58
+  },
+  "frameGrid": {
+    "frameCount": 2,
+    "frameWidth": 190,
+    "frameHeight": 58,
+    "columns": 2,
+    "rows": 1
+  },
+  "animations": [
+    {
+      "key": "ui.button.idle",
+      "frames": [
+        0,
+        1
+      ],
+      "frameRate": 5,
+      "repeat": -1
+    }
+  ],
+  "settings": {
+    "model": "gpt-5",
+    "background": "auto",
+    "quality": "low",
+    "format": "svg",
+    "referenceAssetIds": [
+      "ui.button"
+    ]
+  },
+  "activeVersion": "default",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/ui.button.idle.default.svg",
+      "prompt": "Reusable sci-fi arcade button idle animation. Subtle blue glow pulse, no text, transparent background.",
+      "createdAt": "2026-06-06T00:00:00.000Z",
+      "model": "starter-asset",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "ui.button"
+        ]
+      }
+    }
+  }
+}

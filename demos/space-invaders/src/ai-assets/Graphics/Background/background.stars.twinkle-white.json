@@ -1,0 +1,80 @@
+{
+  "id": "background.stars.twinkle-white",
+  "kind": "spritesheet",
+  "prompt": "White star twinkling animation for a 2D space invaders background.",
+  "dimensions": {
+    "width": 96,
+    "height": 96
+  },
+  "frameGrid": {
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "columns": 3,
+    "rows": 3,
+    "frameCount": 8
+  },
+  "animations": [
+    {
+      "key": "background.stars.twinkle-white",
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "frameRate": 8,
+      "repeat": -1
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "background.stars"
+    ]
+  },
+  "activeVersion": "promoted-1780754791141",
+  "versions": {
+    "first-draft-1780702620989-1": {
+      "name": "first-draft-1780702620989-1",
+      "file": "/assets/background.stars.twinkle-white.first-draft-1780702620989-1.png",
+      "prompt": "White star twinkling animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+      "createdAt": "2026-06-05T23:37:00.991Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "background.stars"
+        ]
+      },
+      "notes": "Auto-generated first draft for a missing asset."
+    },
+    "promoted-1780754791141": {
+      "name": "promoted-1780754791141",
+      "file": "/assets/background.stars.twinkle-white.promoted-1780754791141.png",
+      "prompt": "White star twinkling animation for a 2D space invaders background.",
+      "createdAt": "2026-06-06T14:06:31.168Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "background.stars"
+        ]
+      },
+      "parentVersion": "first-draft-1780702620989-1",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

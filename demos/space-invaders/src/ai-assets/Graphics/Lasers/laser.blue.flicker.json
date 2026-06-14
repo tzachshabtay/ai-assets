@@ -1,0 +1,75 @@
+{
+  "id": "laser.blue.flicker",
+  "kind": "spritesheet",
+  "prompt": "Blue player laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+  "dimensions": {
+    "width": 8,
+    "height": 36
+  },
+  "frameGrid": {
+    "frameCount": 4,
+    "frameWidth": 4,
+    "frameHeight": 18,
+    "columns": 2,
+    "rows": 2
+  },
+  "animations": [
+    {
+      "key": "laser.blue.flicker",
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "frameRate": 8,
+      "repeat": -1
+    }
+  ],
+  "settings": {
+    "model": "gpt-5",
+    "background": "auto",
+    "quality": "low",
+    "format": "svg",
+    "referenceAssetIds": [
+      "laser.blue"
+    ]
+  },
+  "activeVersion": "promoted-1780761577431",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/laser.blue.flicker.default.svg",
+      "prompt": "Blue player laser slow flicker animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+      "createdAt": "2026-06-06T00:00:00.000Z",
+      "model": "starter-asset",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "laser.blue"
+        ]
+      }
+    },
+    "promoted-1780761577431": {
+      "name": "promoted-1780761577431",
+      "file": "/assets/laser.blue.flicker.promoted-1780761577431.svg",
+      "prompt": "Blue player laser slow glow animation. Thin bright vertical laser beam, pulsing core, transparent background.",
+      "createdAt": "2026-06-06T15:59:37.481Z",
+      "model": "gpt-5",
+      "settings": {
+        "model": "gpt-5",
+        "background": "auto",
+        "quality": "low",
+        "format": "svg",
+        "referenceAssetIds": [
+          "laser.blue"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

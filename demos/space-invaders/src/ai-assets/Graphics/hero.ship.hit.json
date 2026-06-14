@@ -1,0 +1,154 @@
+{
+  "id": "hero.ship.hit",
+  "kind": "spritesheet",
+  "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+  "dimensions": {
+    "width": 384,
+    "height": 256
+  },
+  "frameGrid": {
+    "frameCount": 6,
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "columns": 3,
+    "rows": 2
+  },
+  "animations": [
+    {
+      "key": "hero.ship.hit",
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "frameRate": 12,
+      "repeat": 0,
+      "frameTimings": [
+        {
+          "delayMs": 83,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1,
+          "scaleY": 1.2,
+          "rotation": 0
+        },
+        {
+          "delayMs": 83,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1,
+          "scaleY": 1.2,
+          "rotation": 0
+        },
+        {
+          "delayMs": 83,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1,
+          "scaleY": 1.2,
+          "rotation": 0
+        },
+        {
+          "delayMs": 83,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1,
+          "scaleY": 1.2,
+          "rotation": 0
+        },
+        {
+          "delayMs": 83,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1,
+          "scaleY": 1.2,
+          "rotation": 0
+        },
+        {
+          "delayMs": 83,
+          "offsetX": 0,
+          "offsetY": 0,
+          "scaleX": 1,
+          "scaleY": 1.2,
+          "rotation": 0
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "hero.ship"
+    ]
+  },
+  "activeVersion": "promoted-1780625268417",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/hero.ship.hit.default.svg",
+      "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+      "createdAt": "2026-06-03T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "promoted-1780536958079": {
+      "name": "promoted-1780536958079",
+      "file": "/assets/hero.ship.hit.promoted-1780536958079.png",
+      "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+      "createdAt": "2026-06-04T01:35:58.108Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780543095703": {
+      "name": "promoted-1780543095703",
+      "file": "/assets/hero.ship.hit.promoted-1780543095703.png",
+      "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+      "createdAt": "2026-06-04T03:18:15.725Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "promoted-1780536958079",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780625268417": {
+      "name": "promoted-1780625268417",
+      "file": "/assets/hero.ship.hit.promoted-1780625268417.png",
+      "prompt": "Hero starfighter getting hit animation. Brief red shield sparks, flicker, impact recoil, then recovery, same ship identity, transparent background.",
+      "createdAt": "2026-06-05T02:07:48.431Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "promoted-1780543095703",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

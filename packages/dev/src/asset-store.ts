@@ -2,12 +2,13 @@ import {
   addVersion,
   assertManifest,
   createAiAssetVersion,
+  type AiAssetDefinition,
   type AiAssetManifest,
   type AiAssetStyleGuide,
   type AiAssetVersion,
   type GeneratedAssetOption
 } from "./internal.js";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export type AssetStoreOptions = {
@@ -41,6 +42,10 @@ export type SaveStyleGuideInput = {
 };
 
 export async function readManifest(manifestPath: string): Promise<AiAssetManifest> {
+  if (await isDirectory(manifestPath)) {
+    return readManifestDirectory(manifestPath);
+  }
+
   const raw = await readFile(manifestPath, "utf8");
   const manifest = JSON.parse(raw) as AiAssetManifest;
   assertManifest(manifest);
@@ -51,6 +56,11 @@ export async function writeManifest(
   manifestPath: string,
   manifest: AiAssetManifest
 ): Promise<void> {
+  if (await isDirectory(manifestPath)) {
+    await writeManifestDirectory(manifestPath, manifest);
+    return;
+  }
+
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(`${manifestPath}.tmp`, `${JSON.stringify(manifest, null, 2)}\n`);
   await rename(`${manifestPath}.tmp`, manifestPath);
@@ -195,6 +205,100 @@ export async function writeManifestModule(
 
 function sanitizeFilePart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-");
+}
+
+async function isDirectory(filePath: string): Promise<boolean> {
+  try {
+    return (await stat(filePath)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+async function readManifestDirectory(manifestDir: string): Promise<AiAssetManifest> {
+  const assets: Record<string, AiAssetDefinition> = {};
+  const assetPaths: Record<string, string[]> = {};
+  let styleGuide: AiAssetStyleGuide | undefined;
+
+  for (const filePath of await jsonFiles(manifestDir)) {
+    const relativePath = path.relative(manifestDir, filePath);
+
+    if (relativePath === "style-guide.json") {
+      styleGuide = JSON.parse(await readFile(filePath, "utf8")) as AiAssetStyleGuide;
+      continue;
+    }
+
+    const asset = JSON.parse(await readFile(filePath, "utf8")) as AiAssetDefinition;
+    assets[asset.id] = asset;
+    assetPaths[asset.id] = path.dirname(relativePath) === "."
+      ? []
+      : path.dirname(relativePath).split(path.sep);
+  }
+
+  const manifest: AiAssetManifest = {
+    schemaVersion: 1,
+    assets,
+    styleGuide,
+    assetPaths
+  };
+  assertManifest(manifest);
+  return manifest;
+}
+
+async function writeManifestDirectory(
+  manifestDir: string,
+  manifest: AiAssetManifest
+): Promise<void> {
+  await mkdir(manifestDir, { recursive: true });
+
+  if (manifest.styleGuide) {
+    await writeJsonFile(path.join(manifestDir, "style-guide.json"), manifest.styleGuide);
+  }
+
+  for (const asset of Object.values(manifest.assets)) {
+    const folderParts = manifest.assetPaths?.[asset.id] ?? inferAssetFolder(asset);
+    const filePath = path.join(
+      manifestDir,
+      ...folderParts,
+      `${sanitizeFilePart(asset.id)}.json`
+    );
+    await writeJsonFile(filePath, asset);
+  }
+}
+
+async function writeJsonFile(filePath: string, value: unknown): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(`${filePath}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
+  await rename(`${filePath}.tmp`, filePath);
+}
+
+async function jsonFiles(rootDir: string): Promise<string[]> {
+  const entries = await readdir(rootDir, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const filePath = path.join(rootDir, entry.name);
+
+    if (entry.isDirectory()) {
+      files.push(...await jsonFiles(filePath));
+    } else if (entry.isFile() && entry.name.endsWith(".json")) {
+      files.push(filePath);
+    }
+  }
+
+  return files.sort();
+}
+
+function inferAssetFolder(asset: AiAssetDefinition): string[] {
+  if (asset.kind === "sound") return ["Sfx"];
+  if (asset.kind === "music") return ["Music"];
+  if (asset.kind === "voice" || asset.kind === "voice-line") return ["Voices"];
+
+  if (asset.id.startsWith("invader.")) return ["Graphics", "Invaders"];
+  if (asset.id.startsWith("ui.")) return ["Graphics", "UI"];
+  if (asset.id.startsWith("laser.")) return ["Graphics", "Lasers"];
+  if (asset.id.startsWith("background.")) return ["Graphics", "Background"];
+  return ["Graphics"];
 }
 
 function extensionFromMimeType(mimeType: string): string {

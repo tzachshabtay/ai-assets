@@ -1,0 +1,92 @@
+{
+  "id": "audio.sfx.hero-explosion",
+  "kind": "sound",
+  "prompt": "Short dramatic hero spaceship explosion sound effect, arcade sci-fi blast with bright energy burst and debris, satisfying but not harsh, no voice.",
+  "audioSettings": {
+    "provider": "elevenlabs",
+    "format": "mp3",
+    "durationSeconds": 1.5,
+    "loop": true
+  },
+  "activeVersion": "promoted-1781152039483",
+  "versions": {
+    "promoted-1781148870260": {
+      "name": "promoted-1781148870260",
+      "file": "/assets/audio.sfx.hero-explosion.promoted-1781148870260.mp3",
+      "prompt": "Short dramatic hero spaceship explosion sound effect, arcade sci-fi blast with bright energy burst and debris, satisfying but not harsh, no voice.",
+      "createdAt": "2026-06-11T03:34:30.265Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 1.5,
+        "loop": true
+      },
+      "durationSeconds": 1.5,
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1781152039483": {
+      "name": "promoted-1781152039483",
+      "file": "/assets/audio.sfx.hero-explosion.promoted-1781152039483.mp3",
+      "prompt": "Short dramatic hero spaceship explosion sound effect, arcade sci-fi blast with bright energy burst and debris, satisfying but not harsh, no voice.",
+      "createdAt": "2026-06-11T04:27:19.494Z",
+      "model": "eleven_text_to_sound_v2",
+      "settings": {},
+      "audioSettings": {
+        "provider": "elevenlabs",
+        "format": "mp3",
+        "durationSeconds": 1.5,
+        "loop": true
+      },
+      "audioPlayback": {
+        "volume": 1,
+        "trimStartSeconds": 0.8315754104872881,
+        "trimEndSeconds": 1.855258871822034,
+        "playbackRate": 1,
+        "pitchSemitones": 0,
+        "reverb": {
+          "enabled": false,
+          "amount": 0.25,
+          "decaySeconds": 1.2
+        },
+        "delay": {
+          "enabled": false,
+          "timeSeconds": 0.12,
+          "feedback": 0.18,
+          "mix": 0.2
+        },
+        "filter": {
+          "type": "none",
+          "frequencyHz": 1200
+        }
+      },
+      "durationSeconds": 1.5,
+      "parentVersion": "promoted-1781148870260",
+      "notes": "Promoted from the AI asset designer."
+    }
+  },
+  "settings": {},
+  "audioPlayback": {
+    "volume": 1,
+    "trimStartSeconds": 0.8315754104872881,
+    "trimEndSeconds": 1.855258871822034,
+    "playbackRate": 1,
+    "pitchSemitones": 0,
+    "reverb": {
+      "enabled": false,
+      "amount": 0.25,
+      "decaySeconds": 1.2
+    },
+    "delay": {
+      "enabled": false,
+      "timeSeconds": 0.12,
+      "feedback": 0.18,
+      "mix": 0.2
+    },
+    "filter": {
+      "type": "none",
+      "frequencyHz": 1200
+    }
+  }
+}

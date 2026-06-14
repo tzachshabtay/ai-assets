@@ -5,6 +5,7 @@ export {
 } from "@ai-game-assets/core";
 
 export type {
+  AiAssetDefinition,
   AiAssetManifest,
   AiAssetStyleGuide,
   AiAssetVersion

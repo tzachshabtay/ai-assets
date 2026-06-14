@@ -1,0 +1,80 @@
+{
+  "id": "background.stars.blue-pulse",
+  "kind": "spritesheet",
+  "prompt": "Blue star pulsing animation for a 2D space invaders background.",
+  "dimensions": {
+    "width": 96,
+    "height": 96
+  },
+  "frameGrid": {
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "columns": 3,
+    "rows": 3,
+    "frameCount": 8
+  },
+  "animations": [
+    {
+      "key": "background.stars.blue-pulse",
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "frameRate": 7,
+      "repeat": -1
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "background.stars"
+    ]
+  },
+  "activeVersion": "promoted-1780754968149",
+  "versions": {
+    "first-draft-1780702642169-2": {
+      "name": "first-draft-1780702642169-2",
+      "file": "/assets/background.stars.blue-pulse.first-draft-1780702642169-2.png",
+      "prompt": "Blue star pulsing animation for a 2D space invaders background. Four-frame spritesheet, transparent background, same tiny star identity as the base reference.",
+      "createdAt": "2026-06-05T23:37:22.172Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "background.stars"
+        ]
+      },
+      "notes": "Auto-generated first draft for a missing asset."
+    },
+    "promoted-1780754968149": {
+      "name": "promoted-1780754968149",
+      "file": "/assets/background.stars.blue-pulse.promoted-1780754968149.png",
+      "prompt": "Blue star pulsing animation for a 2D space invaders background.",
+      "createdAt": "2026-06-06T14:09:28.170Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "background.stars"
+        ]
+      },
+      "parentVersion": "first-draft-1780702642169-2",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

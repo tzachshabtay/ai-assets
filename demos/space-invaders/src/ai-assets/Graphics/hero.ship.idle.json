@@ -1,0 +1,102 @@
+{
+  "id": "hero.ship.idle",
+  "kind": "spritesheet",
+  "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+  "dimensions": {
+    "width": 256,
+    "height": 256
+  },
+  "frameGrid": {
+    "frameCount": 4,
+    "frameWidth": 128,
+    "frameHeight": 128,
+    "columns": 2,
+    "rows": 2
+  },
+  "animations": [
+    {
+      "key": "hero.ship.idle",
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "frameRate": 6,
+      "repeat": -1
+    }
+  ],
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png",
+    "referenceAssetIds": [
+      "hero.ship"
+    ]
+  },
+  "activeVersion": "promoted-1780542772694",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/hero.ship.idle.default.svg",
+      "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+      "createdAt": "2026-06-03T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "promoted-1780535453778": {
+      "name": "promoted-1780535453778",
+      "file": "/assets/hero.ship.idle.promoted-1780535453778.png",
+      "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+      "createdAt": "2026-06-04T01:10:53.810Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780535677815": {
+      "name": "promoted-1780535677815",
+      "file": "/assets/hero.ship.idle.promoted-1780535677815.png",
+      "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+      "createdAt": "2026-06-04T01:14:37.836Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "promoted-1780535453778",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780542772694": {
+      "name": "promoted-1780542772694",
+      "file": "/assets/hero.ship.idle.promoted-1780542772694.png",
+      "prompt": "Hero starfighter idle animation. Subtle hovering bob, cockpit glint, stable centered silhouette, transparent background.",
+      "createdAt": "2026-06-04T03:12:52.714Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png",
+        "referenceAssetIds": [
+          "hero.ship"
+        ]
+      },
+      "parentVersion": "promoted-1780535677815",
+      "notes": "Promoted from the AI asset designer."
+    }
+  }
+}

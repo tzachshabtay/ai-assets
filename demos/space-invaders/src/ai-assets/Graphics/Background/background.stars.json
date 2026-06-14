@@ -1,0 +1,33 @@
+{
+  "id": "background.stars",
+  "kind": "collection",
+  "prompt": "Animated background star variants for a 2D space invaders background.",
+  "dimensions": {
+    "width": 32,
+    "height": 32
+  },
+  "linkedAnimationAssets": {
+    "twinkle-white": {
+      "label": "White twinkle",
+      "assetId": "background.stars.twinkle-white"
+    },
+    "blue-pulse": {
+      "label": "Blue pulse",
+      "assetId": "background.stars.blue-pulse"
+    },
+    "gold-flare": {
+      "label": "Gold flare",
+      "assetId": "background.stars.gold-flare"
+    },
+    "violet-blink": {
+      "label": "Violet blink",
+      "assetId": "background.stars.violet-blink"
+    },
+    "green-shimmer": {
+      "label": "Green shimmer",
+      "assetId": "background.stars.green-shimmer"
+    }
+  },
+  "activeVersion": "",
+  "versions": {}
+}

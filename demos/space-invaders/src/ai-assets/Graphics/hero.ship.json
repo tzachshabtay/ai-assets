@@ -1,0 +1,92 @@
+{
+  "id": "hero.ship",
+  "kind": "image",
+  "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
+  "dimensions": {
+    "width": 128,
+    "height": 128
+  },
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "auto",
+    "quality": "low",
+    "format": "png"
+  },
+  "activeVersion": "promoted-1780541852813",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/hero.ship.default.svg",
+      "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
+      "createdAt": "2026-05-30T00:00:00.000Z",
+      "model": "starter-asset"
+    },
+    "promoted-1780369898360": {
+      "name": "promoted-1780369898360",
+      "file": "/assets/hero.ship.promoted-1780369898360.png",
+      "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
+      "createdAt": "2026-06-02T03:11:38.392Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png"
+      },
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780445988143": {
+      "name": "promoted-1780445988143",
+      "file": "/assets/hero.ship.promoted-1780445988143.png",
+      "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
+      "createdAt": "2026-06-03T00:19:48.159Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png"
+      },
+      "parentVersion": "promoted-1780369898360",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1780541852813": {
+      "name": "promoted-1780541852813",
+      "file": "/assets/hero.ship.promoted-1780541852813.png",
+      "prompt": "Hero starfighter for a 2D space invaders game, readable silhouette, transparent background.",
+      "createdAt": "2026-06-04T02:57:32.834Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "auto",
+        "quality": "low",
+        "format": "png"
+      },
+      "parentVersion": "promoted-1780445988143",
+      "notes": "Promoted from the AI asset designer."
+    }
+  },
+  "linkedAnimationAssets": {
+    "idle": {
+      "label": "Idle",
+      "assetId": "hero.ship.idle"
+    },
+    "shooting": {
+      "label": "Shooting",
+      "assetId": "hero.ship.shooting"
+    },
+    "hit": {
+      "label": "Getting hit",
+      "assetId": "hero.ship.hit"
+    },
+    "moving-left": {
+      "label": "Moving left",
+      "assetId": "hero.ship.moving-left"
+    },
+    "explosion": {
+      "label": "Explosion",
+      "assetId": "hero.ship.explosion"
+    }
+  }
+}
