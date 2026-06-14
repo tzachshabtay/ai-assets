@@ -1029,8 +1029,9 @@ function renderAssetFolderBrowser(options: {
       path: folderPathForAsset(options.manifest, assetId)
     }));
   const selectedPath = folderPathForAsset(options.manifest, options.selectedAssetId);
-  const storedPath = options.container.dataset.path
-    ? options.container.dataset.path.split("/").filter(Boolean)
+  const storedPathValue = options.container.getAttribute("data-path");
+  const storedPath = storedPathValue !== null
+    ? storedPathValue.split("/").filter(Boolean)
     : selectedPath;
   const currentPath = pathHasAnyAsset(storedPath, assetPathEntries)
     ? storedPath
@@ -3928,7 +3929,11 @@ function mimeTypeFromFileName(fileName: string): string {
 }
 
 function readableAssetName(assetId: string): string {
-  return assetId
+  const displayId = assetId.startsWith("audio.sfx.")
+    ? assetId.slice("audio.sfx.".length)
+    : assetId;
+
+  return displayId
     .split(/[._-]/g)
     .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
     .join(" ");
