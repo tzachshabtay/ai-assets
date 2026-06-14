@@ -3874,8 +3874,9 @@ function ensureDesignerStyles(): void {
 .ai-game-assets-designer * { box-sizing: border-box; }
 .ai-game-assets-designer [hidden] { display: none !important; }
 .ai-game-assets-designer__toggle {
-  width: 42px;
+  min-width: 74px;
   height: 42px;
+  padding: 0 16px;
   border: 1px solid #63708a;
   border-radius: 999px;
   background: #202838;

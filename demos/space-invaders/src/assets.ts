@@ -4767,7 +4767,7 @@ export const assets = defineAiAssets(
       "direction": "Excited arcade announcer direction, quick and punchy, celebratory but urgent.",
       "voiceId": "YlLxFuTEUlgMjWZ6bSA1"
     },
-    "activeVersion": "promoted-1781408131259",
+    "activeVersion": "promoted-1781408825112",
     "versions": {
       "promoted-1781408131259": {
         "name": "promoted-1781408131259",
@@ -4794,10 +4794,43 @@ export const assets = defineAiAssets(
         },
         "durationSeconds": 2,
         "notes": "Promoted from the AI asset designer."
+      },
+      "promoted-1781408825112": {
+        "name": "promoted-1781408825112",
+        "file": "/assets/voice.line.new-wave.promoted-1781408825112.mp3",
+        "prompt": "Excited arcade announcer direction, quick and punchy, celebratory but urgent.",
+        "createdAt": "2026-06-14T03:47:05.138Z",
+        "model": "eleven_v3",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 2,
+          "loop": false
+        },
+        "audioPlayback": {
+          "volume": 1.5,
+          "trimStartSeconds": 0,
+          "trimEndSeconds": 1.12,
+          "playbackRate": 1
+        },
+        "voiceSettings": {
+          "provider": "elevenlabs",
+          "voiceAssetId": "voice.announcer",
+          "text": "New wave incoming!",
+          "direction": "Excited arcade announcer direction, quick and punchy, celebratory but urgent.",
+          "voiceId": "YlLxFuTEUlgMjWZ6bSA1"
+        },
+        "durationSeconds": 2,
+        "parentVersion": "promoted-1781408131259",
+        "notes": "Promoted from the AI asset designer."
       }
     },
     "audioPlayback": {
-      "volume": 0.85
+      "volume": 1.5,
+      "trimStartSeconds": 0,
+      "trimEndSeconds": 1.12,
+      "playbackRate": 1
     },
     "settings": {}
   }
