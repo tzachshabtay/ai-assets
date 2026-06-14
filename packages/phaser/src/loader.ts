@@ -152,7 +152,7 @@ export function loadAiAudioAssets(
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset[] {
   return Object.values(manifest.assets)
-    .filter((asset) => isAudioLikeAsset(asset.kind))
+    .filter((asset) => asset.kind === "sound" || asset.kind === "music")
     .map((asset) => loadAiAudioAsset(scene, manifest, asset.id, options))
     .filter((asset): asset is ResolvedAiAsset => Boolean(asset));
 }

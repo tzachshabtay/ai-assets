@@ -395,8 +395,7 @@ function startGame(assetManifest: AiAssetManifest): void {
           "audio.sfx.game-over",
           menuMusicAssetId,
           gameMusicAssetId,
-          "voice.announcer",
-          "voice.line.new-wave"
+          "voice.announcer"
         ],
         onManifestUpdated: (updatedManifest) => {
           manifest = updatedManifest;

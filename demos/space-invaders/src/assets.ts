@@ -4701,14 +4701,50 @@ export const assets = defineAiAssets(
     "prompt": "Energetic retro arcade announcer voice, confident and playful, clear game-host delivery, medium pitch, warm but punchy.",
     "audioSettings": {
       "provider": "elevenlabs",
-      "format": "mp3"
+      "format": "mp3",
+      "durationSeconds": 2,
+      "loop": false
     },
     "voiceSettings": {
       "provider": "elevenlabs",
-      "previewText": "Wave incoming. Keep your shields ready, pilot. The invaders are descending fast, the lasers are hot, and this sector needs a hero with steady hands."
+      "previewText": "Wave incoming. Keep your shields ready, pilot. The invaders are descending fast, the lasers are hot, and this sector needs a hero with steady hands.",
+      "generatedVoiceId": "YlLxFuTEUlgMjWZ6bSA1",
+      "voiceId": "YlLxFuTEUlgMjWZ6bSA1"
     },
-    "activeVersion": "",
-    "versions": {},
+    "linkedAnimationAssets": {
+      "new-wave": {
+        "label": "New wave",
+        "assetId": "voice.line.new-wave"
+      }
+    },
+    "activeVersion": "promoted-1781407420816",
+    "versions": {
+      "promoted-1781407420816": {
+        "name": "promoted-1781407420816",
+        "file": "/assets/voice.announcer.promoted-1781407420816.mp3",
+        "prompt": "Energetic retro arcade announcer voice, confident and playful, clear game-host delivery, medium pitch, warm but punchy.",
+        "createdAt": "2026-06-14T03:23:42.276Z",
+        "model": "eleven_multilingual_ttv_v2",
+        "settings": {},
+        "audioSettings": {
+          "provider": "elevenlabs",
+          "format": "mp3",
+          "durationSeconds": 2,
+          "loop": false
+        },
+        "audioPlayback": {
+          "volume": 0.9
+        },
+        "voiceSettings": {
+          "provider": "elevenlabs",
+          "previewText": "Wave incoming. Keep your shields ready, pilot. The invaders are descending fast, the lasers are hot, and this sector needs a hero with steady hands.",
+          "generatedVoiceId": "YlLxFuTEUlgMjWZ6bSA1",
+          "voiceId": "YlLxFuTEUlgMjWZ6bSA1"
+        },
+        "durationSeconds": 9.224,
+        "notes": "Promoted from the AI asset designer."
+      }
+    },
     "audioPlayback": {
       "volume": 0.9
     },

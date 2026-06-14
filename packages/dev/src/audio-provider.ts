@@ -232,9 +232,6 @@ async function generateElevenLabsVoiceLine(
   for (let index = 0; index < count; index += 1) {
     const line = voiceSettings.text ?? request.asset.prompt;
     const direction = request.prompt ?? voiceSettings.direction;
-    const text = direction?.trim()
-      ? `[${direction.trim()}] ${line}`
-      : line;
     const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`);
     url.searchParams.set("output_format", options.outputFormat ?? elevenLabsOutputFormat(format));
     const response = await fetch(url, {
@@ -244,7 +241,7 @@ async function generateElevenLabsVoiceLine(
         "xi-api-key": apiKey
       },
       body: JSON.stringify({
-        text,
+        text: line,
         model_id: voiceSettings.model ?? audioSettings.model ?? "eleven_multilingual_v2"
       })
     });

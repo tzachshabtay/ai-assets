@@ -176,12 +176,13 @@ export function installAiAssetDesigner(
   const syncAnimationChoices = (assetId: string) => {
     const asset = manifest.assets[assetId];
     const linkedAnimations = Object.entries(asset.linkedAnimationAssets ?? {});
+    const isVoice = asset.kind === "voice";
     elements.animationSelect.innerHTML = "";
 
     if (asset.kind !== "collection") {
       const baseOption = document.createElement("option");
       baseOption.value = assetId;
-      baseOption.textContent = "Base image";
+      baseOption.textContent = isVoice ? "Base voice" : "Base image";
       elements.animationSelect.append(baseOption);
     }
 
@@ -193,6 +194,7 @@ export function installAiAssetDesigner(
     }
 
     elements.animationField.hidden = linkedAnimations.length === 0;
+    elements.animationField.firstElementChild!.textContent = isVoice ? "Line" : "Animation";
     selectedTargetAssetId = asset.kind === "collection" && linkedAnimations[0]
       ? linkedAnimations[0][1].assetId
       : assetId;
