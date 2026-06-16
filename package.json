@@ -7,7 +7,6 @@
   "packageManager": "npm@11.16.0",
   "workspaces": [
     "packages/*",
-    "examples/*",
     "demos/*"
   ],
   "scripts": {
