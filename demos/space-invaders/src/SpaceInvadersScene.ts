@@ -1,18 +1,11 @@
 import Phaser from "phaser";
 import {
   AiAssetRuntime,
-  applyAiAnimationFrameTransform,
-  bindAiAnimationFrameTransforms,
-  createAiAnimations,
   installAiAssetDesigner,
   loadAiAssets,
 } from "@ai-game-assets/phaser";
 import type { AiAssetDebugClient } from "@ai-game-assets/phaser";
-import type {
-  AiAssetAnimation,
-  AiAssetDefinition,
-  AiAssetManifest
-} from "@ai-game-assets/core";
+import type { AiAssetDefinition, AiAssetManifest } from "@ai-game-assets/core";
 import {
   alienLaserSfxAssetId,
   gameOverSfxAssetId,
@@ -31,7 +24,6 @@ import {
   isRuntimeAudioAsset,
   keepBullet,
   laserAnimationAssetIds,
-  laserHitDisplaySizes,
   loadMasterVolume,
   maxHeroLives,
   newWaveVoiceLineAssetId,
@@ -41,6 +33,7 @@ import {
   uiAnimationAssetIds,
 } from "./assetConfig.js";
 import type { InvaderSprite, InvaderType, LaserSprite, StarSprite } from "./assetConfig.js";
+import { DemoAnimationController } from "./DemoAnimationController.js";
 import { DemoAudioController } from "./DemoAudioController.js";
 import { designerAssetIds, designerPreviewDisplaySize } from "./designerConfig.js";
 import { GameMenuController } from "./GameMenuController.js";
@@ -78,21 +71,11 @@ export function startGame(
     private statusText?: Phaser.GameObjects.Text;
     private isPaused = false;
     private masterVolume = loadMasterVolume();
+    private animations?: DemoAnimationController;
     private audio?: DemoAudioController;
     private menu?: GameMenuController;
-    private heroAnimationSizes = new Map<string, { width: number; height: number }>();
-    private heroAnimations = new Map<string, AiAssetAnimation>();
-    private heroAnimationKey?: string;
     private heroLockedUntil = 0;
-    private heroFrameTransformHandler?: (...args: unknown[]) => void;
     private audioPlaybackOverrides = new Map<string, AiAssetDefinition["audioPlayback"]>();
-    private invaderAnimationSizes = new Map<string, { width: number; height: number }>();
-    private invaderAnimations = new Map<string, AiAssetAnimation>();
-    private invaderAnimationKeys = new WeakMap<Phaser.GameObjects.Sprite, string>();
-    private invaderFrameOffsetHandlers = new WeakMap<
-      Phaser.GameObjects.Sprite,
-      (...args: unknown[]) => void
-    >();
     private starSprites: StarSprite[] = [];
     private starAnimationKeys: string[] = [];
     private readonly pixelCollision: SpritePixelCollision;
@@ -108,32 +91,9 @@ export function startGame(
 
     create() {
       this.aiRuntime = new AiAssetRuntime(this, assetManifest);
+      this.animations = new DemoAnimationController(this, this.aiRuntime, assetManifest);
       this.audio = new DemoAudioController(this, assetManifest, this.audioPlaybackOverrides);
-      createAiAnimations(this, assetManifest, "hero.ship.idle");
-      createAiAnimations(this, assetManifest, "hero.ship.moving-left");
-      createAiAnimations(this, assetManifest, "hero.ship.shooting");
-      createAiAnimations(this, assetManifest, "hero.ship.hit");
-      createAiAnimations(this, assetManifest, "hero.ship.explosion");
-      for (const assetId of starAnimationAssetIds) {
-        createAiAnimations(this, assetManifest, assetId);
-      }
-      for (const assetId of laserAnimationAssetIds) {
-        createAiAnimations(this, assetManifest, assetId);
-      }
-      for (const assetId of uiAnimationAssetIds) {
-        createAiAnimations(this, assetManifest, assetId);
-      }
-      for (const assetId of invaderAnimationAssetIds) {
-        createAiAnimations(this, assetManifest, assetId);
-      }
-      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.idle"]);
-      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.moving-left"]);
-      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.shooting"]);
-      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.hit"]);
-      this.registerHeroAnimationSize(assetManifest.assets["hero.ship.explosion"]);
-      for (const assetId of invaderAnimationAssetIds) {
-        this.registerInvaderAnimationSize(assetManifest.assets[assetId]);
-      }
+      this.animations.initialize();
       this.cursors = this.input.keyboard?.createCursorKeys();
       this.fireKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.escapeKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
@@ -146,7 +106,7 @@ export function startGame(
       this.add.rectangle(320, 320, 640, 640, 0x10131a).setDepth(-100);
       this.background = this.add.image(320, 320, this.aiRuntime.key("background.space"));
       this.background.setDisplaySize(640, 640).setDepth(-90);
-      this.starAnimationKeys = this.resolveStarAnimationKeys();
+      this.starAnimationKeys = this.animations.starAnimationKeys();
       this.spawnStars();
       this.add.text(18, 14, "AI Assets Invaders", {
         color: "#f8fafc",
@@ -185,12 +145,12 @@ export function startGame(
         }
 
         if (starAnimationAssetIds.includes(assetId)) {
-          this.recreateStarAnimations(assetId, textureKey, asset);
+          this.animations?.recreateAnimations(textureKey, asset);
           this.applyStarTexture(assetId, textureKey);
         }
 
         if (laserAnimationAssetIds.includes(assetId)) {
-          this.recreateLaserAnimations(assetId, textureKey, asset);
+          this.animations?.recreateAnimations(textureKey, asset);
         }
 
         if (assetId === "ui.panel") {
@@ -202,32 +162,32 @@ export function startGame(
         }
 
         if (uiAnimationAssetIds.includes(assetId)) {
-          this.recreateUiAnimations(assetId, textureKey, asset);
+          this.animations?.recreateAnimations(textureKey, asset);
           this.menu?.refreshButtonAnimation(assetId);
         }
 
         if (assetId === "hero.ship" && this.hero) {
-          this.heroAnimationKey = undefined;
+          this.animations?.resetHeroAnimation();
           this.hero.setTexture(textureKey);
-          this.applyDisplaySize(this.hero, asset);
+          this.animations?.applyDisplaySize(this.hero, asset);
           this.updateHeroLifeBarTexture(textureKey);
         }
 
         if (assetId.startsWith("hero.ship.")) {
-          this.recreateHeroAnimations(assetId, textureKey, asset);
+          this.animations?.recreateHeroAnimations(assetId, textureKey, asset);
 
-          if (this.heroAnimationKey === assetId) {
+          if (this.animations?.currentHeroAnimationKey === assetId) {
             this.playHeroAnimation(assetId, true);
           }
         }
 
         if (invaderAnimationAssetIds.includes(assetId)) {
-          this.recreateInvaderAnimations(assetId, textureKey, asset);
+          this.animations?.recreateInvaderAnimations(assetId, textureKey, asset);
           for (const invader of this.invaders ?? []) {
-            const currentAnimationKey = this.invaderAnimationKeys.get(invader);
+            const currentAnimationKey = this.animations?.invaderAnimationKey(invader);
 
             if (currentAnimationKey === assetId) {
-              this.playInvaderAnimation(invader, assetId);
+              this.animations?.playInvaderAnimation(invader, assetId);
             }
           }
         }
@@ -331,11 +291,11 @@ export function startGame(
       if (time - this.lastInvaderShotAt > 780) {
         this.lastInvaderShotAt = time;
         const shooter = Phaser.Utils.Array.GetRandom(this.invaders) as InvaderSprite;
-        this.playInvaderAnimation(shooter, shooter.invaderType.shooting);
+        this.animations?.playInvaderAnimation(shooter, shooter.invaderType.shooting);
         this.scheduleInvaderLaser(shooter, shooter.invaderType.shooting);
         shooter.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
           if (shooter.active && !this.invadersCelebrating) {
-            this.playInvaderAnimation(shooter, shooter.invaderType.idle);
+            this.animations?.playInvaderAnimation(shooter, shooter.invaderType.idle);
           }
         });
       }
@@ -388,9 +348,9 @@ export function startGame(
             this.bullets = this.bullets.filter((candidate) => candidate !== bullet);
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
             bullet.destroy();
-            this.spawnLaserHit("laser.blue.hit", collisionPoint.x, collisionPoint.y);
+            this.animations?.spawnLaserHit("laser.blue.hit", collisionPoint.x, collisionPoint.y);
             this.audio?.playAudioAsset(invaderExplosionSfxAssetId, { volume: 0.5 });
-            this.playInvaderAnimation(invader, invader.invaderType.destroyed);
+            this.animations?.playInvaderAnimation(invader, invader.invaderType.destroyed);
             invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
             this.scoreText?.setText(`Score ${this.score}`);
@@ -407,7 +367,7 @@ export function startGame(
         if (collisionPoint) {
           this.invaderBullets = this.invaderBullets.filter((candidate) => candidate !== bullet);
           bullet.destroy();
-          this.spawnLaserHit("laser.red.hit", collisionPoint.x, collisionPoint.y);
+          this.animations?.spawnLaserHit("laser.red.hit", collisionPoint.x, collisionPoint.y);
           this.handleHeroHit();
         }
       }
@@ -430,7 +390,7 @@ export function startGame(
       this.lastShotAt = 0;
       this.lastInvaderShotAt = this.time.now;
       this.heroLockedUntil = 0;
-      this.heroAnimationKey = undefined;
+      this.animations?.resetHeroAnimation();
       this.scoreText?.setText("Score 0");
       this.statusText?.setText("Move: arrows  Fire: space");
 
@@ -446,7 +406,7 @@ export function startGame(
     }
 
     private clearGameplayObjects(): void {
-      this.detachHeroFrameTransformHandler();
+      this.animations?.detachHeroFrameTransformHandler(this.hero);
 
       for (const bullet of this.bullets) bullet.destroy();
       for (const bullet of this.invaderBullets) bullet.destroy();
@@ -526,7 +486,7 @@ export function startGame(
             this.aiRuntime.key(invaderType.idle)
           ) as InvaderSprite;
           invader.invaderType = invaderType;
-          this.playInvaderAnimation(invader, invaderType.idle);
+          this.animations?.playInvaderAnimation(invader, invaderType.idle);
           this.invaders.push(invader);
         }
       }
@@ -574,7 +534,7 @@ export function startGame(
 
     private applyStarTexture(assetId: string, textureKey: string): void {
       const animationKey = assetManifest.assets[assetId]?.animations?.[0]?.key ?? assetId;
-      this.starAnimationKeys = this.resolveStarAnimationKeys();
+      this.starAnimationKeys = this.animations?.starAnimationKeys() ?? [];
 
       for (const star of this.starSprites) {
         if (star.starAnimationKey === animationKey) {
@@ -699,17 +659,14 @@ export function startGame(
       this.gameActive = false;
       this.startInvaderCelebration();
       this.heroLockedUntil = Number.POSITIVE_INFINITY;
-      this.detachHeroFrameTransformHandler();
+      this.animations?.detachHeroFrameTransformHandler(this.hero);
       this.hero.setFlipX(false);
-      this.heroAnimationKey = "hero.ship.explosion";
       this.audio?.playAudioAsset(heroExplosionSfxAssetId, { volume: 0.7 });
       this.audio?.cutGameMusic();
       this.playGameOverEffectThenShowMenu();
-      this.hero.play("hero.ship.explosion", true);
-      this.applyHeroFrameTransform("hero.ship.explosion", 0);
-      this.attachHeroFrameTransformHandler("hero.ship.explosion");
+      this.animations?.playHeroAnimation(this.hero, "hero.ship.explosion", true);
       this.hero.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-        this.detachHeroFrameTransformHandler();
+        this.animations?.detachHeroFrameTransformHandler(this.hero);
         this.hero?.setVisible(false);
         this.hero?.setActive(false);
       });
@@ -752,420 +709,57 @@ export function startGame(
       for (const invader of this.invaders) {
         if (!invader.active) continue;
 
-        this.playInvaderAnimation(invader, invader.invaderType.celebration, true);
-      }
-    }
-
-    private recreateHeroAnimations(
-      assetId: string,
-      textureKey: string,
-      asset = assetManifest.assets[assetId]
-    ): string[] {
-      const animationKeys: string[] = [];
-
-      for (const animation of asset?.animations ?? []) {
-        this.anims.remove(animation.key);
-        this.anims.create({
-          key: animation.key,
-          frames: this.animationFramesWithTiming(textureKey, animation),
-          frameRate: animation.frameRate,
-          repeat: animation.repeat ?? -1
-        });
-        animationKeys.push(animation.key);
-      }
-
-      this.registerHeroAnimationSize(asset);
-
-      return animationKeys;
-    }
-
-    private recreateInvaderAnimations(
-      assetId: string,
-      textureKey: string,
-      asset = assetManifest.assets[assetId]
-    ): string[] {
-      const animationKeys: string[] = [];
-
-      for (const animation of asset?.animations ?? []) {
-        this.anims.remove(animation.key);
-        this.anims.create({
-          key: animation.key,
-          frames: this.animationFramesWithTiming(textureKey, animation),
-          frameRate: animation.frameRate,
-          repeat: animation.repeat ?? -1
-        });
-        animationKeys.push(animation.key);
-      }
-
-      this.registerInvaderAnimationSize(asset);
-
-      return animationKeys;
-    }
-
-    private recreateStarAnimations(
-      assetId: string,
-      textureKey: string,
-      asset = assetManifest.assets[assetId]
-    ): string[] {
-      const animationKeys: string[] = [];
-
-      for (const animation of asset?.animations ?? []) {
-        this.anims.remove(animation.key);
-        this.anims.create({
-          key: animation.key,
-          frames: this.animationFramesWithTiming(textureKey, animation),
-          frameRate: animation.frameRate,
-          repeat: animation.repeat ?? -1
-        });
-        animationKeys.push(animation.key);
-      }
-
-      return animationKeys;
-    }
-
-    private recreateLaserAnimations(
-      assetId: string,
-      textureKey: string,
-      asset = assetManifest.assets[assetId]
-    ): string[] {
-      const animationKeys: string[] = [];
-
-      for (const animation of asset?.animations ?? []) {
-        this.anims.remove(animation.key);
-        this.anims.create({
-          key: animation.key,
-          frames: this.animationFramesWithTiming(textureKey, animation),
-          frameRate: animation.frameRate,
-          repeat: animation.repeat ?? -1
-        });
-        animationKeys.push(animation.key);
-      }
-
-      return animationKeys;
-    }
-
-    private recreateUiAnimations(
-      assetId: string,
-      textureKey: string,
-      asset = assetManifest.assets[assetId]
-    ): string[] {
-      const animationKeys: string[] = [];
-
-      for (const animation of asset?.animations ?? []) {
-        this.anims.remove(animation.key);
-        this.anims.create({
-          key: animation.key,
-          frames: this.animationFramesWithTiming(textureKey, animation),
-          frameRate: animation.frameRate,
-          repeat: animation.repeat ?? -1
-        });
-        animationKeys.push(animation.key);
-      }
-
-      return animationKeys;
-    }
-
-    private resolveStarAnimationKeys(): string[] {
-      return starAnimationAssetIds.flatMap((assetId) =>
-        assetManifest.assets[assetId]?.animations?.map((animation) => animation.key) ?? []
-      );
-    }
-
-    private registerHeroAnimationSize(asset: AiAssetDefinition | undefined): void {
-      const size = this.displaySizeForAsset(asset);
-
-      for (const animation of asset?.animations ?? []) {
-        this.heroAnimationSizes.set(animation.key, size);
-        this.heroAnimations.set(animation.key, animation);
+        this.animations?.playInvaderAnimation(invader, invader.invaderType.celebration, true);
       }
     }
 
     private playHeroAnimation(animationKey: string, forceRestart = false): void {
-      if (!this.hero || (!forceRestart && this.heroAnimationKey === animationKey)) return;
-
-      this.detachHeroFrameTransformHandler();
-      this.heroAnimationKey = animationKey;
-      this.hero.play(animationKey);
-      this.applyHeroFrameTransform(animationKey, 0);
-      this.attachHeroFrameTransformHandler(animationKey);
+      this.animations?.playHeroAnimation(this.hero, animationKey, forceRestart);
     }
 
     private playHeroActionAnimation(animationKey: string): void {
-      if (this.hero) {
-        this.detachHeroFrameTransformHandler();
-        this.hero.setFlipX(false);
-        this.heroAnimationKey = animationKey;
-        this.hero.play(animationKey, true);
-        this.applyHeroFrameTransform(animationKey, 0);
-        this.attachHeroFrameTransformHandler(animationKey);
-      }
-      this.heroLockedUntil = this.time.now + this.animationDuration(animationKey);
-
-      this.hero?.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
+      const duration = this.animations?.playHeroActionAnimation(this.hero, animationKey, () => {
         if (this.time.now >= this.heroLockedUntil) {
           this.playHeroAnimation("hero.ship.idle");
         }
-      });
+      }) ?? 0;
+      this.heroLockedUntil = this.time.now + duration;
     }
 
     private scheduleHeroLaser(animationKey: string): void {
       if (!this.hero) return;
 
       const shooter = this.hero;
-      const delayMs = this.delayUntilTaggedFrame(animationKey, "shoot");
+      const delayMs = this.animations?.delayUntilTaggedFrame(animationKey, "shoot") ?? 0;
 
       this.time.delayedCall(delayMs, () => {
-        if (!shooter.active || this.heroAnimationKey !== animationKey) return;
+        if (!shooter.active || this.animations?.currentHeroAnimationKey !== animationKey) return;
 
-        this.bullets.push(this.spawnLaser("laser.blue.flicker", shooter.x, shooter.y - 35));
+        this.bullets.push(this.animations!.spawnLaser("laser.blue.flicker", shooter.x, shooter.y - 35));
         this.audio?.playAudioAsset(playerLaserSfxAssetId, { volume: 0.55 });
       });
-    }
-
-    private attachHeroFrameTransformHandler(animationKey: string): void {
-      if (!this.hero) return;
-
-      this.heroFrameTransformHandler = (...args: unknown[]) => {
-        const frame = args[1] as { index?: number } | undefined;
-        this.applyHeroFrameTransform(animationKey, Math.max(0, (frame?.index ?? 1) - 1));
-      };
-      this.hero.on(Phaser.Animations.Events.ANIMATION_UPDATE, this.heroFrameTransformHandler);
-    }
-
-    private detachHeroFrameTransformHandler(): void {
-      if (this.hero && this.heroFrameTransformHandler) {
-        this.hero.off(Phaser.Animations.Events.ANIMATION_UPDATE, this.heroFrameTransformHandler);
-      }
-
-      this.heroFrameTransformHandler = undefined;
-    }
-
-    private registerInvaderAnimationSize(asset: AiAssetDefinition | undefined): void {
-      const size = this.displaySizeForAsset(asset);
-
-      for (const animation of asset?.animations ?? []) {
-        this.invaderAnimationSizes.set(animation.key, size);
-        this.invaderAnimations.set(animation.key, animation);
-      }
-    }
-
-    private playInvaderAnimation(
-      invader: Phaser.GameObjects.Sprite,
-      animationKey: string,
-      randomStartFrame = false
-    ): void {
-      const existingHandler = this.invaderFrameOffsetHandlers.get(invader);
-
-      if (existingHandler) {
-        invader.off(Phaser.Animations.Events.ANIMATION_UPDATE, existingHandler);
-      }
-
-      this.invaderAnimationKeys.set(invader, animationKey);
-      invader.play(randomStartFrame ? { key: animationKey, randomFrame: true } : animationKey);
-      this.applyInvaderAnimationSize(invader, animationKey);
-      const currentFrame = invader.anims.currentFrame as { index?: number } | undefined;
-      this.applyInvaderFrameTransform(
-        invader,
-        animationKey,
-        Math.max(0, (currentFrame?.index ?? 1) - 1)
-      );
-
-      const handler = (...args: unknown[]) => {
-        const frame = args[1] as { index?: number } | undefined;
-        this.applyInvaderFrameTransform(invader, animationKey, Math.max(0, (frame?.index ?? 1) - 1));
-      };
-
-      this.invaderFrameOffsetHandlers.set(invader, handler);
-      invader.on(Phaser.Animations.Events.ANIMATION_UPDATE, handler);
-    }
-
-    private applyInvaderAnimationSize(
-      invader: Phaser.GameObjects.Sprite,
-      animationKey: string
-    ): void {
-      const size = this.invaderAnimationSizes.get(animationKey) ??
-        this.displaySizeForAsset(assetManifest.assets[animationKey]);
-      invader.setDisplaySize(size.width, size.height);
-      invader.setRotation(0);
     }
 
     private scheduleInvaderLaser(
       shooter: Phaser.GameObjects.Sprite,
       animationKey: string
     ): void {
-      const delayMs = this.delayUntilTaggedFrame(animationKey, "shoot");
+      const delayMs = this.animations?.delayUntilTaggedFrame(animationKey, "shoot") ?? 0;
 
       this.time.delayedCall(delayMs, () => {
         if (
           this.invadersCelebrating ||
           !shooter.active ||
-          this.invaderAnimationKeys.get(shooter) !== animationKey
+          this.animations?.invaderAnimationKey(shooter) !== animationKey
         ) {
           return;
         }
 
-        this.invaderBullets.push(this.spawnLaser("laser.red.flicker", shooter.x, shooter.y + 30));
+        this.invaderBullets.push(this.animations!.spawnLaser("laser.red.flicker", shooter.x, shooter.y + 30));
         this.audio?.playAudioAsset(alienLaserSfxAssetId, { volume: 0.45 });
       });
     }
 
-    private spawnLaser(animationKey: string, x: number, y: number): LaserSprite {
-      if (!this.aiRuntime) {
-        throw new Error("AI runtime is required to spawn laser assets.");
-      }
-
-      const asset = assetManifest.assets[animationKey];
-      const laser = this.add.sprite(x, y, this.aiRuntime.key(animationKey));
-      const size = this.displaySizeForAsset(asset);
-      laser.setDisplaySize(size.width, size.height);
-      laser.setDepth(8);
-      laser.play(animationKey);
-      bindAiAnimationFrameTransforms(
-        laser,
-        this.animationForKey(animationKey),
-        size,
-        { eventName: Phaser.Animations.Events.ANIMATION_UPDATE }
-      );
-
-      return laser;
-    }
-
-    private spawnLaserHit(animationKey: string, x: number, y: number): void {
-      if (!this.aiRuntime) return;
-
-      const size = laserHitDisplaySizes[animationKey] ??
-        this.displaySizeForAsset(assetManifest.assets[animationKey]);
-      const hit = this.add.sprite(x, y, this.aiRuntime.key(animationKey));
-      const fallbackDestroy = this.time.delayedCall(
-        this.animationDuration(animationKey) + 80,
-        () => {
-          transformBinding.detach();
-          hit.destroy();
-        }
-      );
-
-      hit.setDisplaySize(size.width, size.height);
-      hit.setOrigin(0.5, animationKey === "laser.red.hit" ? 1 : 0);
-      hit.setDepth(20);
-      hit.play(animationKey, true);
-      const transformBinding = bindAiAnimationFrameTransforms(
-        hit,
-        this.animationForKey(animationKey),
-        size,
-        {
-          eventName: Phaser.Animations.Events.ANIMATION_UPDATE,
-          originY: animationKey === "laser.red.hit" ? 1 : 0
-        }
-      );
-      hit.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-        fallbackDestroy.remove(false);
-        transformBinding.detach();
-        hit.destroy();
-      });
-    }
-
-    private delayUntilTaggedFrame(animationKey: string, tag: string): number {
-      const animation = this.animationForKey(animationKey);
-
-      if (!animation) return 0;
-
-      const defaultDelay = Math.round(1000 / animation.frameRate);
-      const tagIndex = animation.frameTimings?.findIndex((timing) => timing.tag === tag) ?? -1;
-      const targetIndex = tagIndex >= 0 ? tagIndex : animation.frames.length;
-
-      return animation.frames
-        .slice(0, targetIndex)
-        .reduce((total, _frame, index) => (
-          total + (animation.frameTimings?.[index]?.delayMs ?? defaultDelay)
-        ), 0);
-    }
-
-    private animationDuration(animationKey: string): number {
-      const animation = this.animationForKey(animationKey);
-
-      if (!animation) return 0;
-
-      const defaultDelay = Math.round(1000 / animation.frameRate);
-
-      return animation.frames.reduce((total, _frame, index) => (
-        total + (animation.frameTimings?.[index]?.delayMs ?? defaultDelay)
-      ), 0);
-    }
-
-    private applyHeroFrameTransform(animationKey: string, frameSlot: number): void {
-      if (!this.hero) return;
-
-      const size = this.heroAnimationSizes.get(animationKey) ??
-        this.displaySizeForAsset(assetManifest.assets[animationKey]);
-      this.applyFrameTransform(this.hero, animationKey, frameSlot, size);
-    }
-
-    private applyInvaderFrameTransform(
-      invader: Phaser.GameObjects.Sprite,
-      animationKey: string,
-      frameSlot: number
-    ): void {
-      const size = this.invaderAnimationSizes.get(animationKey) ??
-        this.displaySizeForAsset(assetManifest.assets[animationKey]);
-      this.applyFrameTransform(invader, animationKey, frameSlot, size);
-    }
-
-    private applyFrameTransform(
-      sprite: Phaser.GameObjects.Sprite,
-      animationKey: string,
-      frameSlot: number,
-      size: { width: number; height: number }
-    ): void {
-      applyAiAnimationFrameTransform(
-        sprite,
-        this.animationForKey(animationKey),
-        frameSlot,
-        size
-      );
-    }
-
-    private animationFramesWithTiming(
-      textureKey: string,
-      animation: AiAssetAnimation
-    ): Phaser.Types.Animations.AnimationFrame[] {
-      return this.anims.generateFrameNumbers(textureKey, {
-        frames: animation.frames
-      }).map((frame, index) => ({
-        ...frame,
-        duration: animation.frameTimings?.[index]?.delayMs
-      }));
-    }
-
-    private animationForKey(animationKey: string): AiAssetAnimation | undefined {
-      return this.heroAnimations.get(animationKey) ??
-        this.invaderAnimations.get(animationKey) ??
-        starAnimationAssetIds
-        .flatMap((assetId) => assetManifest.assets[assetId]?.animations ?? [])
-        .find((animation) => animation.key === animationKey) ??
-        laserAnimationAssetIds
-        .flatMap((assetId) => assetManifest.assets[assetId]?.animations ?? [])
-        .find((animation) => animation.key === animationKey) ??
-        assetManifest.assets[animationKey]?.animations
-        ?.find((animation) => animation.key === animationKey);
-    }
-
-    private applyDisplaySize(
-      target: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite,
-      asset: AiAssetDefinition | undefined
-    ): void {
-      const size = this.displaySizeForAsset(asset);
-      target.setDisplaySize(size.width, size.height);
-    }
-
-    private displaySizeForAsset(asset: AiAssetDefinition | undefined): {
-      width: number;
-      height: number;
-    } {
-      return {
-        width: asset?.frameGrid?.frameWidth ?? asset?.dimensions?.width ?? 42,
-        height: asset?.frameGrid?.frameHeight ?? asset?.dimensions?.height ?? 42
-      };
-    }
   }
 
   new Phaser.Game({
