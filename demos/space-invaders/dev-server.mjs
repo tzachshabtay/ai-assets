@@ -30,7 +30,6 @@ await mkdir(assetsDir, { recursive: true });
 
 const assetDevServer = createAiAssetDevServer({
   manifestPath: path.join(__dirname, "src/ai-assets"),
-  manifestModulePath: path.join(__dirname, "src/assets.ts"),
   assetsDir,
   publicPathPrefix: "/assets",
   port: assetApiPort,

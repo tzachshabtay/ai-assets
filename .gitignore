@@ -12,3 +12,4 @@ examples/*/public/assets/*.webp
 examples/*/public/assets/*.jpg
 demos/*/public/game.js
 demos/*/public/game.js.map
+demos/*/src/assets.ts
