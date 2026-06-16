@@ -34,13 +34,6 @@ import {
   laserHitDisplaySizes,
   loadMasterVolume,
   maxHeroLives,
-  menuButtonSize,
-  menuPanelSize,
-  menuPauseNewGameButtonY,
-  menuPauseResumeButtonY,
-  menuSingleButtonY,
-  menuTitleY,
-  menuVolumeSlider,
   newWaveVoiceLineAssetId,
   playerLaserSfxAssetId,
   saveMasterVolume,
@@ -50,6 +43,7 @@ import {
 import type { InvaderSprite, InvaderType, LaserSprite, StarSprite } from "./assetConfig.js";
 import { DemoAudioController } from "./DemoAudioController.js";
 import { designerAssetIds, designerPreviewDisplaySize } from "./designerConfig.js";
+import { GameMenuController } from "./GameMenuController.js";
 import { SpritePixelCollision } from "./SpritePixelCollision.js";
 
 export function startGame(
@@ -82,24 +76,10 @@ export function startGame(
     private heroLifeIcons: Phaser.GameObjects.Image[] = [];
     private scoreText?: Phaser.GameObjects.Text;
     private statusText?: Phaser.GameObjects.Text;
-    private menuContainer?: Phaser.GameObjects.Container;
-    private menuPanel?: Phaser.GameObjects.Image;
-    private menuTitle?: Phaser.GameObjects.Text;
-    private menuVolumeLabel?: Phaser.GameObjects.Text;
-    private menuVolumeValue?: Phaser.GameObjects.Text;
-    private menuVolumeTrack?: Phaser.GameObjects.Rectangle;
-    private menuVolumeFill?: Phaser.GameObjects.Rectangle;
-    private menuVolumeKnob?: Phaser.GameObjects.Ellipse;
-    private newGameButton?: Phaser.GameObjects.Sprite;
-    private newGameButtonText?: Phaser.GameObjects.Text;
-    private resumeButton?: Phaser.GameObjects.Sprite;
-    private resumeButtonText?: Phaser.GameObjects.Text;
-    private newGameButtonState: "idle" | "hover" | "clicked" = "idle";
-    private resumeButtonState: "idle" | "hover" | "clicked" = "idle";
     private isPaused = false;
-    private isDraggingVolume = false;
     private masterVolume = loadMasterVolume();
     private audio?: DemoAudioController;
+    private menu?: GameMenuController;
     private heroAnimationSizes = new Map<string, { width: number; height: number }>();
     private heroAnimations = new Map<string, AiAssetAnimation>();
     private heroAnimationKey?: string;
@@ -213,29 +193,17 @@ export function startGame(
           this.recreateLaserAnimations(assetId, textureKey, asset);
         }
 
-        if (assetId === "ui.panel" && this.menuPanel) {
-          this.menuPanel.setTexture(textureKey);
-          this.menuPanel.setDisplaySize(menuPanelSize.width, menuPanelSize.height);
+        if (assetId === "ui.panel") {
+          this.menu?.setPanelTexture(textureKey);
         }
 
-        if (assetId === "ui.button" && this.newGameButton) {
-          this.newGameButton.setTexture(textureKey);
-          this.newGameButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
-        }
-        if (assetId === "ui.button" && this.resumeButton) {
-          this.resumeButton.setTexture(textureKey);
-          this.resumeButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
+        if (assetId === "ui.button") {
+          this.menu?.setButtonTexture(textureKey);
         }
 
         if (uiAnimationAssetIds.includes(assetId)) {
           this.recreateUiAnimations(assetId, textureKey, asset);
-
-          if (assetId === `ui.button.${this.newGameButtonState}`) {
-            this.playNewGameButtonAnimation(this.newGameButtonState);
-          }
-          if (assetId === `ui.button.${this.resumeButtonState}`) {
-            this.playResumeButtonAnimation(this.resumeButtonState);
-          }
+          this.menu?.refreshButtonAnimation(assetId);
         }
 
         if (assetId === "hero.ship" && this.hero) {
@@ -498,168 +466,26 @@ export function startGame(
     private createGameMenu(title: string): void {
       if (!this.aiRuntime) return;
 
-      this.menuPanel = this.add.image(0, 0, this.aiRuntime.key("ui.panel"));
-      this.menuPanel.setDisplaySize(menuPanelSize.width, menuPanelSize.height);
-
-      this.menuTitle = this.add.text(0, menuTitleY, title, {
-        align: "center",
-        color: "#f8fafc",
-        fontSize: "24px"
+      this.menu = new GameMenuController(this, this.aiRuntime, this.masterVolume, {
+        onNewGame: () => this.startNewGame(true),
+        onResume: () => this.resumeGame(),
+        onVolumeChange: (volume) => this.setMasterVolume(volume),
+        onMenuShown: (showResume) => {
+          if (!showResume) this.audio?.fadeMusicTo("menu");
+        }
       });
-      this.menuTitle.setOrigin(0.5);
-
-      this.menuVolumeLabel = this.add.text(-95, menuVolumeSlider.y - 25, "Master Volume", {
-        align: "left",
-        color: "#dbeafe",
-        fontSize: "14px"
-      });
-      this.menuVolumeLabel.setOrigin(0, 0.5);
-      this.menuVolumeValue = this.add.text(95, menuVolumeSlider.y - 25, "100%", {
-        align: "right",
-        color: "#f8fafc",
-        fontSize: "14px"
-      });
-      this.menuVolumeValue.setOrigin(1, 0.5);
-      this.menuVolumeTrack = this.add.rectangle(0, menuVolumeSlider.y, menuVolumeSlider.width, 8, 0x334155, 0.95);
-      this.menuVolumeTrack.setInteractive({ useHandCursor: true });
-      this.menuVolumeFill = this.add.rectangle(
-        -menuVolumeSlider.width / 2,
-        menuVolumeSlider.y,
-        menuVolumeSlider.width,
-        8,
-        0x38bdf8,
-        1
-      );
-      this.menuVolumeFill.setOrigin(0, 0.5);
-      this.menuVolumeKnob = this.add.ellipse(0, menuVolumeSlider.y, 20, 20, 0xf8fafc, 1);
-      this.menuVolumeKnob.setStrokeStyle(3, 0x0f172a, 1);
-      this.menuVolumeKnob.setInteractive({ useHandCursor: true });
-      this.menuVolumeTrack.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-        this.isDraggingVolume = true;
-        this.setMasterVolumeFromPointer(pointer);
-      });
-      this.menuVolumeKnob.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-        this.isDraggingVolume = true;
-        this.setMasterVolumeFromPointer(pointer);
-      });
-      this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        if (this.isDraggingVolume) this.setMasterVolumeFromPointer(pointer);
-      });
-      this.input.on("pointerup", () => {
-        this.isDraggingVolume = false;
-      });
-
-      this.newGameButton = this.add.sprite(0, menuSingleButtonY, this.aiRuntime.key("ui.button.idle"));
-      this.newGameButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
-      this.newGameButton.setInteractive({ useHandCursor: true });
-      this.newGameButton.on("pointerover", () => this.playNewGameButtonAnimation("hover"));
-      this.newGameButton.on("pointerout", () => this.playNewGameButtonAnimation("idle"));
-      this.newGameButton.on("pointerdown", () => this.playNewGameButtonAnimation("clicked"));
-      this.newGameButton.on("pointerup", () => {
-        this.playNewGameButtonAnimation("hover");
-        this.startNewGame(true);
-      });
-      this.playNewGameButtonAnimation("idle");
-
-      this.newGameButtonText = this.add.text(0, menuSingleButtonY, "New Game", {
-        align: "center",
-        color: "#f8fafc",
-        fontSize: "18px"
-      });
-      this.newGameButtonText.setOrigin(0.5);
-
-      this.resumeButton = this.add.sprite(0, menuPauseResumeButtonY, this.aiRuntime.key("ui.button.idle"));
-      this.resumeButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
-      this.resumeButton.setInteractive({ useHandCursor: true });
-      this.resumeButton.on("pointerover", () => this.playResumeButtonAnimation("hover"));
-      this.resumeButton.on("pointerout", () => this.playResumeButtonAnimation("idle"));
-      this.resumeButton.on("pointerdown", () => this.playResumeButtonAnimation("clicked"));
-      this.resumeButton.on("pointerup", () => {
-        this.playResumeButtonAnimation("hover");
-        this.resumeGame();
-      });
-      this.playResumeButtonAnimation("idle");
-
-      this.resumeButtonText = this.add.text(0, menuPauseResumeButtonY, "Resume", {
-        align: "center",
-        color: "#f8fafc",
-        fontSize: "18px"
-      });
-      this.resumeButtonText.setOrigin(0.5);
-
-      this.menuContainer = this.add.container(320, 320, [
-        this.menuPanel,
-        this.menuTitle,
-        this.menuVolumeLabel,
-        this.menuVolumeValue,
-        this.menuVolumeTrack,
-        this.menuVolumeFill,
-        this.menuVolumeKnob,
-        this.resumeButton,
-        this.resumeButtonText,
-        this.newGameButton,
-        this.newGameButtonText
-      ]);
-      this.menuContainer.setDepth(100);
-      this.updateMasterVolumeUi();
-      this.showGameMenu(title);
+      this.menu.create(title);
     }
 
     private showGameMenu(title: string, options: { showResume?: boolean } = {}): void {
       this.gameActive = false;
       this.isPaused = Boolean(options.showResume);
-      this.menuTitle?.setText(title);
-      this.layoutMenuControls(Boolean(options.showResume));
-      this.playNewGameButtonAnimation("idle");
-      this.playResumeButtonAnimation("idle");
-      this.newGameButton?.setInteractive({ useHandCursor: true });
-      this.resumeButton?.setVisible(Boolean(options.showResume));
-      this.resumeButton?.setActive(Boolean(options.showResume));
-      this.resumeButtonText?.setVisible(Boolean(options.showResume));
-      if (options.showResume) {
-        this.resumeButton?.setInteractive({ useHandCursor: true });
-      } else {
-        this.resumeButton?.disableInteractive();
-      }
-      this.menuContainer?.setVisible(true);
-      this.menuContainer?.setActive(true);
-
-      if (!options.showResume) {
-        this.audio?.fadeMusicTo("menu");
-      }
+      this.menu?.show(title, options);
     }
 
     private hideGameMenu(): void {
       this.isPaused = false;
-      this.newGameButton?.disableInteractive();
-      this.resumeButton?.disableInteractive();
-      this.menuContainer?.setVisible(false);
-      this.menuContainer?.setActive(false);
-    }
-
-    private layoutMenuControls(showResume: boolean): void {
-      const newGameY = showResume ? menuPauseNewGameButtonY : menuSingleButtonY;
-
-      this.newGameButton?.setPosition(0, newGameY);
-      this.newGameButtonText?.setPosition(0, newGameY);
-      this.resumeButton?.setPosition(0, menuPauseResumeButtonY);
-      this.resumeButtonText?.setPosition(0, menuPauseResumeButtonY);
-    }
-
-    private playNewGameButtonAnimation(state: "idle" | "hover" | "clicked"): void {
-      if (!this.newGameButton) return;
-
-      this.newGameButtonState = state;
-      this.newGameButton.play(`ui.button.${state}`, true);
-      this.newGameButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
-    }
-
-    private playResumeButtonAnimation(state: "idle" | "hover" | "clicked"): void {
-      if (!this.resumeButton) return;
-
-      this.resumeButtonState = state;
-      this.resumeButton.play(`ui.button.${state}`, true);
-      this.resumeButton.setDisplaySize(menuButtonSize.width, menuButtonSize.height);
+      this.menu?.hide();
     }
 
     private showPauseMenu(): void {
@@ -676,28 +502,12 @@ export function startGame(
       this.statusText?.setText("Move: arrows  Fire: space");
     }
 
-    private setMasterVolumeFromPointer(pointer: Phaser.Input.Pointer): void {
-      const containerX = this.menuContainer?.x ?? 320;
-      const localX = pointer.worldX - containerX;
-
-      this.setMasterVolume((localX + (menuVolumeSlider.width / 2)) / menuVolumeSlider.width);
-    }
-
     private setMasterVolume(volume: number): void {
       this.masterVolume = Phaser.Math.Clamp(volume, 0, 1);
       this.sound.volume = this.masterVolume;
       this.audio?.syncMusicTrackVolumes();
       saveMasterVolume(this.masterVolume);
-      this.updateMasterVolumeUi();
-    }
-
-    private updateMasterVolumeUi(): void {
-      const width = menuVolumeSlider.width * this.masterVolume;
-      const knobX = (-menuVolumeSlider.width / 2) + width;
-
-      this.menuVolumeFill?.setSize(width, 8);
-      this.menuVolumeKnob?.setPosition(knobX, menuVolumeSlider.y);
-      this.menuVolumeValue?.setText(`${Math.round(this.masterVolume * 100)}%`);
+      this.menu?.setMasterVolume(this.masterVolume);
     }
 
     private spawnInvaders(): void {
