@@ -4,7 +4,7 @@ import type {
   AiAudioGenerationSettings,
   AiVoiceGenerationSettings
 } from "@ai-game-assets/core";
-import type { GeneratedAssetOption } from "./provider.js";
+import type { GeneratedAssetOption, GeneratedAssetOptionCallback } from "./provider.js";
 
 export type GenerateAudioAssetRequest = {
   asset: AiAssetDefinition;
@@ -16,7 +16,10 @@ export type GenerateAudioAssetRequest = {
 };
 
 export type AiAudioProvider = {
-  generate(request: GenerateAudioAssetRequest): Promise<GeneratedAssetOption[]>;
+  generate(
+    request: GenerateAudioAssetRequest,
+    onOption?: GeneratedAssetOptionCallback
+  ): Promise<GeneratedAssetOption[]>;
   createVoice?(request: {
     asset: AiAssetDefinition;
     option: GeneratedAssetOption;
@@ -36,7 +39,7 @@ export function createElevenLabsAudioProvider(
   options: ElevenLabsAudioProviderOptions = {}
 ): AiAudioProvider {
   return {
-    async generate(request) {
+    async generate(request, onOption) {
       const apiKey = options.apiKey ?? process.env.ELEVENLABS_API_KEY;
 
       if (!apiKey) {
@@ -49,17 +52,22 @@ export function createElevenLabsAudioProvider(
       const generated: GeneratedAssetOption[] = [];
 
       if (request.asset.kind === "voice") {
-        return generateElevenLabsVoicePreviews(apiKey, request, options, count);
+        return generateElevenLabsVoicePreviews(apiKey, request, options, count, onOption);
       }
 
       if (request.asset.kind === "voice-line") {
-        return generateElevenLabsVoiceLine(apiKey, request, options, count);
+        return generateElevenLabsVoiceLine(apiKey, request, options, count, onOption);
       }
 
-      for (let index = 0; index < count; index += 1) {
-        generated.push(await generateElevenLabsAudio(apiKey, request, options));
-      }
+      const generatedByIndex = await Promise.all(
+        Array.from({ length: count }, async (_, index) => {
+          const option = await generateElevenLabsAudio(apiKey, request, options);
+          await onOption?.(option, index);
+          return option;
+        })
+      );
 
+      generated.push(...generatedByIndex);
       return generated;
     },
     async createVoice(request) {
@@ -120,7 +128,8 @@ async function generateElevenLabsVoicePreviews(
   apiKey: string,
   request: GenerateAudioAssetRequest,
   options: ElevenLabsAudioProviderOptions,
-  count: number
+  count: number,
+  onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
   const voiceSettings = {
     ...request.asset.voiceSettings,
@@ -174,7 +183,7 @@ async function generateElevenLabsVoicePreviews(
     for (const preview of body.previews ?? []) {
       if (!preview.audio_base_64 || !preview.generated_voice_id) continue;
 
-      generated.push({
+      const option = {
         image: Buffer.from(preview.audio_base_64, "base64"),
         mimeType: preview.media_type || mimeTypeForAudioFormat(format),
         prompt,
@@ -192,7 +201,10 @@ async function generateElevenLabsVoicePreviews(
           generatedVoiceId: preview.generated_voice_id
         },
         durationSeconds: preview.duration_secs
-      });
+      };
+
+      generated.push(option);
+      await onOption?.(option, generated.length - 1);
 
       if (generated.length >= count) break;
     }
@@ -207,7 +219,8 @@ async function generateElevenLabsVoiceLine(
   apiKey: string,
   request: GenerateAudioAssetRequest,
   options: ElevenLabsAudioProviderOptions,
-  count: number
+  count: number,
+  onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
   const voiceSettings = {
     ...request.asset.voiceSettings,
@@ -229,7 +242,7 @@ async function generateElevenLabsVoiceLine(
     );
   }
 
-  for (let index = 0; index < count; index += 1) {
+  const generatedByIndex = await Promise.all(Array.from({ length: count }, async (_, index) => {
     const line = voiceSettings.text ?? request.asset.prompt;
     const direction = (request.prompt ?? voiceSettings.direction)?.trim();
     const model =
@@ -257,7 +270,7 @@ async function generateElevenLabsVoiceLine(
       );
     }
 
-    generated.push({
+    const option = {
       image: new Uint8Array(await response.arrayBuffer()),
       mimeType: mimeTypeForAudioFormat(format),
       prompt: direction ?? request.asset.prompt,
@@ -275,8 +288,13 @@ async function generateElevenLabsVoiceLine(
         text: line,
         direction
       }
-    });
-  }
+    };
+
+    await onOption?.(option, index);
+    return option;
+  }));
+
+  generated.push(...generatedByIndex);
 
   return generated;
 }

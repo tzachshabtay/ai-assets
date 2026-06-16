@@ -397,10 +397,12 @@ export function installAiAssetDesigner(
     lockGenerationStatus();
     elements.promoteButton.disabled = true;
     elements.regenerateButton.textContent = "Cancel";
+    elements.options.innerHTML = "";
     selectedOption = undefined;
+    const streamedOptions: GeneratedDebugOption[] = [];
 
     try {
-      const generated = await client.generate({
+      const generationRequest = {
         assetId: generationAssetId,
         prompt: elements.promptInput.value,
         count: options.optionCount ?? 3,
@@ -413,6 +415,24 @@ export function installAiAssetDesigner(
           manifest.assets[generationAssetId],
           generationFormat
         )
+      };
+      await client.generateStream(generationRequest, (option) => {
+        if (activeGeneration?.id !== currentGenerationId) return;
+
+        streamedOptions.push(option);
+        renderOptions({
+          elements,
+          generated: [...streamedOptions].sort((left, right) => left.index - right.index),
+          scene: options.scene,
+          manifest,
+          assetId: generationAssetId,
+          designerOptions: options,
+          onPreview: options.onPreview,
+          onSelected(selected) {
+            selectedOption = selected;
+            elements.promoteButton.disabled = false;
+          }
+        });
       }, {
         signal: controller.signal
       });
@@ -422,27 +442,20 @@ export function installAiAssetDesigner(
       }
 
       finishGeneration(currentGenerationId);
-      renderOptions({
+      setStatus(
         elements,
-        generated,
-        scene: options.scene,
-        manifest,
-        assetId: generationAssetId,
-        designerOptions: options,
-        onPreview: options.onPreview,
-        onSelected(option) {
-          selectedOption = option;
-          elements.promoteButton.disabled = false;
-        }
-      });
-      setStatus(elements, "Pick an option to preview it.", "info");
+        streamedOptions.length > 0 ? "Pick an option to preview it." : "Generation finished with no options.",
+        streamedOptions.length > 0 ? "info" : "error"
+      );
     } catch (error) {
       if (isAbortError(error)) {
         return;
       }
 
       finishGeneration(currentGenerationId);
-      elements.options.innerHTML = "";
+      if (streamedOptions.length === 0) {
+        elements.options.innerHTML = "";
+      }
       setStatus(elements, `Generation failed. ${errorMessage(error)}`, "error");
     } finally {
       finishGeneration(currentGenerationId);

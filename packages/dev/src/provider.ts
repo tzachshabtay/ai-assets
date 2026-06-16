@@ -54,8 +54,16 @@ export type GeneratedAssetOption = {
   animations?: AiAssetAnimation[];
 };
 
+export type GeneratedAssetOptionCallback = (
+  option: GeneratedAssetOption,
+  index: number
+) => void | Promise<void>;
+
 export type AiImageProvider = {
-  generate(request: GenerateAssetRequest): Promise<GeneratedAssetOption[]>;
+  generate(
+    request: GenerateAssetRequest,
+    onOption?: GeneratedAssetOptionCallback
+  ): Promise<GeneratedAssetOption[]>;
 };
 
 export type OpenAiImageProviderOptions = {
@@ -70,7 +78,7 @@ export function createOpenAiImageProvider(
   options: OpenAiImageProviderOptions = {}
 ): AiImageProvider {
   return {
-    async generate(request) {
+    async generate(request, onOption) {
       const dimensions = requireAssetDimensions(request.asset);
       const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
 
@@ -92,7 +100,7 @@ export function createOpenAiImageProvider(
           model: request.settings?.model ?? options.svgModel ?? process.env.OPENAI_SVG_MODEL ?? "gpt-5",
           prompt,
           count: request.count ?? 1
-        });
+        }, onOption);
       }
 
       const outputFormat = normalizeOutputFormat(requestedFormat);
@@ -131,9 +139,7 @@ export function createOpenAiImageProvider(
         output_format: outputFormat,
         moderation: request.settings?.moderation ?? request.asset.settings?.moderation
       }));
-      const generated: GeneratedAssetOption[] = [];
-
-      for (const requestBody of requestBodies) {
+      const generatedByIndex = await Promise.all(requestBodies.map(async (requestBody, index) => {
         const response = allReferences.length
           ? await createImageEdit(apiKey, requestBody, allReferences)
           : await createImageGeneration(apiKey, requestBody);
@@ -146,6 +152,7 @@ export function createOpenAiImageProvider(
         }
 
         const payload = await readImagePayload(response);
+        const generatedForRequest: GeneratedAssetOption[] = [];
 
         for (const item of payload.data ?? []) {
           if (!item.b64_json) {
@@ -164,7 +171,7 @@ export function createOpenAiImageProvider(
             dimensions
           );
 
-          generated.push({
+          const option: GeneratedAssetOption = {
             image: processedImage,
             mimeType: mimeTypeFromOutputFormat(outputFormat),
             prompt,
@@ -180,11 +187,16 @@ export function createOpenAiImageProvider(
               background,
               format: outputFormat === "jpeg" ? "jpg" : outputFormat
             }
-          });
-        }
-      }
+          };
 
-      return generated;
+          generatedForRequest.push(option);
+          await onOption?.(option, index);
+        }
+
+        return generatedForRequest;
+      }));
+
+      return generatedByIndex.flat();
     }
   };
 }
@@ -196,10 +208,10 @@ async function generateSvgAssets(
     model: string;
     prompt: string;
     count: number;
-  }
+  },
+  onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
   const dimensions = requireAssetDimensions(request.asset);
-  const generated: GeneratedAssetOption[] = [];
   const references = [
     ...(request.references ?? []),
     ...(request.styleReferences ?? []).map((reference, index) => ({
@@ -208,7 +220,7 @@ async function generateSvgAssets(
     }))
   ];
 
-  for (let index = 0; index < context.count; index += 1) {
+  return Promise.all(Array.from({ length: context.count }, async (_, index) => {
     const prompt = svgAssetPrompt(request, {
       prompt: context.prompt,
       variation: context.count > 1 ? createVariationSeed(index) : undefined,
@@ -231,7 +243,7 @@ async function generateSvgAssets(
     const payload = await response.json() as unknown;
     const svg = normalizeSvgOutput(extractResponseText(payload), dimensions);
 
-    generated.push({
+    const option: GeneratedAssetOption = {
       image: Buffer.from(svg, "utf8"),
       mimeType: "image/svg+xml",
       prompt: context.prompt,
@@ -245,10 +257,11 @@ async function generateSvgAssets(
         model: context.model,
         format: "svg"
       }
-    });
-  }
+    };
 
-  return generated;
+    await onOption?.(option, index);
+    return option;
+  }));
 }
 
 function svgAssetPrompt(

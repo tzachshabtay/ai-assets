@@ -11,6 +11,7 @@ import {
   type AiVoiceGenerationSettings
 } from "@ai-game-assets/core";
 import type { AiImageProvider } from "./provider.js";
+import type { GeneratedAssetOption, GeneratedAssetOptionCallback } from "./provider.js";
 import type { AiAudioProvider } from "./audio-provider.js";
 import {
   type AssetStoreOptions,
@@ -76,17 +77,7 @@ async function routeRequest(
   }
 
   if (request.method === "POST" && url.pathname === "/__ai-assets/generate") {
-    const body = await readJson<{
-      assetId: string;
-      prompt?: string;
-      count?: number;
-      dimensions?: AiAssetDimensions;
-      frameCount?: number;
-      format?: AiAssetFormat;
-      audioSettings?: AiAudioGenerationSettings;
-      voiceSettings?: AiVoiceGenerationSettings;
-      styleGuide?: DebugStyleGuide;
-    }>(request);
+    const body = await readJson<GenerateRequestBody>(request);
     const manifest = await readManifest(options.manifestPath);
     const asset = applyGenerationOverrides(getAsset(manifest, body.assetId), {
       dimensions: body.dimensions,
@@ -97,23 +88,57 @@ async function routeRequest(
       : await generateImage(options, manifest, asset, body);
 
     sendJson(response, 200, {
-      options: generated.map((option, index) => ({
-        index,
-        mimeType: option.mimeType,
-        prompt: option.prompt,
-        model: option.model,
-        revisedPrompt: option.revisedPrompt,
-        dimensions: option.dimensions,
-        frameGrid: option.frameGrid,
-        animations: option.animations,
-        settings: option.settings,
-      audioSettings: option.audioSettings,
-      audioPlayback: option.audioPlayback,
-      voiceSettings: option.voiceSettings,
-      durationSeconds: option.durationSeconds,
-        dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
-      }))
+      options: generated.map((option, index) => serializeGeneratedOption(option, index))
     });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/__ai-assets/generate-stream") {
+    const body = await readJson<GenerateRequestBody>(request);
+    const manifest = await readManifest(options.manifestPath);
+    const asset = applyGenerationOverrides(getAsset(manifest, body.assetId), {
+      dimensions: body.dimensions,
+      frameCount: body.frameCount
+    });
+
+    response.writeHead(200, {
+      ...corsHeaders(),
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store"
+    });
+
+    let sentOptions = 0;
+    const onOption: GeneratedAssetOptionCallback = (option, index) => {
+      sentOptions += 1;
+      response.write(`${JSON.stringify({
+        type: "option",
+        option: serializeGeneratedOption(option, index)
+      })}\n`);
+    };
+
+    try {
+      const generated = isAudioAsset(asset)
+        ? await generateAudio(options, manifest, asset, body, onOption)
+        : await generateImage(options, manifest, asset, body, onOption);
+
+      if (sentOptions === 0) {
+        generated.forEach((option, index) => {
+          response.write(`${JSON.stringify({
+            type: "option",
+            option: serializeGeneratedOption(option, index)
+          })}\n`);
+        });
+      }
+
+      response.write(`${JSON.stringify({ type: "done" })}\n`);
+    } catch (error) {
+      response.write(`${JSON.stringify({
+        type: "error",
+        error: error instanceof Error ? error.message : String(error)
+      })}\n`);
+    }
+
+    response.end();
     return;
   }
 
@@ -259,6 +284,18 @@ type DebugStyleGuide = {
   }>;
 };
 
+type GenerateRequestBody = {
+  assetId: string;
+  prompt?: string;
+  count?: number;
+  dimensions?: AiAssetDimensions;
+  frameCount?: number;
+  format?: AiAssetFormat;
+  audioSettings?: AiAudioGenerationSettings;
+  voiceSettings?: AiVoiceGenerationSettings;
+  styleGuide?: DebugStyleGuide;
+};
+
 async function generateImage(
   options: AiAssetDevServerOptions,
   manifest: AiAssetManifest,
@@ -268,7 +305,8 @@ async function generateImage(
     count?: number;
     format?: AiAssetFormat;
     styleGuide?: DebugStyleGuide;
-  }
+  },
+  onOption?: GeneratedAssetOptionCallback
 ) {
   if (!options.provider) {
     throw new Error(
@@ -288,7 +326,7 @@ async function generateImage(
     styleReferences: body.styleGuide
       ? referencesFromDataUrls(body.styleGuide.images)
       : await getStyleReferenceImages(options, manifest.styleGuide)
-  });
+  }, onOption);
 }
 
 async function generateAudio(
@@ -300,7 +338,8 @@ async function generateAudio(
     count?: number;
     audioSettings?: AiAudioGenerationSettings;
     voiceSettings?: AiVoiceGenerationSettings;
-  }
+  },
+  onOption?: GeneratedAssetOptionCallback
 ) {
   if (!options.audioProvider) {
     throw new Error(
@@ -319,7 +358,26 @@ async function generateAudio(
       const activeVoice = voiceAsset?.versions[voiceAsset.activeVersion];
       return activeVoice?.voiceSettings?.voiceId ?? voiceAsset?.voiceSettings?.voiceId;
     }
-  });
+  }, onOption);
+}
+
+function serializeGeneratedOption(option: GeneratedAssetOption, index: number) {
+  return {
+    index,
+    mimeType: option.mimeType,
+    prompt: option.prompt,
+    model: option.model,
+    revisedPrompt: option.revisedPrompt,
+    dimensions: option.dimensions,
+    frameGrid: option.frameGrid,
+    animations: option.animations,
+    settings: option.settings,
+    audioSettings: option.audioSettings,
+    audioPlayback: option.audioPlayback,
+    voiceSettings: option.voiceSettings,
+    durationSeconds: option.durationSeconds,
+    dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
+  };
 }
 
 function isAudioAsset(asset: AiAssetDefinition): boolean {

@@ -139,6 +139,72 @@ export class AiAssetDebugClient {
     return body.options;
   }
 
+  async generateStream(
+    request: GenerateDebugOptionsRequest,
+    onOption: (option: GeneratedDebugOption) => void,
+    options: AiAssetDebugClientRequestOptions = {}
+  ): Promise<GeneratedDebugOption[]> {
+    const url = `${this.endpoint}/__ai-assets/generate-stream`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request),
+      signal: options.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+
+    if (!response.body) {
+      const generated = await this.generate(request, options);
+      generated.forEach(onOption);
+      return generated;
+    }
+
+    const generated: GeneratedDebugOption[] = [];
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const consumeLine = (line: string) => {
+      if (!line.trim()) return;
+
+      const event = JSON.parse(line) as
+        | { type: "option"; option: GeneratedDebugOption }
+        | { type: "error"; error: string }
+        | { type: "done" };
+
+      if (event.type === "option") {
+        generated.push(event.option);
+        onOption(event.option);
+        return;
+      }
+
+      if (event.type === "error") {
+        throw new Error(event.error);
+      }
+    };
+
+    while (true) {
+      const chunk = await reader.read();
+      buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        consumeLine(line);
+      }
+
+      if (chunk.done) break;
+    }
+
+    consumeLine(buffer);
+    return generated.sort((left, right) => left.index - right.index);
+  }
+
   async getManifest(): Promise<AiAssetManifest> {
     const url = `${this.endpoint}/__ai-assets/manifest`;
     const response = await fetchDebugEndpoint(url, {
