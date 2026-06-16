@@ -5,8 +5,6 @@ import {
   bindAiAnimationFrameTransforms,
   createAiAnimations,
   installAiAssetDesigner,
-  loadAiAudioAsset,
-  loadAiAudioAssets,
   loadAiAssets,
 } from "@ai-game-assets/phaser";
 import type { AiAssetDebugClient } from "@ai-game-assets/phaser";
@@ -17,7 +15,6 @@ import type {
 } from "@ai-game-assets/core";
 import {
   alienLaserSfxAssetId,
-  gameMusicAssetId,
   gameOverSfxAssetId,
   heroExplosionSfxAssetId,
   heroHitSfxAssetId,
@@ -38,23 +35,22 @@ import {
   loadMasterVolume,
   maxHeroLives,
   menuButtonSize,
-  menuMusicAssetId,
   menuPanelSize,
   menuPauseNewGameButtonY,
   menuPauseResumeButtonY,
   menuSingleButtonY,
   menuTitleY,
   menuVolumeSlider,
-  musicFadeDurationMs,
   newWaveVoiceLineAssetId,
   playerLaserSfxAssetId,
   saveMasterVolume,
-  soundOnlyManifest,
   starAnimationAssetIds,
   uiAnimationAssetIds,
 } from "./assetConfig.js";
 import type { InvaderSprite, InvaderType, LaserSprite, StarSprite } from "./assetConfig.js";
+import { DemoAudioController } from "./DemoAudioController.js";
 import { designerAssetIds, designerPreviewDisplaySize } from "./designerConfig.js";
+import { SpritePixelCollision } from "./SpritePixelCollision.js";
 
 export function startGame(
   assetManifest: AiAssetManifest,
@@ -103,18 +99,13 @@ export function startGame(
     private isPaused = false;
     private isDraggingVolume = false;
     private masterVolume = loadMasterVolume();
+    private audio?: DemoAudioController;
     private heroAnimationSizes = new Map<string, { width: number; height: number }>();
     private heroAnimations = new Map<string, AiAssetAnimation>();
     private heroAnimationKey?: string;
     private heroLockedUntil = 0;
     private heroFrameTransformHandler?: (...args: unknown[]) => void;
     private audioPlaybackOverrides = new Map<string, AiAssetDefinition["audioPlayback"]>();
-    private menuMusic?: Phaser.Sound.BaseSound;
-    private gameMusic?: Phaser.Sound.BaseSound;
-    private menuMusicVolume = 0;
-    private gameMusicVolume = 0;
-    private musicMode: "menu" | "game" = "menu";
-    private musicFadeEvent?: Phaser.Time.TimerEvent;
     private invaderAnimationSizes = new Map<string, { width: number; height: number }>();
     private invaderAnimations = new Map<string, AiAssetAnimation>();
     private invaderAnimationKeys = new WeakMap<Phaser.GameObjects.Sprite, string>();
@@ -124,10 +115,11 @@ export function startGame(
     >();
     private starSprites: StarSprite[] = [];
     private starAnimationKeys: string[] = [];
-    private pixelCollisionLocalPoint = new Phaser.Math.Vector2();
+    private readonly pixelCollision: SpritePixelCollision;
 
     constructor() {
       super("space-invaders");
+      this.pixelCollision = new SpritePixelCollision(this);
     }
 
     preload() {
@@ -136,6 +128,7 @@ export function startGame(
 
     create() {
       this.aiRuntime = new AiAssetRuntime(this, assetManifest);
+      this.audio = new DemoAudioController(this, assetManifest, this.audioPlaybackOverrides);
       createAiAnimations(this, assetManifest, "hero.ship.idle");
       createAiAnimations(this, assetManifest, "hero.ship.moving-left");
       createAiAnimations(this, assetManifest, "hero.ship.shooting");
@@ -167,7 +160,7 @@ export function startGame(
       this.sound.volume = this.masterVolume;
       if ((this.sound as Phaser.Sound.BaseSoundManager).locked) {
         this.sound.once(Phaser.Sound.Events.UNLOCKED, () => {
-          this.fadeMusicTo(this.musicMode, 0);
+          this.audio?.fadeMusicTo(this.audio.mode, 0);
         });
       }
       this.add.rectangle(320, 320, 640, 640, 0x10131a).setDepth(-100);
@@ -190,18 +183,18 @@ export function startGame(
 
       this.startNewGame(false);
       this.createGameMenu("AI Assets Invaders");
-      this.loadSoundAssets();
-      this.loadMusicAssets();
+      this.audio.loadSoundAssets();
+      this.audio.loadMusicAssets();
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
         assetManifest.assets[assetId] = asset;
 
         if (isRuntimeAudioAsset(asset)) {
-          this.audioPlaybackOverrides.set(assetId, asset.audioPlayback);
-          this.refreshAudioAsset(
+          this.audio?.setPlaybackOverride(assetId, asset.audioPlayback);
+          this.audio?.refreshAudioAsset(
             assetId,
             textureKey,
-            asset.kind === "music" ? () => this.restartMusicTrack(assetId) : undefined
+            asset.kind === "music" ? () => this.audio?.restartMusicTrack(assetId) : undefined
           );
           return;
         }
@@ -421,14 +414,14 @@ export function startGame(
 
       for (const bullet of [...this.bullets]) {
         for (const invader of [...this.invaders]) {
-          const collisionPoint = this.pixelCollisionPoint(bullet, invader);
+          const collisionPoint = this.pixelCollision.point(bullet, invader);
 
           if (collisionPoint) {
             this.bullets = this.bullets.filter((candidate) => candidate !== bullet);
             this.invaders = this.invaders.filter((candidate) => candidate !== invader);
             bullet.destroy();
             this.spawnLaserHit("laser.blue.hit", collisionPoint.x, collisionPoint.y);
-            this.playAudioAsset(invaderExplosionSfxAssetId, { volume: 0.5 });
+            this.audio?.playAudioAsset(invaderExplosionSfxAssetId, { volume: 0.5 });
             this.playInvaderAnimation(invader, invader.invaderType.destroyed);
             invader.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => invader.destroy());
             this.score += 10;
@@ -441,7 +434,7 @@ export function startGame(
       for (const bullet of [...this.invaderBullets]) {
         if (this.heroDestroyed) break;
 
-        const collisionPoint = this.pixelCollisionPoint(bullet, this.hero);
+        const collisionPoint = this.pixelCollision.point(bullet, this.hero);
 
         if (collisionPoint) {
           this.invaderBullets = this.invaderBullets.filter((candidate) => candidate !== bullet);
@@ -454,80 +447,6 @@ export function startGame(
       if (this.invaders.length === 0) {
         this.resetWave("Wave cleared.");
       }
-    }
-
-    private pixelCollisionPoint(
-      first: Phaser.GameObjects.Sprite,
-      second: Phaser.GameObjects.Sprite
-    ): Phaser.Math.Vector2 | undefined {
-      if (!first.active || !second.active) return undefined;
-
-      const firstBounds = first.getBounds();
-      const secondBounds = second.getBounds();
-      const left = Math.max(firstBounds.left, secondBounds.left);
-      const right = Math.min(firstBounds.right, secondBounds.right);
-      const top = Math.max(firstBounds.top, secondBounds.top);
-      const bottom = Math.min(firstBounds.bottom, secondBounds.bottom);
-
-      if (right <= left || bottom <= top) return undefined;
-
-      const startX = Math.floor(left);
-      const endX = Math.ceil(right);
-      const startY = Math.floor(top);
-      const endY = Math.ceil(bottom);
-
-      for (let y = startY; y < endY; y += 1) {
-        for (let x = startX; x < endX; x += 1) {
-          const sampleX = x + 0.5;
-          const sampleY = y + 0.5;
-
-          if (
-            this.isSpritePixelOpaqueAt(first, sampleX, sampleY) &&
-            this.isSpritePixelOpaqueAt(second, sampleX, sampleY)
-          ) {
-            return new Phaser.Math.Vector2(sampleX, sampleY);
-          }
-        }
-      }
-
-      return undefined;
-    }
-
-    private isSpritePixelOpaqueAt(
-      sprite: Phaser.GameObjects.Sprite,
-      worldX: number,
-      worldY: number
-    ): boolean {
-      const localPoint = sprite.getLocalPoint(worldX, worldY, this.pixelCollisionLocalPoint);
-      const frame = sprite.frame;
-      let pixelX = Math.floor(localPoint.x);
-      let pixelY = Math.floor(localPoint.y);
-
-      if (sprite.flipX) {
-        pixelX = frame.width - pixelX - 1;
-      }
-
-      if (sprite.flipY) {
-        pixelY = frame.height - pixelY - 1;
-      }
-
-      if (
-        pixelX < 0 ||
-        pixelY < 0 ||
-        pixelX >= frame.width ||
-        pixelY >= frame.height
-      ) {
-        return false;
-      }
-
-      const alpha = this.textures.getPixelAlpha(
-        pixelX,
-        pixelY,
-        sprite.texture.key,
-        frame.name
-      );
-
-      return (alpha ?? 0) >= 16;
     }
 
     private startNewGame(activate = true): void {
@@ -554,7 +473,7 @@ export function startGame(
 
       if (activate) {
         this.hideGameMenu();
-        this.fadeMusicTo("game");
+        this.audio?.fadeMusicTo("game");
       }
     }
 
@@ -706,7 +625,7 @@ export function startGame(
       this.menuContainer?.setActive(true);
 
       if (!options.showResume) {
-        this.fadeMusicTo("menu");
+        this.audio?.fadeMusicTo("menu");
       }
     }
 
@@ -767,8 +686,7 @@ export function startGame(
     private setMasterVolume(volume: number): void {
       this.masterVolume = Phaser.Math.Clamp(volume, 0, 1);
       this.sound.volume = this.masterVolume;
-      this.setMusicTrackVolume(menuMusicAssetId, this.menuMusicVolume);
-      this.setMusicTrackVolume(gameMusicAssetId, this.gameMusicVolume);
+      this.audio?.syncMusicTrackVolumes();
       saveMasterVolume(this.masterVolume);
       this.updateMasterVolumeUi();
     }
@@ -867,7 +785,7 @@ export function startGame(
       this.invaderBullets = [];
       this.waveIndex += 1;
       this.spawnInvaders();
-      this.playAudioAsset(newWaveVoiceLineAssetId, { volume: 0.8 });
+      this.audio?.playAudioAsset(newWaveVoiceLineAssetId, { volume: 0.8 });
       this.statusText?.setText(
         `${message} Wave ${this.waveIndex + 1}. Speed x${this.invaderSpeedMultiplier().toFixed(1)}.`
       );
@@ -960,7 +878,7 @@ export function startGame(
       }
 
       this.statusText?.setText(`Hit. ${this.heroLives} ${this.heroLives === 1 ? "life" : "lives"} left.`);
-      this.playAudioAsset(heroHitSfxAssetId, { volume: 0.55 });
+      this.audio?.playAudioAsset(heroHitSfxAssetId, { volume: 0.55 });
       this.playHeroActionAnimation("hero.ship.hit");
     }
 
@@ -974,8 +892,8 @@ export function startGame(
       this.detachHeroFrameTransformHandler();
       this.hero.setFlipX(false);
       this.heroAnimationKey = "hero.ship.explosion";
-      this.playAudioAsset(heroExplosionSfxAssetId, { volume: 0.7 });
-      this.cutGameMusic();
+      this.audio?.playAudioAsset(heroExplosionSfxAssetId, { volume: 0.7 });
+      this.audio?.cutGameMusic();
       this.playGameOverEffectThenShowMenu();
       this.hero.play("hero.ship.explosion", true);
       this.applyHeroFrameTransform("hero.ship.explosion", 0);
@@ -988,7 +906,7 @@ export function startGame(
     }
 
     private playGameOverEffectThenShowMenu(): void {
-      const sound = this.playAudioAsset(gameOverSfxAssetId, { loop: false, volume: 0.8 });
+      const sound = this.audio?.playAudioAsset(gameOverSfxAssetId, { loop: false, volume: 0.8 });
       const asset = assetManifest.assets[gameOverSfxAssetId];
       const version = asset?.versions[asset.activeVersion];
       const durationSeconds = version?.durationSeconds ??
@@ -1190,7 +1108,7 @@ export function startGame(
         if (!shooter.active || this.heroAnimationKey !== animationKey) return;
 
         this.bullets.push(this.spawnLaser("laser.blue.flicker", shooter.x, shooter.y - 35));
-        this.playAudioAsset(playerLaserSfxAssetId, { volume: 0.55 });
+        this.audio?.playAudioAsset(playerLaserSfxAssetId, { volume: 0.55 });
       });
     }
 
@@ -1277,7 +1195,7 @@ export function startGame(
         }
 
         this.invaderBullets.push(this.spawnLaser("laser.red.flicker", shooter.x, shooter.y + 30));
-        this.playAudioAsset(alienLaserSfxAssetId, { volume: 0.45 });
+        this.audio?.playAudioAsset(alienLaserSfxAssetId, { volume: 0.45 });
       });
     }
 
@@ -1300,245 +1218,6 @@ export function startGame(
       );
 
       return laser;
-    }
-
-    private playAudioAsset(
-      assetId: string,
-      config?: Phaser.Types.Sound.SoundConfig
-    ): Phaser.Sound.BaseSound | undefined {
-      if (!this.cache.audio.exists(assetId)) return undefined;
-
-      const playback = this.playbackForAudioAsset(assetId);
-      const rate = playback.playbackRate ?? config?.rate ?? 1;
-      const seek = playback.trimStartSeconds ?? config?.seek ?? 0;
-      const loop = config?.loop ?? playback.loop;
-      const sound = this.sound.add(assetId);
-
-      sound.play({
-        ...config,
-        rate,
-        seek,
-        loop,
-        volume: (config?.volume ?? 1) * (playback.volume ?? 1)
-      });
-
-      if (
-        playback.trimEndSeconds !== undefined &&
-        playback.trimEndSeconds > seek
-      ) {
-        const stopOrLoop = () => {
-          if (!sound.isPlaying) return;
-
-          if (loop) {
-            sound.play({
-              ...config,
-              rate,
-              seek,
-              loop: false,
-              volume: (config?.volume ?? 1) * (playback.volume ?? 1)
-            });
-            this.time.delayedCall(
-              ((playback.trimEndSeconds! - seek) / Math.max(0.01, rate)) * 1000,
-              stopOrLoop
-            );
-            return;
-          }
-
-          sound.stop();
-        };
-        this.time.delayedCall(
-          ((playback.trimEndSeconds - seek) / Math.max(0.01, rate)) * 1000,
-          stopOrLoop
-        );
-      }
-
-      return sound;
-    }
-
-    private playbackForAudioAsset(assetId: string): NonNullable<AiAssetDefinition["audioPlayback"]> {
-      const asset = assetManifest.assets[assetId];
-      const version = asset?.versions[asset.activeVersion];
-
-      return {
-        ...asset?.audioPlayback,
-        ...version?.audioPlayback,
-        ...this.audioPlaybackOverrides.get(assetId)
-      };
-    }
-
-    private targetMusicVolume(assetId: string): number {
-      return Phaser.Math.Clamp(this.playbackForAudioAsset(assetId)?.volume ?? 1, 0, 1);
-    }
-
-    private ensureMusicTracks(): void {
-      if (!this.menuMusic) {
-        this.menuMusic = this.createLoopingMusicTrack(menuMusicAssetId, this.menuMusicVolume);
-      }
-      if (!this.gameMusic) {
-        this.gameMusic = this.createLoopingMusicTrack(gameMusicAssetId, this.gameMusicVolume);
-      }
-    }
-
-    private loadSoundAssets(): void {
-      const loaded = loadAiAudioAssets(this, soundOnlyManifest(assetManifest));
-      const voiceLine = assetManifest.assets[newWaveVoiceLineAssetId];
-
-      if (voiceLine?.versions[voiceLine.activeVersion]?.file) {
-        loaded.push(loadAiAudioAsset(this, assetManifest, newWaveVoiceLineAssetId)!);
-      }
-
-      if (loaded.length > 0) this.load.start();
-    }
-
-    private loadMusicAssets(): void {
-      const musicAssets = [menuMusicAssetId, gameMusicAssetId]
-        .map((assetId) => assetManifest.assets[assetId])
-        .filter((asset): asset is AiAssetDefinition => Boolean(asset));
-      const assetsToLoad = musicAssets.filter((asset) => {
-        const version = asset.versions[asset.activeVersion];
-
-        return Boolean(version?.file) && !this.cache.audio.exists(asset.id);
-      });
-
-      if (assetsToLoad.length === 0) {
-        this.fadeMusicTo(this.musicMode, 0);
-        return;
-      }
-
-      for (const asset of assetsToLoad) {
-        const version = asset.versions[asset.activeVersion];
-        if (version?.file) this.load.audio(asset.id, version.file);
-      }
-
-      this.load.once(Phaser.Loader.Events.COMPLETE, () => {
-        this.fadeMusicTo(this.musicMode, 0);
-      });
-      this.load.start();
-    }
-
-    private createLoopingMusicTrack(
-      assetId: string,
-      volume: number
-    ): Phaser.Sound.BaseSound | undefined {
-      if (!this.cache.audio.exists(assetId)) return undefined;
-
-      const playback = this.playbackForAudioAsset(assetId);
-      const sound = this.sound.add(assetId);
-      sound.play({
-        loop: true,
-        rate: playback.playbackRate ?? 1,
-        seek: playback.trimStartSeconds ?? 0,
-        volume
-      });
-
-      return sound;
-    }
-
-    private setMusicTrackVolume(assetId: string, volume: number): void {
-      const clampedVolume = Phaser.Math.Clamp(volume, 0, 1);
-      const sound = assetId === menuMusicAssetId ? this.menuMusic : this.gameMusic;
-
-      if (assetId === menuMusicAssetId) {
-        this.menuMusicVolume = clampedVolume;
-      } else {
-        this.gameMusicVolume = clampedVolume;
-      }
-
-      const adjustableSound = sound as (Phaser.Sound.BaseSound & {
-        setVolume?: (value: number) => Phaser.Sound.BaseSound;
-        volume?: number;
-      }) | undefined;
-      if (adjustableSound?.setVolume) {
-        adjustableSound.setVolume(clampedVolume);
-      } else if (adjustableSound) {
-        adjustableSound.volume = clampedVolume;
-      }
-    }
-
-    private fadeMusicTo(mode: "menu" | "game", durationMs = musicFadeDurationMs): void {
-      this.musicMode = mode;
-      this.ensureMusicTracks();
-      this.musicFadeEvent?.remove(false);
-
-      const startTime = this.time.now;
-      const startMenuVolume = this.menuMusicVolume;
-      const startGameVolume = this.gameMusicVolume;
-      const targetMenuVolume = mode === "menu" ? this.targetMusicVolume(menuMusicAssetId) : 0;
-      const targetGameVolume = mode === "game" ? this.targetMusicVolume(gameMusicAssetId) : 0;
-
-      if (durationMs <= 0) {
-        this.setMusicTrackVolume(menuMusicAssetId, targetMenuVolume);
-        this.setMusicTrackVolume(gameMusicAssetId, targetGameVolume);
-        return;
-      }
-
-      this.musicFadeEvent = this.time.addEvent({
-        delay: 16,
-        loop: true,
-        callback: () => {
-          const progress = Phaser.Math.Clamp((this.time.now - startTime) / durationMs, 0, 1);
-          this.setMusicTrackVolume(
-            menuMusicAssetId,
-            Phaser.Math.Linear(startMenuVolume, targetMenuVolume, progress)
-          );
-          this.setMusicTrackVolume(
-            gameMusicAssetId,
-            Phaser.Math.Linear(startGameVolume, targetGameVolume, progress)
-          );
-
-          if (progress >= 1) {
-            this.musicFadeEvent?.remove(false);
-            this.musicFadeEvent = undefined;
-          }
-        }
-      });
-    }
-
-    private cutGameMusic(): void {
-      this.musicFadeEvent?.remove(false);
-      this.musicFadeEvent = undefined;
-      this.ensureMusicTracks();
-      this.setMusicTrackVolume(gameMusicAssetId, 0);
-      this.setMusicTrackVolume(menuMusicAssetId, 0);
-    }
-
-    private restartMusicTrack(assetId: string): void {
-      if (assetId === menuMusicAssetId) {
-        this.menuMusic?.stop();
-        this.menuMusic?.destroy();
-        this.menuMusic = undefined;
-        this.menuMusicVolume = 0;
-      } else if (assetId === gameMusicAssetId) {
-        this.gameMusic?.stop();
-        this.gameMusic?.destroy();
-        this.gameMusic = undefined;
-        this.gameMusicVolume = 0;
-      }
-
-      this.ensureMusicTracks();
-      this.fadeMusicTo(this.musicMode, 0);
-    }
-
-    private refreshAudioAsset(
-      assetId: string,
-      source: string,
-      onReady?: () => void
-    ): void {
-      if (!source) return;
-
-      const audioCache = this.cache.audio as Phaser.Cache.BaseCache & {
-        remove?: (key: string) => unknown;
-      };
-
-      if (audioCache.exists(assetId)) {
-        audioCache.remove?.(assetId);
-      }
-
-      this.load.audio(assetId, source);
-      if (onReady) {
-        this.load.once(Phaser.Loader.Events.COMPLETE, onReady);
-      }
-      this.load.start();
     }
 
     private spawnLaserHit(animationKey: string, x: number, y: number): void {
