@@ -121,11 +121,6 @@ export function startGame(
         fontSize: "15px"
       });
 
-      this.startNewGame(false);
-      this.createGameMenu("AI Assets Invaders");
-      this.audio.loadSoundAssets();
-      this.audio.loadMusicAssets();
-
       this.applyAssetTexture = (assetId, textureKey, asset) => {
         assetManifest.assets[assetId] = asset;
 
@@ -210,6 +205,11 @@ export function startGame(
           this.applyAssetTexture?.(assetId, textureKey, asset);
         }
       });
+
+      this.startNewGame(false);
+      this.createGameMenu("AI Assets Invaders");
+      this.audio.loadSoundAssets();
+      this.audio.loadMusicAssets();
     }
 
     update(time: number, delta: number) {
