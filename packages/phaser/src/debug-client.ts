@@ -154,14 +154,10 @@ export class AiAssetDebugClient {
       signal: options.signal
     });
 
-    if (response.status === 404) {
+    if (!response.ok) {
       const generated = await this.generate(request, options);
       generated.forEach(onOption);
       return generated;
-    }
-
-    if (!response.ok) {
-      throw new Error(await responseErrorMessage(response));
     }
 
     if (!response.body) {
