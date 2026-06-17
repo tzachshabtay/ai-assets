@@ -1,6 +1,7 @@
-import { AiAssetDebugClient } from "@ai-game-assets/phaser";
+import { AiAssetDebugClient, installAiAssetDesigner } from "@ai-game-assets/phaser";
 import type { AiAssetManifest } from "@ai-game-assets/core";
 import { startGame } from "./SpaceInvadersScene.js";
+import { designerAssetIds, designerPreviewDisplaySize } from "./designerConfig.js";
 
 const assetApi =
   new URLSearchParams(window.location.search).get("assetApi") ??
@@ -11,8 +12,18 @@ let manifest: AiAssetManifest;
 
 async function boot(): Promise<void> {
   manifest = await debugClient.getManifest();
-  startGame(manifest, debugClient, (updatedManifest: AiAssetManifest) => {
-    manifest = updatedManifest;
+  startGame(manifest, {
+    onManifestUpdated: (updatedManifest: AiAssetManifest) => {
+      manifest = updatedManifest;
+    },
+    installDesigner: (designerOptions) => {
+      installAiAssetDesigner({
+        ...designerOptions,
+        client: debugClient,
+        assetIds: designerAssetIds,
+        previewDisplaySize: designerPreviewDisplaySize
+      });
+    }
   });
 }
 

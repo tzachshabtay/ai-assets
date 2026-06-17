@@ -1,6 +1,8 @@
 {
   "name": "@ai-game-assets/core",
   "version": "0.1.0",
+  "description": "Core manifest and runtime types for prompt-aware AI game assets.",
+  "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "exports": {
@@ -12,6 +14,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"

@@ -1,6 +1,8 @@
 {
   "name": "@ai-game-assets/dev",
   "version": "0.1.0",
+  "description": "Development server and AI providers for prompt-aware AI game assets.",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
@@ -11,12 +13,15 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@ai-game-assets/core": "file:../core",
+    "@ai-game-assets/core": "0.1.0",
     "@types/pngjs": "^6.0.5",
     "pngjs": "^7.0.0"
   },

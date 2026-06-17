@@ -4,9 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --format=esm --sourcemap --outfile=public/game.js",
+    "generate-assets-module": "node scripts/write-assets-module.mjs",
+    "build": "npm run build:dev",
+    "build:dev": "esbuild src/main.ts --bundle --format=esm --sourcemap --outfile=public/game.js",
+    "build:production": "npm run generate-assets-module && esbuild src/main.production.ts --bundle --format=esm --minify --outfile=public/game.js",
     "dev": "node dev-server.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "npm run generate-assets-module && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@ai-game-assets/core": "file:../../packages/core",

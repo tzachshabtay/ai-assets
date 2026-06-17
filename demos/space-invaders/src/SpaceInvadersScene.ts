@@ -1,10 +1,8 @@
 import Phaser from "phaser";
 import {
   AiAssetRuntime,
-  installAiAssetDesigner,
   loadAiAssets,
 } from "@ai-game-assets/phaser";
-import type { AiAssetDebugClient } from "@ai-game-assets/phaser";
 import type { AiAssetDefinition, AiAssetManifest } from "@ai-game-assets/core";
 import {
   alienLaserSfxAssetId,
@@ -35,14 +33,23 @@ import {
 import type { InvaderSprite, InvaderType, LaserSprite, StarSprite } from "./assetConfig.js";
 import { DemoAnimationController } from "./DemoAnimationController.js";
 import { DemoAudioController } from "./DemoAudioController.js";
-import { designerAssetIds, designerPreviewDisplaySize } from "./designerConfig.js";
 import { GameMenuController } from "./GameMenuController.js";
 import { SpritePixelCollision } from "./SpritePixelCollision.js";
 
+export type SpaceInvadersDesignerInstaller = (options: {
+  scene: Phaser.Scene;
+  manifest: AiAssetManifest;
+  onManifestUpdated(manifest: AiAssetManifest): void;
+  onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
+  onAssetReady(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
+}) => void;
+
 export function startGame(
   assetManifest: AiAssetManifest,
-  debugClient: AiAssetDebugClient,
-  onManifestUpdated: (manifest: AiAssetManifest) => void
+  options: {
+    onManifestUpdated?: (manifest: AiAssetManifest) => void;
+    installDesigner?: SpaceInvadersDesignerInstaller;
+  } = {}
 ): void {
   class SpaceInvadersScene extends Phaser.Scene {
     aiRuntime?: AiAssetRuntime;
@@ -188,16 +195,13 @@ export function startGame(
         }
       };
 
-      installAiAssetDesigner({
+      options.installDesigner?.({
         scene: this,
         manifest: assetManifest,
-        client: debugClient,
-        assetIds: designerAssetIds,
         onManifestUpdated: (updatedManifest) => {
-          onManifestUpdated(updatedManifest);
+          options.onManifestUpdated?.(updatedManifest);
           Object.assign(assetManifest.assets, updatedManifest.assets);
         },
-        previewDisplaySize: designerPreviewDisplaySize,
         onPreview: (assetId, textureKey, asset) => {
           this.applyAssetTexture?.(assetId, textureKey, asset);
         },
