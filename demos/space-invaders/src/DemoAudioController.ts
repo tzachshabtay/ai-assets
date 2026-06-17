@@ -20,7 +20,8 @@ export class DemoAudioController {
   constructor(
     private readonly scene: Phaser.Scene,
     private readonly assetManifest: AiAssetManifest,
-    private readonly playbackOverrides: Map<string, AiAssetDefinition["audioPlayback"]>
+    private readonly playbackOverrides: Map<string, AiAssetDefinition["audioPlayback"]>,
+    private readonly assetBaseUrl?: string
   ) {}
 
   get mode(): "menu" | "game" {
@@ -90,11 +91,20 @@ export class DemoAudioController {
   }
 
   loadSoundAssets(): void {
-    const loaded = loadAiAudioAssets(this.scene, soundOnlyManifest(this.assetManifest));
+    const loaded = loadAiAudioAssets(
+      this.scene,
+      soundOnlyManifest(this.assetManifest),
+      { baseUrl: this.assetBaseUrl }
+    );
     const voiceLine = this.assetManifest.assets[newWaveVoiceLineAssetId];
 
     if (voiceLine?.versions[voiceLine.activeVersion]?.file) {
-      loaded.push(loadAiAudioAsset(this.scene, this.assetManifest, newWaveVoiceLineAssetId)!);
+      loaded.push(loadAiAudioAsset(
+        this.scene,
+        this.assetManifest,
+        newWaveVoiceLineAssetId,
+        { baseUrl: this.assetBaseUrl }
+      )!);
     }
 
     if (loaded.length > 0) this.scene.load.start();
@@ -117,7 +127,7 @@ export class DemoAudioController {
 
     for (const asset of assetsToLoad) {
       const version = asset.versions[asset.activeVersion];
-      if (version?.file) this.scene.load.audio(asset.id, version.file);
+      if (version?.file) this.scene.load.audio(asset.id, this.assetUrl(version.file));
     }
 
     this.scene.load.once(Phaser.Loader.Events.COMPLETE, () => {
@@ -227,6 +237,14 @@ export class DemoAudioController {
     return Phaser.Math.Clamp(this.playbackForAudioAsset(assetId)?.volume ?? 1, 0, 1);
   }
 
+  private assetUrl(file: string): string {
+    if (!this.assetBaseUrl || isAbsoluteUrl(file) || file.startsWith("data:")) {
+      return file;
+    }
+
+    return `${this.assetBaseUrl.replace(/\/$/, "")}/${file.replace(/^\//, "")}`;
+  }
+
   private ensureMusicTracks(): void {
     if (!this.menuMusic) {
       this.menuMusic = this.createLoopingMusicTrack(menuMusicAssetId, this.menuMusicVolume);
@@ -274,4 +292,8 @@ export class DemoAudioController {
       adjustableSound.volume = clampedVolume;
     }
   }
+}
+
+function isAbsoluteUrl(file: string): boolean {
+  return /^[a-z][a-z\d+\-.]*:/i.test(file) || file.startsWith("//");
 }

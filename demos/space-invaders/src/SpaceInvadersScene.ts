@@ -47,6 +47,7 @@ export type SpaceInvadersDesignerInstaller = (options: {
 export function startGame(
   assetManifest: AiAssetManifest,
   options: {
+    assetBaseUrl?: string;
     onManifestUpdated?: (manifest: AiAssetManifest) => void;
     installDesigner?: SpaceInvadersDesignerInstaller;
   } = {}
@@ -93,13 +94,18 @@ export function startGame(
     }
 
     preload() {
-      loadAiAssets(this, assetManifest);
+      loadAiAssets(this, assetManifest, { baseUrl: options.assetBaseUrl });
     }
 
     create() {
-      this.aiRuntime = new AiAssetRuntime(this, assetManifest);
+      this.aiRuntime = new AiAssetRuntime(this, assetManifest, { baseUrl: options.assetBaseUrl });
       this.animations = new DemoAnimationController(this, this.aiRuntime, assetManifest);
-      this.audio = new DemoAudioController(this, assetManifest, this.audioPlaybackOverrides);
+      this.audio = new DemoAudioController(
+        this,
+        assetManifest,
+        this.audioPlaybackOverrides,
+        options.assetBaseUrl
+      );
       this.animations.initialize();
       this.cursors = this.input.keyboard?.createCursorKeys();
       this.fireKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
