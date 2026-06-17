@@ -27,9 +27,12 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.14.0
           cache: npm
           registry-url: https://registry.npmjs.org
+
+      - name: Use npm 11 for trusted publishing
+        run: npm install -g npm@^11.5.1
 
       - name: Install dependencies
         run: npm ci
@@ -68,11 +71,30 @@ jobs:
           npm run build --workspace @ai-game-assets/dev
           npm run build --workspace @ai-game-assets/phaser
 
+      - name: Publish diagnostics
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "event=${GITHUB_EVENT_NAME}"
+          echo "ref=${GITHUB_REF}"
+          echo "workflow=${GITHUB_WORKFLOW}"
+          echo "repository=${GITHUB_REPOSITORY}"
+          node --version
+          npm --version
+          npm config get registry
+
+          if [[ -n "${NODE_AUTH_TOKEN:-}" ]]; then
+            echo "NODE_AUTH_TOKEN is set"
+          else
+            echo "NODE_AUTH_TOKEN is not set"
+          fi
+
       - name: Publish core
-        run: npm publish --workspace @ai-game-assets/core --access public --provenance
+        run: npm publish --workspace @ai-game-assets/core --access public
 
       - name: Publish dev
-        run: npm publish --workspace @ai-game-assets/dev --access public --provenance
+        run: npm publish --workspace @ai-game-assets/dev --access public
 
       - name: Publish phaser
-        run: npm publish --workspace @ai-game-assets/phaser --access public --provenance
+        run: npm publish --workspace @ai-game-assets/phaser --access public
