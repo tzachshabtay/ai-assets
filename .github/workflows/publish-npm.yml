@@ -1,4 +1,4 @@
-name: Publish Packages
+name: publish-npm.yml
 
 on:
   release:
@@ -58,6 +58,9 @@ jobs:
             --workspace @ai-game-assets/dev \
             --workspace @ai-game-assets/phaser \
             --no-git-tag-version
+
+          npm pkg set "dependencies.@ai-game-assets/core=$version" --workspace @ai-game-assets/dev
+          npm pkg set "dependencies.@ai-game-assets/core=$version" --workspace @ai-game-assets/phaser
 
       - name: Build packages
         run: |

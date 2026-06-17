@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "Development server and AI providers for prompt-aware AI game assets.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tzachshabtay/ai-assets.git",
+    "directory": "packages/dev"
+  },
   "type": "module",
   "exports": {
     ".": {
