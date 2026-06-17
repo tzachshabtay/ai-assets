@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="space" cx="50%" cy="35%" r="70%">
+      <stop offset="0" stop-color="#263b83"/>
+      <stop offset="0.55" stop-color="#111827"/>
+      <stop offset="1" stop-color="#050816"/>
+    </radialGradient>
+    <linearGradient id="ship" x1="24" y1="18" x2="40" y2="50">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="0.45" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#space)"/>
+  <circle cx="13" cy="16" r="1.6" fill="#fef3c7"/>
+  <circle cx="48" cy="13" r="1.2" fill="#bfdbfe"/>
+  <circle cx="52" cy="44" r="1.4" fill="#fef3c7"/>
+  <path d="M32 10c5.3 5.4 8 13.7 8 25.1l8 10.4-8.5-1.9-2.8 10.4H27.3l-2.8-10.4-8.5 1.9 8-10.4C24 23.7 26.7 15.4 32 10Z" fill="url(#ship)" stroke="#e0f2fe" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M29 38h6l-1.4 9.5h-3.2L29 38Z" fill="#f97316"/>
+  <circle cx="32" cy="24" r="5" fill="#0f172a" stroke="#93c5fd" stroke-width="2"/>
+  <path d="M20 31c-4-4.3-8.1-4.8-12.4-1.4 3.5.5 6.3 2.2 8.4 5.1l4-3.7Z" fill="#22c55e"/>
+  <path d="M44 31c4-4.3 8.1-4.8 12.4-1.4-3.5.5-6.3 2.2-8.4 5.1L44 31Z" fill="#22c55e"/>
+</svg>
