@@ -7,6 +7,7 @@ const demoRoot = path.resolve(__dirname, "..");
 const manifestDir = path.join(demoRoot, "src/ai-assets");
 const modulePath = path.join(demoRoot, "src/assets.ts");
 const manifest = await readManifestDirectory(manifestDir);
+normalizeAssetUrls(manifest);
 
 await mkdir(path.dirname(modulePath), { recursive: true });
 await writeFile(
@@ -39,6 +40,26 @@ async function readManifestDirectory(rootDir) {
   }
 
   return { assets, styleGuide };
+}
+
+function normalizeAssetUrls(manifest) {
+  for (const asset of Object.values(manifest.assets)) {
+    for (const version of Object.values(asset.versions ?? {})) {
+      if (typeof version.file === "string") {
+        version.file = productionAssetUrl(version.file);
+      }
+    }
+  }
+
+  for (const image of manifest.styleGuide?.images ?? []) {
+    if (typeof image.file === "string") {
+      image.file = productionAssetUrl(image.file);
+    }
+  }
+}
+
+function productionAssetUrl(file) {
+  return file.startsWith("/assets/") ? file.slice(1) : file;
 }
 
 async function jsonFiles(rootDir) {
