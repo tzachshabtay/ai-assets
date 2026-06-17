@@ -37,15 +37,9 @@ jobs:
 
       - name: Publish core
         run: npm publish --workspace @ai-game-assets/core --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish dev
         run: npm publish --workspace @ai-game-assets/dev --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish phaser
         run: npm publish --workspace @ai-game-assets/phaser --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
