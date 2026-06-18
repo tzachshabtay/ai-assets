@@ -25,6 +25,9 @@ export type DesignerElements = {
   styleButton: HTMLButtonElement;
   assetSelect: HTMLSelectElement;
   assetBrowser: HTMLDivElement;
+  targetSelect: HTMLSelectElement;
+  targetField: HTMLLabelElement;
+  targetVariantLabel: HTMLDivElement;
   animationSelect: HTMLSelectElement;
   animationField: HTMLLabelElement;
   widthInput: HTMLInputElement;
@@ -117,6 +120,24 @@ export function createDesignerElements(
   assetSelect.hidden = true;
   const assetBrowser = document.createElement("div");
   assetBrowser.className = "ai-game-assets-designer__asset-browser";
+  const targetSelect = document.createElement("select");
+  targetSelect.className = "ai-game-assets-designer__target-select";
+  const defaultTargetOption = document.createElement("option");
+  defaultTargetOption.value = "";
+  defaultTargetOption.textContent = "Default";
+  targetSelect.append(defaultTargetOption);
+  for (const target of Object.values(manifest.targets ?? {})) {
+    const option = document.createElement("option");
+    option.value = target.id;
+    option.textContent = target.label ?? readableAssetName(target.id);
+    option.selected = target.id === options.targetId;
+    targetSelect.append(option);
+  }
+  const targetField = labelWrap("Target", targetSelect);
+  targetField.hidden = Object.keys(manifest.targets ?? {}).length === 0;
+  const targetVariantLabel = document.createElement("div");
+  targetVariantLabel.className = "ai-game-assets-designer__target-variant";
+  targetVariantLabel.hidden = true;
 
   for (const assetId of options.assetIds ?? Object.keys(manifest.assets)) {
     const option = document.createElement("option");
@@ -239,7 +260,9 @@ export function createDesignerElements(
 
   panel.append(
     header,
+    targetField,
     labelWrap("Asset", assetBrowser),
+    targetVariantLabel,
     animationField,
     dimensionGrid,
     frameCountField,
@@ -264,6 +287,9 @@ export function createDesignerElements(
     styleButton,
     assetSelect,
     assetBrowser,
+    targetSelect,
+    targetField,
+    targetVariantLabel,
     animationSelect,
     animationField,
     widthInput,
@@ -3540,6 +3566,16 @@ export function ensureDesignerStyles(): void {
   font: inherit;
 }
 .ai-game-assets-designer__field textarea { resize: vertical; }
+.ai-game-assets-designer__target-variant {
+  margin: -4px 0 12px;
+  padding: 7px 9px;
+  border: 1px solid #354058;
+  border-radius: 6px;
+  background: rgba(37, 49, 73, 0.62);
+  color: #b8d0ff;
+  font-size: 12px;
+  line-height: 1.35;
+}
 .ai-game-assets-designer__asset-browser {
   display: grid;
   gap: 8px;

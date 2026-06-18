@@ -126,6 +126,7 @@ export function installAiAssetDesigner(
   const client = options.client ?? new AiAssetDebugClient();
   let manifest = options.manifest;
   let selectedAssetId = options.assetIds?.[0] ?? Object.keys(manifest.assets)[0];
+  let selectedTargetId = options.targetId;
   let selectedTargetAssetId = selectedAssetId;
   let selectedOption: GeneratedDebugOption | undefined;
   let stopCurrentAnimationPreview: (() => void) | undefined;
@@ -169,14 +170,14 @@ export function installAiAssetDesigner(
 
     if (asset.kind !== "collection") {
       const baseOption = document.createElement("option");
-      baseOption.value = resolveTargetAssetId(manifest, assetId, options.targetId);
+      baseOption.value = resolveTargetAssetId(manifest, assetId, selectedTargetId);
       baseOption.textContent = isVoice ? "Base voice" : "Base image";
       elements.animationSelect.append(baseOption);
     }
 
     for (const [key, linkedAnimation] of linkedAnimations) {
       const option = document.createElement("option");
-      option.value = resolveTargetAssetId(manifest, linkedAnimation.assetId, options.targetId);
+      option.value = resolveTargetAssetId(manifest, linkedAnimation.assetId, selectedTargetId);
       option.textContent = linkedAnimation.label || readableAssetName(key);
       elements.animationSelect.append(option);
     }
@@ -184,8 +185,8 @@ export function installAiAssetDesigner(
     elements.animationField.hidden = linkedAnimations.length === 0;
     elements.animationField.firstElementChild!.textContent = isVoice ? "Line" : "Animation";
     selectedTargetAssetId = asset.kind === "collection" && linkedAnimations[0]
-      ? resolveTargetAssetId(manifest, linkedAnimations[0][1].assetId, options.targetId)
-      : resolveTargetAssetId(manifest, assetId, options.targetId);
+      ? resolveTargetAssetId(manifest, linkedAnimations[0][1].assetId, selectedTargetId)
+      : resolveTargetAssetId(manifest, assetId, selectedTargetId);
     elements.animationSelect.value = selectedTargetAssetId;
   };
 
@@ -223,6 +224,7 @@ export function installAiAssetDesigner(
     elements.voiceTextField.firstChild!.textContent = isVoiceLine ? "Text to say" : "Demo sentence";
     elements.formatField.hidden = isAudio || elements.formatField.hidden;
     elements.dimensionGrid.hidden = isAudio;
+    syncTargetVariantLabel(assetId);
     elements.frameCountInput.value = String(
       asset.frameGrid?.frameCount ??
       (asset.frameGrid ? asset.frameGrid.columns * asset.frameGrid.rows : 1)
@@ -267,6 +269,44 @@ export function installAiAssetDesigner(
     syncAnimationChoices(assetId);
     syncTargetAsset(selectedTargetAssetId);
     renderAssetBrowser();
+  };
+
+  const syncTargetVariantLabel = (assetId: string) => {
+    const target = selectedTargetId ? manifest.targets?.[selectedTargetId] : undefined;
+    const logicalAssetId = logicalAssetIdForTargetAsset(assetId);
+
+    elements.targetField.hidden = Object.keys(manifest.targets ?? {}).length === 0;
+    elements.targetSelect.value = selectedTargetId ?? "";
+
+    if (!target) {
+      elements.targetVariantLabel.hidden = true;
+      elements.targetVariantLabel.textContent = "";
+      return;
+    }
+
+    if (logicalAssetId && logicalAssetId !== assetId) {
+      elements.targetVariantLabel.hidden = false;
+      elements.targetVariantLabel.textContent =
+        `${target.label ?? readableAssetName(target.id)} variant: ` +
+        `${readableAssetName(logicalAssetId)} -> ${readableAssetName(assetId)}`;
+      return;
+    }
+
+    elements.targetVariantLabel.hidden = false;
+    elements.targetVariantLabel.textContent =
+      `${target.label ?? readableAssetName(target.id)} uses default ${readableAssetName(logicalAssetId ?? assetId)}.`;
+  };
+
+  const logicalAssetIdForTargetAsset = (targetAssetId: string): string | undefined => {
+    const target = selectedTargetId ? manifest.targets?.[selectedTargetId] : undefined;
+
+    if (!target) return targetAssetId;
+
+    for (const [logicalAssetId, variantAssetId] of Object.entries(target.variants)) {
+      if (variantAssetId === targetAssetId) return logicalAssetId;
+    }
+
+    return targetAssetId;
   };
 
   const renderAssetBrowser = () => {
@@ -322,6 +362,18 @@ export function installAiAssetDesigner(
   elements.assetSelect.addEventListener("change", () => {
     selectedAssetId = elements.assetSelect.value;
     syncAsset(selectedAssetId);
+  });
+
+  elements.targetSelect.addEventListener("change", () => {
+    selectedTargetId = elements.targetSelect.value || undefined;
+    syncAsset(selectedAssetId);
+    setStatus(
+      elements,
+      selectedTargetId
+        ? `Editing ${manifest.targets?.[selectedTargetId]?.label ?? readableAssetName(selectedTargetId)} target.`
+        : "Editing default target.",
+      "info"
+    );
   });
 
   elements.animationSelect.addEventListener("change", () => {
