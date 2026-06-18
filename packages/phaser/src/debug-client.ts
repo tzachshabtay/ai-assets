@@ -94,6 +94,11 @@ export type SaveDebugOptionRequest = {
   notes?: string;
 };
 
+export type DeleteDebugVersionRequest = {
+  assetId: string;
+  versionName: string;
+};
+
 export type EnsureFirstDraftsRequest = {
   assetIds?: string[];
 };
@@ -252,6 +257,24 @@ export class AiAssetDebugClient {
     if (!response.ok) {
       throw new Error(await responseErrorMessage(response));
     }
+  }
+
+  async deleteVersion(request: DeleteDebugVersionRequest): Promise<AiAssetManifest> {
+    const url = `${this.endpoint}/__ai-assets/delete-version`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+
+    const body = await response.json() as { manifest: AiAssetManifest };
+    return body.manifest;
   }
 
   async promoteStyle(styleGuide: DebugStyleGuideDraft): Promise<void> {

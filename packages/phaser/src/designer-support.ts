@@ -8,7 +8,8 @@ import type {
   AiVoiceGenerationSettings,
   AiAssetFormat,
   AiAssetGenerationSettings,
-  AiAssetManifest
+  AiAssetManifest,
+  AiAssetVersion
 } from "@ai-game-assets/core";
 import type { DebugStyleGuideDraft, GeneratedDebugOption } from "./debug-client.js";
 import type {
@@ -50,6 +51,7 @@ export type DesignerElements = {
   currentPreview: HTMLDivElement;
   uploadButton: HTMLButtonElement;
   regenerateButton: HTMLButtonElement;
+  versionsButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
   restartButton: HTMLButtonElement;
   versionLabel: HTMLDivElement;
@@ -209,6 +211,10 @@ export function createDesignerElements(
   uploadButton.type = "button";
   uploadButton.textContent = "Upload...";
 
+  const versionsButton = document.createElement("button");
+  versionsButton.type = "button";
+  versionsButton.textContent = "Versions...";
+
   const promoteButton = document.createElement("button");
   promoteButton.type = "button";
   promoteButton.textContent = "Promote";
@@ -220,7 +226,7 @@ export function createDesignerElements(
 
   const actions = document.createElement("div");
   actions.className = "ai-game-assets-designer__actions";
-  actions.append(regenerateButton, uploadButton, promoteButton, restartButton);
+  actions.append(regenerateButton, uploadButton, versionsButton, promoteButton, restartButton);
 
   const versionLabel = document.createElement("div");
   versionLabel.className = "ai-game-assets-designer__meta";
@@ -284,6 +290,7 @@ export function createDesignerElements(
     currentPreview,
     uploadButton,
     regenerateButton,
+    versionsButton,
     promoteButton,
     restartButton,
     versionLabel,
@@ -2144,6 +2151,159 @@ export async function openStyleGuideEditor(options: {
   promptInput.focus();
 }
 
+export async function openAssetVersionsDialog(options: {
+  root: HTMLElement;
+  asset: AiAssetDefinition;
+  assetId: string;
+  onSelect(versionName: string, option: GeneratedDebugOption): void | Promise<void>;
+  onDelete(versionName: string): void | Promise<void>;
+}): Promise<void> {
+  const dialog = document.createElement("div");
+  dialog.className = "ai-game-assets-designer__modal";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", `Versions for ${readableAssetName(options.assetId)}`);
+
+  const card = document.createElement("div");
+  card.className = "ai-game-assets-designer__modal-card";
+  const title = document.createElement("div");
+  title.className = "ai-game-assets-designer__modal-title";
+  title.textContent = `${readableAssetName(options.assetId)} versions`;
+
+  const list = document.createElement("div");
+  list.className = "ai-game-assets-designer__version-list";
+  let versions = { ...options.asset.versions };
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.textContent = "Close";
+  const actions = document.createElement("div");
+  actions.className = "ai-game-assets-designer__modal-actions";
+  actions.append(closeButton);
+
+  const versionEntries = () => Object.entries(versions)
+    .sort(([, left], [, right]) =>
+      Date.parse(right.createdAt || "") - Date.parse(left.createdAt || "")
+    );
+
+  const versionLabel = (versionName: string, version: AiAssetVersion) => {
+    const date = version.createdAt ? new Date(version.createdAt) : undefined;
+    const dateLabel = date && Number.isFinite(date.getTime())
+      ? date.toLocaleString()
+      : versionName;
+
+    return `${versionName === options.asset.activeVersion ? "Current · " : ""}${dateLabel}`;
+  };
+
+  const selectVersion = async (versionName: string, version: AiAssetVersion) => {
+    const dataUrl = await imageSourceToDataUrl(version.file);
+    await options.onSelect(versionName, {
+      index: -1,
+      dataUrl,
+      mimeType: mimeTypeFromDataUrl(dataUrl),
+      prompt: version.prompt ?? options.asset.prompt,
+      model: version.model,
+      revisedPrompt: version.revisedPrompt,
+      settings: version.settings,
+      audioSettings: version.audioSettings,
+      audioPlayback: version.audioPlayback,
+      voiceSettings: version.voiceSettings,
+      durationSeconds: version.durationSeconds
+    });
+    dialog.remove();
+  };
+
+  const render = () => {
+    list.innerHTML = "";
+
+    if (versionEntries().length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "ai-game-assets-designer__version-empty";
+      empty.textContent = "No saved versions yet.";
+      list.append(empty);
+      return;
+    }
+
+    for (const [versionName, version] of versionEntries()) {
+      const item = document.createElement("div");
+      item.className = "ai-game-assets-designer__version-item";
+      item.classList.toggle("is-active", versionName === options.asset.activeVersion);
+
+      const preview = document.createElement("div");
+      preview.className = "ai-game-assets-designer__version-preview";
+      if (isAudioAsset(options.asset)) {
+        renderAudioPlayer({
+          container: preview,
+          src: version.file,
+          label: versionName,
+          playback: version.audioPlayback
+        });
+      } else {
+        const image = document.createElement("img");
+        image.src = version.file;
+        image.alt = versionName;
+        preview.append(image);
+      }
+
+      const meta = document.createElement("div");
+      meta.className = "ai-game-assets-designer__version-meta";
+      const name = document.createElement("div");
+      name.className = "ai-game-assets-designer__version-name";
+      name.textContent = versionLabel(versionName, version);
+      const prompt = document.createElement("div");
+      prompt.className = "ai-game-assets-designer__version-prompt";
+      prompt.textContent = version.prompt || options.asset.prompt;
+      meta.append(name, prompt);
+
+      const selectButton = document.createElement("button");
+      selectButton.type = "button";
+      selectButton.textContent = versionName === options.asset.activeVersion ? "Use current" : "Use";
+      selectButton.addEventListener("click", () => {
+        selectButton.disabled = true;
+        void selectVersion(versionName, version).catch(() => {
+          selectButton.disabled = false;
+        });
+      });
+
+      const deleteButton = document.createElement("button");
+      deleteButton.type = "button";
+      deleteButton.textContent = "Delete";
+      deleteButton.disabled = versionName === options.asset.activeVersion;
+      deleteButton.addEventListener("click", async () => {
+        if (!window.confirm(
+          `Delete version "${versionName}"? This removes its asset file from your computer.`
+        )) {
+          return;
+        }
+
+        deleteButton.disabled = true;
+
+        try {
+          await options.onDelete(versionName);
+          const { [versionName]: _deleted, ...remaining } = versions;
+          versions = remaining;
+          render();
+        } catch {
+          deleteButton.disabled = false;
+        }
+      });
+
+      const buttons = document.createElement("div");
+      buttons.className = "ai-game-assets-designer__version-actions";
+      buttons.append(selectButton, deleteButton);
+      item.append(preview, meta, buttons);
+      list.append(item);
+    }
+  };
+
+  closeButton.addEventListener("click", () => dialog.remove());
+  card.append(title, list, actions);
+  dialog.append(card);
+  options.root.append(dialog);
+  render();
+  closeButton.focus();
+}
+
 export async function openAudioEditor(options: {
   root: HTMLElement;
   asset: AiAssetDefinition;
@@ -3670,6 +3830,85 @@ export function ensureDesignerStyles(): void {
   margin: 0 auto 14px;
   position: relative;
   overflow: hidden;
+  background: #0f1218;
+}
+.ai-game-assets-designer__version-list {
+  display: grid;
+  gap: 10px;
+}
+.ai-game-assets-designer__version-item {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #384251;
+  border-radius: 7px;
+  background: #0f1218;
+  padding: 8px;
+}
+.ai-game-assets-designer__version-item.is-active {
+  border-color: #6ed3ff;
+}
+.ai-game-assets-designer__version-preview {
+  min-width: 0;
+  min-height: 64px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.ai-game-assets-designer__version-preview img {
+  max-width: 80px;
+  max-height: 70px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.ai-game-assets-designer__version-preview .ai-game-assets-designer__audio-player {
+  min-width: 220px;
+}
+.ai-game-assets-designer__version-meta {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.ai-game-assets-designer__version-name {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 700;
+}
+.ai-game-assets-designer__version-prompt {
+  color: #aeb8c8;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.ai-game-assets-designer__version-actions {
+  display: grid;
+  gap: 6px;
+}
+.ai-game-assets-designer__version-actions button {
+  min-width: 70px;
+  border: 1px solid #58657a;
+  border-radius: 6px;
+  background: #273142;
+  color: #fff;
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ai-game-assets-designer__version-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.ai-game-assets-designer__version-empty {
+  color: #aeb8c8;
+  font-size: 13px;
+  padding: 12px;
+  border: 1px solid #384251;
+  border-radius: 7px;
   background: #0f1218;
 }
 .ai-game-assets-designer__frame-image {

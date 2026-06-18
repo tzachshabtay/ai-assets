@@ -95,6 +95,7 @@ import {
   normalizeAssetFormat,
   normalizeAudioFormat,
   openAnimationEditor,
+  openAssetVersionsDialog,
   openAudioEditor,
   openFrameTouchUpEditor,
   openStyleGuideEditor,
@@ -127,6 +128,7 @@ export function installAiAssetDesigner(
   let selectedOption: GeneratedDebugOption | undefined;
   let stopCurrentAnimationPreview: (() => void) | undefined;
   let editedCurrentOption: GeneratedDebugOption | undefined;
+  let previewedVersionName: string | undefined;
   let styleGuideDraft = styleGuideDraftFromManifest(manifest);
   const formatDrafts = new Map<string, AiAssetFormat>();
   let activeGeneration:
@@ -253,8 +255,10 @@ export function installAiAssetDesigner(
     elements.options.classList.remove("is-audio");
     setStatus(elements, "", "idle");
     elements.promoteButton.disabled = true;
+    elements.versionsButton.disabled = Object.keys(asset.versions).length <= 1;
     selectedOption = undefined;
     editedCurrentOption = undefined;
+    previewedVersionName = undefined;
   };
 
   const syncAsset = (assetId: string) => {
@@ -348,11 +352,22 @@ export function installAiAssetDesigner(
     }
 
     elements.currentPreview.classList.add("is-selected");
+    if (previewedVersionName) {
+      editedCurrentOption = undefined;
+      previewedVersionName = undefined;
+    }
     selectedOption = editedCurrentOption;
     elements.promoteButton.disabled = !selectedOption;
     if (isAudioAsset(asset)) {
+      renderAudioPlayer({
+        container: elements.currentAudio,
+        src: activeVersion.file,
+        label: readableAssetName(selectedTargetAssetId),
+        playback: activeVersion.audioPlayback
+      });
       options.onPreview(selectedTargetAssetId, activeVersion.file, asset);
     } else {
+      elements.currentImage.src = activeVersion.file;
       previewCurrentAsset({
         scene: options.scene,
         manifest,
@@ -399,6 +414,8 @@ export function installAiAssetDesigner(
     elements.regenerateButton.textContent = "Cancel";
     elements.options.innerHTML = "";
     selectedOption = undefined;
+    editedCurrentOption = undefined;
+    previewedVersionName = undefined;
     const streamedOptions: GeneratedDebugOption[] = [];
 
     try {
@@ -430,6 +447,7 @@ export function installAiAssetDesigner(
           onPreview: options.onPreview,
           onSelected(selected) {
             selectedOption = selected;
+            previewedVersionName = undefined;
             elements.promoteButton.disabled = false;
           }
         });
@@ -486,10 +504,12 @@ export function installAiAssetDesigner(
         onPreview: options.onPreview,
         onSelected(option) {
           selectedOption = option;
+          previewedVersionName = undefined;
           elements.promoteButton.disabled = false;
         }
       });
       selectedOption = uploadedOption;
+      previewedVersionName = undefined;
       elements.promoteButton.disabled = false;
 
       if (isAudioAsset(asset)) {
@@ -564,6 +584,73 @@ export function installAiAssetDesigner(
 
   elements.restartButton.addEventListener("click", () => {
     window.location.reload();
+  });
+
+  elements.versionsButton.addEventListener("click", () => {
+    const asset = manifest.assets[selectedTargetAssetId];
+
+    void openAssetVersionsDialog({
+      root: elements.root,
+      asset,
+      assetId: selectedTargetAssetId,
+      async onSelect(versionName, option) {
+        const optionAsset = assetWithGeneratedGeometry(asset, option);
+
+        for (const item of elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
+          item.classList.remove("is-selected");
+        }
+
+        selectedOption = option;
+        editedCurrentOption = option;
+        previewedVersionName = versionName;
+        elements.currentPreview.classList.add("is-selected");
+        elements.promoteButton.disabled = false;
+
+        if (isAudioAsset(asset)) {
+          renderAudioPlayer({
+            container: elements.currentAudio,
+            src: option.dataUrl,
+            label: readableAssetName(selectedTargetAssetId),
+            playback: option.audioPlayback
+          });
+          options.onPreview(selectedTargetAssetId, option.dataUrl, optionAsset);
+        } else {
+          elements.currentImage.src = option.dataUrl;
+          previewImageSource({
+            scene: options.scene,
+            manifest,
+            assetId: selectedTargetAssetId,
+            src: option.dataUrl,
+            textureKey: `ai-version-preview:${selectedTargetAssetId}:${versionName}:${Date.now()}`,
+            assetOverride: optionAsset,
+            onPreview: options.onPreview
+          });
+        }
+
+        setStatus(elements, `Previewing ${versionName}. Promote to make it current.`, "info");
+      },
+      async onDelete(versionName) {
+        try {
+          manifest = await client.deleteVersion({
+            assetId: selectedTargetAssetId,
+            versionName
+          });
+          options.onManifestUpdated?.(manifest);
+
+          if (previewedVersionName === versionName) {
+            syncTargetAsset(selectedTargetAssetId);
+          } else {
+            elements.versionsButton.disabled =
+              Object.keys(manifest.assets[selectedTargetAssetId].versions).length <= 1;
+          }
+
+          setStatus(elements, `Deleted ${versionName}.`, "success");
+        } catch (error) {
+          setStatus(elements, `Delete failed. ${errorMessage(error)}`, "error");
+          throw error;
+        }
+      }
+    });
   });
 
   elements.styleButton.addEventListener("click", () => {

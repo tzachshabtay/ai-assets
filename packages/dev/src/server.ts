@@ -15,6 +15,7 @@ import type { GeneratedAssetOption, GeneratedAssetOptionCallback } from "./provi
 import type { AiAudioProvider } from "./audio-provider.js";
 import {
   type AssetStoreOptions,
+  deleteAssetVersion,
   readManifest,
   saveGeneratedOption,
   saveStyleGuide
@@ -270,6 +271,20 @@ async function routeRequest(
       version: result.version,
       filePath: result.filePath
     });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/__ai-assets/delete-version") {
+    const body = await readJson<{
+      assetId: string;
+      versionName: string;
+    }>(request);
+    const manifest = await deleteAssetVersion(options, {
+      assetId: body.assetId,
+      versionName: body.versionName
+    });
+
+    sendJson(response, 200, { manifest });
     return;
   }
 

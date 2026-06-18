@@ -8,7 +8,7 @@ import {
   type AiAssetVersion,
   type GeneratedAssetOption
 } from "./internal.js";
-import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export type AssetStoreOptions = {
@@ -39,6 +39,11 @@ export type SaveStyleGuideInput = {
     mimeType: string;
     image: Uint8Array;
   }>;
+};
+
+export type DeleteAssetVersionInput = {
+  assetId: string;
+  versionName: string;
 };
 
 export async function readManifest(manifestPath: string): Promise<AiAssetManifest> {
@@ -180,6 +185,42 @@ export async function saveStyleGuide(
   return manifest;
 }
 
+export async function deleteAssetVersion(
+  options: AssetStoreOptions,
+  input: DeleteAssetVersionInput
+): Promise<AiAssetManifest> {
+  const manifest = await readManifest(options.manifestPath);
+  const asset = manifest.assets[input.assetId];
+
+  if (!asset) {
+    throw new Error(`Unknown AI asset "${input.assetId}".`);
+  }
+
+  if (!asset.versions[input.versionName]) {
+    throw new Error(`Unknown version "${input.versionName}" for AI asset "${input.assetId}".`);
+  }
+
+  if (asset.activeVersion === input.versionName) {
+    throw new Error(`Cannot delete active version "${input.versionName}" for AI asset "${input.assetId}".`);
+  }
+
+  await deleteVersionFile(options, asset.versions[input.versionName]);
+
+  const { [input.versionName]: _deleted, ...remainingVersions } = asset.versions;
+  manifest.assets[input.assetId] = {
+    ...asset,
+    versions: remainingVersions
+  };
+
+  await writeManifest(options.manifestPath, manifest);
+
+  if (options.manifestModulePath) {
+    await writeManifestModule(options.manifestModulePath, manifest);
+  }
+
+  return manifest;
+}
+
 export async function writeManifestModule(
   modulePath: string,
   manifest: AiAssetManifest
@@ -205,6 +246,21 @@ export async function writeManifestModule(
 
 function sanitizeFilePart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-");
+}
+
+async function deleteVersionFile(
+  options: AssetStoreOptions,
+  version: AiAssetVersion
+): Promise<void> {
+  const filePath = path.join(options.assetsDir, path.basename(version.file));
+
+  try {
+    await unlink(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
 }
 
 async function isDirectory(filePath: string): Promise<boolean> {
