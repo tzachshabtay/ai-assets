@@ -134,8 +134,8 @@ export function isRuntimeAudioAsset(asset: AiAssetDefinition): boolean {
     asset.kind === "voice-line";
 }
 
-export function keepBullet(bullet: LaserSprite): boolean {
-  if (bullet.y > -20 && bullet.y < 660) {
+export function keepBullet(bullet: LaserSprite, maxY = 660): boolean {
+  if (bullet.y > -20 && bullet.y < maxY) {
     return true;
   }
 

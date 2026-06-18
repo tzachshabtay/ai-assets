@@ -114,19 +114,23 @@ export class GameMenuController {
     this.resumeButtonText = this.createButtonText(menuPauseResumeButtonY, "Resume");
     this.playResumeButtonAnimation("idle");
 
-    this.container = this.scene.add.container(320, 320, [
-      this.panel,
-      this.title,
-      volumeLabel,
-      this.volumeValue,
-      volumeTrack,
-      this.volumeFill,
-      this.volumeKnob,
-      this.resumeButton,
-      this.resumeButtonText,
-      this.newGameButton,
-      this.newGameButtonText
-    ]);
+    this.container = this.scene.add.container(
+      this.scene.scale.gameSize.width / 2,
+      this.scene.scale.gameSize.height / 2,
+      [
+        this.panel,
+        this.title,
+        volumeLabel,
+        this.volumeValue,
+        volumeTrack,
+        this.volumeFill,
+        this.volumeKnob,
+        this.resumeButton,
+        this.resumeButtonText,
+        this.newGameButton,
+        this.newGameButtonText
+      ]
+    );
     this.container.setDepth(100);
     this.updateMasterVolumeUi();
     this.show(title);
@@ -242,7 +246,7 @@ export class GameMenuController {
   }
 
   private setMasterVolumeFromPointer(pointer: Phaser.Input.Pointer): void {
-    const containerX = this.container?.x ?? 320;
+    const containerX = this.container?.x ?? this.scene.scale.gameSize.width / 2;
     const localX = pointer.worldX - containerX;
     const volume = (localX + (menuVolumeSlider.width / 2)) / menuVolumeSlider.width;
 

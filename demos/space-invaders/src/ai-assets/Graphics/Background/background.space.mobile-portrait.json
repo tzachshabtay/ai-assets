@@ -3,8 +3,8 @@
   "kind": "image",
   "prompt": "Portrait mobile background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near phone edges.",
   "dimensions": {
-    "width": 720,
-    "height": 1280
+    "width": 412,
+    "height": 915
   },
   "settings": {
     "model": "gpt-image-2",
@@ -12,7 +12,7 @@
     "quality": "low",
     "format": "png"
   },
-  "activeVersion": "default",
+  "activeVersion": "promoted-1781749057940",
   "versions": {
     "default": {
       "name": "default",
@@ -22,6 +22,27 @@
       "model": "starter-asset",
       "parentVersion": "background.space:promoted-1780545088449",
       "notes": "Starter mobile portrait variant using the current desktop background until a phone-specific version is generated."
+    },
+    "promoted-1781749057940": {
+      "name": "promoted-1781749057940",
+      "file": "/assets/background.space.mobile-portrait.promoted-1781749057940.png",
+      "prompt": "Portrait mobile background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near phone edges.",
+      "createdAt": "2026-06-18T02:17:37.980Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "opaque",
+        "quality": "low",
+        "format": "png"
+      },
+      "audioSettings": {},
+      "audioPlayback": {},
+      "voiceSettings": {},
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
     }
-  }
+  },
+  "audioSettings": {},
+  "audioPlayback": {},
+  "voiceSettings": {}
 }

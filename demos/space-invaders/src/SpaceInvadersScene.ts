@@ -53,6 +53,8 @@ export function startGame(
     installDesigner?: SpaceInvadersDesignerInstaller;
   } = {}
 ): void {
+  const gameSize = gameSizeForTargetBackground(assetManifest, options.targetId);
+
   class SpaceInvadersScene extends Phaser.Scene {
     aiRuntime?: AiAssetRuntime;
     background?: Phaser.GameObjects.Image;
@@ -127,9 +129,19 @@ export function startGame(
           this.audio?.fadeMusicTo(this.audio.mode, 0);
         });
       }
-      this.add.rectangle(320, 320, 640, 640, 0x10131a).setDepth(-100);
-      this.background = this.add.image(320, 320, this.aiRuntime.key("background.space"));
-      this.background.setDisplaySize(640, 640).setDepth(-90);
+      this.add.rectangle(
+        gameSize.width / 2,
+        gameSize.height / 2,
+        gameSize.width,
+        gameSize.height,
+        0x10131a
+      ).setDepth(-100);
+      this.background = this.add.image(
+        gameSize.width / 2,
+        gameSize.height / 2,
+        this.aiRuntime.key("background.space")
+      );
+      this.background.setDisplaySize(gameSize.width, gameSize.height).setDepth(-90);
       this.starAnimationKeys = this.animations.starAnimationKeys();
       this.spawnStars();
       this.add.text(18, 14, "AI Assets Invaders", {
@@ -160,7 +172,7 @@ export function startGame(
 
         if (this.isBackgroundAsset(assetId) && this.background) {
           this.background.setTexture(textureKey);
-          this.background.setDisplaySize(640, 640);
+          this.background.setDisplaySize(gameSize.width, gameSize.height);
         }
 
         if (starAnimationAssetIds.includes(assetId)) {
@@ -356,8 +368,8 @@ export function startGame(
       for (const bullet of this.bullets) bullet.y -= playerStep;
       for (const bullet of this.invaderBullets) bullet.y += enemyStep;
 
-      this.bullets = this.bullets.filter((bullet) => keepBullet(bullet));
-      this.invaderBullets = this.invaderBullets.filter((bullet) => keepBullet(bullet));
+      this.bullets = this.bullets.filter((bullet) => keepBullet(bullet, gameSize.height + 20));
+      this.invaderBullets = this.invaderBullets.filter((bullet) => keepBullet(bullet, gameSize.height + 20));
     }
 
     private updateInvaders(delta: number, time: number) {
@@ -373,7 +385,7 @@ export function startGame(
       this.correctInvaderEdgeHit();
       this.checkInvadersReachedHero();
 
-      if (this.invaders.some((invader) => invader.y > 625)) {
+      if (this.invaders.some((invader) => invader.y > gameSize.height - 15)) {
         this.resetWave("Invaders regrouped.");
         return;
       }
@@ -485,7 +497,7 @@ export function startGame(
       this.scoreText?.setText("Score 0");
       this.statusText?.setText("Move: arrows/drag  Shoot: space/hold");
 
-      this.hero = this.add.sprite(320, 570, this.aiRuntime.key("hero.ship.idle"));
+      this.hero = this.add.sprite(gameSize.width / 2, gameSize.height - 70, this.aiRuntime.key("hero.ship.idle"));
       this.playHeroAnimation("hero.ship.idle", true);
       this.createHeroLifeBar();
       this.spawnInvaders();
@@ -592,8 +604,8 @@ export function startGame(
 
       for (let index = 0; index < 28; index += 1) {
         const star = this.add.sprite(
-          Phaser.Math.Between(0, 640),
-          Phaser.Math.Between(0, 640),
+          Phaser.Math.Between(0, gameSize.width),
+          Phaser.Math.Between(0, gameSize.height),
           this.aiRuntime.key(starAnimationAssetIds[0])
         ) as StarSprite;
         star.starSpeed = Phaser.Math.FloatBetween(8, 42);
@@ -612,8 +624,8 @@ export function startGame(
       for (const star of this.starSprites) {
         star.y += star.starSpeed * deltaSeconds;
 
-        if (star.y > 660) {
-          star.x = Phaser.Math.Between(0, 640);
+        if (star.y > gameSize.height + 20) {
+          star.x = Phaser.Math.Between(0, gameSize.width);
           star.y = -20;
           star.starSpeed = Phaser.Math.FloatBetween(8, 42);
           star.setAlpha(Phaser.Math.FloatBetween(0.175, 0.45));
@@ -857,8 +869,8 @@ export function startGame(
   new Phaser.Game({
     type: Phaser.AUTO,
     parent: "game",
-    width: 640,
-    height: 640,
+    width: gameSize.width,
+    height: gameSize.height,
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH
@@ -866,4 +878,26 @@ export function startGame(
     backgroundColor: "#10131a",
     scene: SpaceInvadersScene
   });
+}
+
+function gameSizeForTargetBackground(
+  manifest: AiAssetManifest,
+  targetId: string | undefined
+): { width: number; height: number } {
+  const width = 640;
+  const backgroundAssetId = targetId
+    ? manifest.targets?.[targetId]?.variants["background.space"] ?? "background.space"
+    : "background.space";
+  const backgroundAsset = manifest.assets[backgroundAssetId] ?? manifest.assets["background.space"];
+  const assetWidth = backgroundAsset?.dimensions?.width;
+  const assetHeight = backgroundAsset?.dimensions?.height;
+
+  if (!assetWidth || !assetHeight || assetWidth <= 0 || assetHeight <= 0) {
+    return { width, height: 640 };
+  }
+
+  return {
+    width,
+    height: Math.max(640, Math.round(width * (assetHeight / assetWidth)))
+  };
 }
