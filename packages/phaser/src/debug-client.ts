@@ -115,6 +115,16 @@ export type EnsureFirstDraftsResult = {
   }>;
 };
 
+export type EnsureTargetVariantRequest = {
+  targetId: string;
+  assetId: string;
+};
+
+export type EnsureTargetVariantResult = {
+  manifest: AiAssetManifest;
+  assetId: string;
+};
+
 export type AiAssetDebugClientRequestOptions = {
   signal?: AbortSignal;
 };
@@ -279,6 +289,25 @@ export class AiAssetDebugClient {
 
     const body = await response.json() as { manifest: AiAssetManifest };
     return body.manifest;
+  }
+
+  async ensureTargetVariant(
+    request: EnsureTargetVariantRequest
+  ): Promise<EnsureTargetVariantResult> {
+    const url = `${this.endpoint}/__ai-assets/target-variant`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+
+    return response.json() as Promise<EnsureTargetVariantResult>;
   }
 
   async promoteStyle(styleGuide: DebugStyleGuideDraft): Promise<void> {

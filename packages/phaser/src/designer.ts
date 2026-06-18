@@ -318,9 +318,19 @@ export function installAiAssetDesigner(
 
   const deriveCandidatesForAsset = (targetAssetId: string): DeriveCandidate[] => {
     const logicalAssetId = logicalAssetIdForTargetAsset(targetAssetId) ?? targetAssetId;
+    const target = selectedTargetId ? manifest.targets?.[selectedTargetId] : undefined;
+    const selectedTargetUsesDefault = Boolean(
+      selectedTargetId &&
+      target &&
+      targetAssetId === logicalAssetId &&
+      !target.variants[logicalAssetId]
+    );
     const candidates: DeriveCandidate[] = [];
     const addCandidate = (targetId: string | undefined, targetLabel: string, assetId: string) => {
-      if (assetId === targetAssetId || candidates.some((candidate) => candidate.assetId === assetId)) {
+      if (
+        (assetId === targetAssetId && !selectedTargetUsesDefault) ||
+        candidates.some((candidate) => candidate.assetId === assetId)
+      ) {
         return;
       }
 
@@ -351,6 +361,32 @@ export function installAiAssetDesigner(
     }
 
     return candidates;
+  };
+
+  const ensureTargetVariantForDerive = async (targetAssetId: string): Promise<string> => {
+    if (!selectedTargetId) return targetAssetId;
+
+    const logicalAssetId = logicalAssetIdForTargetAsset(targetAssetId) ?? targetAssetId;
+    const target = manifest.targets?.[selectedTargetId];
+
+    if (!target || target.variants[logicalAssetId]) {
+      return targetAssetId;
+    }
+
+    setStatus(
+      elements,
+      `Creating ${target.label ?? readableAssetName(target.id)} variant for ${readableAssetName(logicalAssetId)}...`,
+      "busy"
+    );
+    const result = await client.ensureTargetVariant({
+      targetId: selectedTargetId,
+      assetId: logicalAssetId
+    });
+    manifest = result.manifest;
+    options.onManifestUpdated?.(manifest);
+    selectedTargetAssetId = result.assetId;
+    syncAsset(selectedAssetId);
+    return result.assetId;
   };
 
   const renderAssetBrowser = () => {
@@ -628,12 +664,13 @@ export function installAiAssetDesigner(
   });
 
   elements.deriveButton.addEventListener("click", async () => {
-    const asset = manifest.assets[selectedTargetAssetId];
+    const derivationAssetId = await ensureTargetVariantForDerive(selectedTargetAssetId);
+    const asset = manifest.assets[derivationAssetId];
     const generationFormat = effectiveGenerationFormat(
       manifest,
       formatDrafts,
       selectedAssetId,
-      selectedTargetAssetId
+      derivationAssetId
     );
 
     if (isAudioAsset(asset)) return;
@@ -641,8 +678,8 @@ export function installAiAssetDesigner(
     await openDeriveDialog({
       root: elements.root,
       asset,
-      assetId: selectedTargetAssetId,
-      candidates: deriveCandidatesForAsset(selectedTargetAssetId),
+      assetId: derivationAssetId,
+      candidates: deriveCandidatesForAsset(derivationAssetId),
       prompt: elements.promptInput.value,
       format: generationFormat,
       onConfirm: async (deriveRequest) => {
@@ -675,7 +712,7 @@ export function installAiAssetDesigner(
             generated: [option],
             scene: options.scene,
             manifest,
-            assetId: selectedTargetAssetId,
+            assetId: derivationAssetId,
             designerOptions: options,
             onPreview: options.onPreview,
             onSelected(selected) {
@@ -689,7 +726,7 @@ export function installAiAssetDesigner(
           previewOption({
             scene: options.scene,
             manifest,
-            assetId: selectedTargetAssetId,
+            assetId: derivationAssetId,
             option,
             onPreview: options.onPreview
           });
@@ -713,7 +750,7 @@ export function installAiAssetDesigner(
 
         try {
           await client.generateStream({
-            assetId: selectedTargetAssetId,
+            assetId: derivationAssetId,
             prompt,
             count: options.optionCount ?? 3,
             references: [reference],
@@ -730,7 +767,7 @@ export function installAiAssetDesigner(
               generated: [...streamedOptions].sort((left, right) => left.index - right.index),
               scene: options.scene,
               manifest,
-              assetId: selectedTargetAssetId,
+              assetId: derivationAssetId,
               designerOptions: options,
               onPreview: options.onPreview,
               onSelected(selected) {

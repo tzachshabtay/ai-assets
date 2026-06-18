@@ -47,6 +47,16 @@ export type DeleteAssetVersionInput = {
   versionName: string;
 };
 
+export type EnsureTargetVariantInput = {
+  targetId: string;
+  assetId: string;
+};
+
+export type EnsureTargetVariantResult = {
+  manifest: AiAssetManifest;
+  assetId: string;
+};
+
 export async function readManifest(manifestPath: string): Promise<AiAssetManifest> {
   if (await isDirectory(manifestPath)) {
     return readManifestDirectory(manifestPath);
@@ -222,6 +232,81 @@ export async function deleteAssetVersion(
   return manifest;
 }
 
+export async function ensureTargetVariant(
+  options: AssetStoreOptions,
+  input: EnsureTargetVariantInput
+): Promise<EnsureTargetVariantResult> {
+  const manifest = await readManifest(options.manifestPath);
+  const sourceAsset = manifest.assets[input.assetId];
+  const target = manifest.targets?.[input.targetId];
+
+  if (!sourceAsset) {
+    throw new Error(`Unknown AI asset "${input.assetId}".`);
+  }
+
+  if (!target) {
+    throw new Error(`Unknown AI asset target "${input.targetId}".`);
+  }
+
+  const existingVariantAssetId = target.variants[input.assetId];
+
+  if (existingVariantAssetId) {
+    if (!manifest.assets[existingVariantAssetId]) {
+      throw new Error(
+        `Target "${input.targetId}" maps "${input.assetId}" to unknown variant asset "${existingVariantAssetId}".`
+      );
+    }
+
+    return {
+      manifest,
+      assetId: existingVariantAssetId
+    };
+  }
+
+  const variantAssetId = uniqueAssetId(
+    manifest,
+    `${input.assetId}.${slugifyTargetId(input.targetId)}`
+  );
+  manifest.assets[variantAssetId] = {
+    ...sourceAsset,
+    id: variantAssetId,
+    versions: { ...sourceAsset.versions },
+    linkedAnimationAssets: sourceAsset.linkedAnimationAssets
+      ? { ...sourceAsset.linkedAnimationAssets }
+      : undefined,
+    settings: sourceAsset.settings ? { ...sourceAsset.settings } : undefined,
+    audioSettings: sourceAsset.audioSettings ? { ...sourceAsset.audioSettings } : undefined,
+    audioPlayback: sourceAsset.audioPlayback ? { ...sourceAsset.audioPlayback } : undefined,
+    voiceSettings: sourceAsset.voiceSettings ? { ...sourceAsset.voiceSettings } : undefined,
+    tags: sourceAsset.tags ? [...sourceAsset.tags] : undefined
+  };
+  manifest.assetPaths = {
+    ...manifest.assetPaths,
+    [variantAssetId]: manifest.assetPaths?.[input.assetId] ?? inferAssetFolder(sourceAsset)
+  };
+  manifest.targets = {
+    ...manifest.targets,
+    [input.targetId]: {
+      ...target,
+      variants: {
+        ...target.variants,
+        [input.assetId]: variantAssetId
+      }
+    }
+  };
+
+  await writeManifest(options.manifestPath, manifest);
+
+  if (options.manifestModulePath) {
+    await writeManifestModule(options.manifestModulePath, manifest);
+  }
+
+  return {
+    manifest,
+    assetId: variantAssetId
+  };
+}
+
 export async function writeManifestModule(
   modulePath: string,
   manifest: AiAssetManifest
@@ -257,6 +342,26 @@ export async function writeManifestModule(
 
 function sanitizeFilePart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, "-");
+}
+
+function slugifyTargetId(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+function uniqueAssetId(manifest: AiAssetManifest, baseAssetId: string): string {
+  let candidate = baseAssetId;
+  let suffix = 2;
+
+  while (manifest.assets[candidate]) {
+    candidate = `${baseAssetId}-${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
 }
 
 async function deleteVersionFile(

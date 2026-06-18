@@ -16,6 +16,7 @@ import type { AiAudioProvider } from "./audio-provider.js";
 import {
   type AssetStoreOptions,
   deleteAssetVersion,
+  ensureTargetVariant,
   readManifest,
   saveGeneratedOption,
   saveStyleGuide
@@ -285,6 +286,20 @@ async function routeRequest(
     });
 
     sendJson(response, 200, { manifest });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/__ai-assets/target-variant") {
+    const body = await readJson<{
+      targetId: string;
+      assetId: string;
+    }>(request);
+    const result = await ensureTargetVariant(options, {
+      targetId: body.targetId,
+      assetId: body.assetId
+    });
+
+    sendJson(response, 200, result);
     return;
   }
 
