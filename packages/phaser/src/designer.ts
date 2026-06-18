@@ -20,6 +20,12 @@ import {
   ensureMissingAiAssetFirstDrafts,
   type EnsureMissingAiAssetFirstDraftsProgress
 } from "./first-drafts.js";
+import {
+  createLocalDerivedOption,
+  openDeriveDialog,
+  referenceImageForCandidate,
+  type DeriveCandidate
+} from "./derive-dialog.js";
 
 type AiAssetTextureFrameConfig = {
   frameWidth: number;
@@ -260,6 +266,7 @@ export function installAiAssetDesigner(
     setStatus(elements, "", "idle");
     elements.promoteButton.disabled = true;
     elements.versionsButton.disabled = Object.keys(asset.versions).length <= 1;
+    elements.deriveButton.hidden = isAudio || deriveCandidatesForAsset(assetId).length === 0;
     selectedOption = undefined;
     editedCurrentOption = undefined;
     previewedVersionName = undefined;
@@ -307,6 +314,43 @@ export function installAiAssetDesigner(
     }
 
     return targetAssetId;
+  };
+
+  const deriveCandidatesForAsset = (targetAssetId: string): DeriveCandidate[] => {
+    const logicalAssetId = logicalAssetIdForTargetAsset(targetAssetId) ?? targetAssetId;
+    const candidates: DeriveCandidate[] = [];
+    const addCandidate = (targetId: string | undefined, targetLabel: string, assetId: string) => {
+      if (assetId === targetAssetId || candidates.some((candidate) => candidate.assetId === assetId)) {
+        return;
+      }
+
+      const asset = manifest.assets[assetId];
+      const activeVersion = asset?.versions[asset.activeVersion];
+
+      if (!asset || isAudioAsset(asset) || asset.kind === "collection" || !activeVersion?.file) {
+        return;
+      }
+
+      candidates.push({
+        targetId,
+        targetLabel,
+        assetId,
+        asset,
+        src: activeVersion.file
+      });
+    };
+
+    addCandidate(undefined, "Default", logicalAssetId);
+
+    for (const target of Object.values(manifest.targets ?? {})) {
+      addCandidate(
+        target.id,
+        target.label ?? readableAssetName(target.id),
+        target.variants[logicalAssetId] ?? logicalAssetId
+      );
+    }
+
+    return candidates;
   };
 
   const renderAssetBrowser = () => {
@@ -581,6 +625,139 @@ export function installAiAssetDesigner(
     } catch (error) {
       setStatus(elements, `Upload failed. ${errorMessage(error)}`, "error");
     }
+  });
+
+  elements.deriveButton.addEventListener("click", async () => {
+    const asset = manifest.assets[selectedTargetAssetId];
+    const generationFormat = effectiveGenerationFormat(
+      manifest,
+      formatDrafts,
+      selectedAssetId,
+      selectedTargetAssetId
+    );
+
+    if (isAudioAsset(asset)) return;
+
+    await openDeriveDialog({
+      root: elements.root,
+      asset,
+      assetId: selectedTargetAssetId,
+      candidates: deriveCandidatesForAsset(selectedTargetAssetId),
+      prompt: elements.promptInput.value,
+      format: generationFormat,
+      onConfirm: async (deriveRequest) => {
+        elements.options.innerHTML = "";
+        elements.promoteButton.disabled = true;
+        selectedOption = undefined;
+        editedCurrentOption = undefined;
+        previewedVersionName = undefined;
+
+        if (deriveRequest.strategy === "scale" ||
+          deriveRequest.strategy === "tile" ||
+          deriveRequest.strategy === "crop") {
+          setStatus(elements, `Deriving from ${readableAssetName(deriveRequest.candidate.assetId)}...`, "busy");
+          const option = await createLocalDerivedOption({
+            strategy: deriveRequest.strategy,
+            source: deriveRequest.candidate,
+            targetAsset: asset,
+            prompt: elements.promptInput.value,
+            dimensions: deriveRequest.dimensions,
+            frameCount: deriveRequest.frameCount,
+            scaleMode: deriveRequest.scaleMode,
+            cropX: deriveRequest.cropX,
+            cropY: deriveRequest.cropY,
+            mirrorX: deriveRequest.mirrorX,
+            mirrorY: deriveRequest.mirrorY
+          });
+
+          renderOptions({
+            elements,
+            generated: [option],
+            scene: options.scene,
+            manifest,
+            assetId: selectedTargetAssetId,
+            designerOptions: options,
+            onPreview: options.onPreview,
+            onSelected(selected) {
+              selectedOption = selected;
+              previewedVersionName = undefined;
+              elements.promoteButton.disabled = false;
+            }
+          });
+          selectedOption = option;
+          elements.promoteButton.disabled = false;
+          previewOption({
+            scene: options.scene,
+            manifest,
+            assetId: selectedTargetAssetId,
+            option,
+            onPreview: options.onPreview
+          });
+          setStatus(elements, "Derived one local option. Promote to save it to code.", "success");
+          return;
+        }
+
+        const controller = new AbortController();
+        const currentGenerationId = generationId + 1;
+        const streamedOptions: GeneratedDebugOption[] = [];
+        const reference = await referenceImageForCandidate(deriveRequest.candidate);
+        const prompt = deriveRequest.strategy === "extend"
+          ? `${elements.promptInput.value}\n\nExtend the referenced source target into the requested canvas. Preserve the original asset identity and visual style while filling the new area naturally.`
+          : elements.promptInput.value;
+
+        generationId = currentGenerationId;
+        activeGeneration = { controller, id: currentGenerationId };
+        elements.regenerateButton.textContent = "Cancel";
+        lockGenerationStatus();
+        setStatus(elements, `Deriving options from ${readableAssetName(deriveRequest.candidate.assetId)}...`, "busy");
+
+        try {
+          await client.generateStream({
+            assetId: selectedTargetAssetId,
+            prompt,
+            count: options.optionCount ?? 3,
+            references: [reference],
+            format: generationFormat,
+            dimensions: deriveRequest.dimensions,
+            frameCount: deriveRequest.frameCount,
+            styleGuide: await styleGuideRequest(styleGuideDraft)
+          }, (option) => {
+            if (activeGeneration?.id !== currentGenerationId) return;
+
+            streamedOptions.push(option);
+            renderOptions({
+              elements,
+              generated: [...streamedOptions].sort((left, right) => left.index - right.index),
+              scene: options.scene,
+              manifest,
+              assetId: selectedTargetAssetId,
+              designerOptions: options,
+              onPreview: options.onPreview,
+              onSelected(selected) {
+                selectedOption = selected;
+                previewedVersionName = undefined;
+                elements.promoteButton.disabled = false;
+              }
+            });
+          }, {
+            signal: controller.signal
+          });
+
+          finishGeneration(currentGenerationId);
+          setStatus(
+            elements,
+            streamedOptions.length > 0 ? "Pick a derived option to preview it." : "Derive finished with no options.",
+            streamedOptions.length > 0 ? "info" : "error"
+          );
+        } catch (error) {
+          if (!isAbortError(error)) {
+            setStatus(elements, `Derive failed. ${errorMessage(error)}`, "error");
+          }
+        } finally {
+          finishGeneration(currentGenerationId);
+        }
+      }
+    });
   });
 
   elements.promoteButton.addEventListener("click", async () => {

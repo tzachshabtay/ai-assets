@@ -53,6 +53,7 @@ export type DesignerElements = {
   currentTouchUpButton: HTMLButtonElement;
   currentPreview: HTMLDivElement;
   uploadButton: HTMLButtonElement;
+  deriveButton: HTMLButtonElement;
   regenerateButton: HTMLButtonElement;
   versionsButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
@@ -232,6 +233,10 @@ export function createDesignerElements(
   uploadButton.type = "button";
   uploadButton.textContent = "Upload...";
 
+  const deriveButton = document.createElement("button");
+  deriveButton.type = "button";
+  deriveButton.textContent = "Derive...";
+
   const versionsButton = document.createElement("button");
   versionsButton.type = "button";
   versionsButton.textContent = "Versions...";
@@ -247,7 +252,7 @@ export function createDesignerElements(
 
   const actions = document.createElement("div");
   actions.className = "ai-game-assets-designer__actions";
-  actions.append(regenerateButton, uploadButton, versionsButton, promoteButton, restartButton);
+  actions.append(regenerateButton, uploadButton, deriveButton, versionsButton, promoteButton, restartButton);
 
   const versionLabel = document.createElement("div");
   versionLabel.className = "ai-game-assets-designer__meta";
@@ -315,6 +320,7 @@ export function createDesignerElements(
     currentTouchUpButton,
     currentPreview,
     uploadButton,
+    deriveButton,
     regenerateButton,
     versionsButton,
     promoteButton,
@@ -4060,6 +4066,43 @@ export function ensureDesignerStyles(): void {
   color: #94a3b8;
   font-size: 12px;
   line-height: 1.35;
+}
+.ai-game-assets-designer__derive-hint {
+  margin: 8px 0;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.ai-game-assets-designer__derive-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0;
+}
+.ai-game-assets-designer__derive-preview {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  max-height: 280px;
+  overflow: hidden;
+  border: 1px solid #384251;
+  border-radius: 7px;
+  background: #0f1218;
+}
+.ai-game-assets-designer__derive-preview img {
+  max-width: 100%;
+  max-height: 260px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.ai-game-assets-designer__derive-crop {
+  position: absolute;
+  border: 2px solid #6ed3ff;
+  box-shadow:
+    0 0 0 999px rgba(6, 8, 12, 0.42),
+    0 0 14px rgba(110, 211, 255, 0.55);
+  pointer-events: none;
 }
 .ai-game-assets-designer__modal-actions {
   display: flex;

@@ -10,6 +10,10 @@ export type GenerateDebugOptionsRequest = {
   assetId: string;
   prompt?: string;
   count?: number;
+  references?: Array<{
+    name: string;
+    dataUrl: string;
+  }>;
   dimensions?: {
     width: number;
     height: number;

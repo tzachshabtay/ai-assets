@@ -303,6 +303,10 @@ type GenerateRequestBody = {
   assetId: string;
   prompt?: string;
   count?: number;
+  references?: Array<{
+    name: string;
+    dataUrl: string;
+  }>;
   dimensions?: AiAssetDimensions;
   frameCount?: number;
   format?: AiAssetFormat;
@@ -318,6 +322,10 @@ async function generateImage(
   body: {
     prompt?: string;
     count?: number;
+    references?: Array<{
+      name: string;
+      dataUrl: string;
+    }>;
     format?: AiAssetFormat;
     styleGuide?: DebugStyleGuide;
   },
@@ -334,7 +342,10 @@ async function generateImage(
     prompt: body.prompt,
     count: body.count,
     settings: body.format ? { format: body.format } : undefined,
-    references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds),
+    references: [
+      ...(await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds) ?? []),
+      ...referencesFromDataUrls(body.references)
+    ],
     stylePrompt: body.styleGuide
       ? body.styleGuide.prompt?.trim() || undefined
       : manifest.styleGuide?.prompt,
