@@ -87,6 +87,9 @@ export function startGame(
     private starSprites: StarSprite[] = [];
     private starAnimationKeys: string[] = [];
     private readonly pixelCollision: SpritePixelCollision;
+    private touchPointerId?: number;
+    private touchHeroOffsetX = 0;
+    private touchHeroMoving = false;
 
     constructor() {
       super("space-invaders");
@@ -110,6 +113,7 @@ export function startGame(
       this.cursors = this.input.keyboard?.createCursorKeys();
       this.fireKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.escapeKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+      this.setupTouchControls();
       this.sound.volume = this.masterVolume;
       if ((this.sound as Phaser.Sound.BaseSoundManager).locked) {
         this.sound.once(Phaser.Sound.Events.UNLOCKED, () => {
@@ -129,7 +133,7 @@ export function startGame(
         color: "#b9c1cf",
         fontSize: "15px"
       });
-      this.statusText = this.add.text(210, 42, "Move: arrows  Fire: space", {
+      this.statusText = this.add.text(210, 42, "Move: arrows/drag  Shoot: space/hold", {
         color: "#b9c1cf",
         fontSize: "15px"
       });
@@ -243,29 +247,93 @@ export function startGame(
     }
 
     private updateHero(delta: number) {
-      if (!this.hero || !this.cursors) return;
+      if (!this.hero) return;
       if (this.heroDestroyed) return;
-      if (this.input.keyboard && !this.input.keyboard.enabled) return;
 
       const speed = 280 * (delta / 1000);
-      const isMovingLeft = this.cursors.left.isDown;
-      const isMovingRight = this.cursors.right.isDown;
+      const keyboardEnabled = this.input.keyboard?.enabled ?? true;
+      const isMovingLeft = Boolean(keyboardEnabled && this.cursors?.left.isDown);
+      const isMovingRight = Boolean(keyboardEnabled && this.cursors?.right.isDown);
+      const isTouchShooting = this.touchPointerId !== undefined;
       const isMoving = isMovingLeft || isMovingRight;
 
       if (isMovingLeft) this.hero.x -= speed;
       if (isMovingRight) this.hero.x += speed;
       this.hero.x = Phaser.Math.Clamp(this.hero.x, 32, 608);
 
-      if (this.fireKey?.isDown && this.time.now - this.lastShotAt > 220) {
-        this.lastShotAt = this.time.now;
-        this.playHeroActionAnimation("hero.ship.shooting");
-        this.scheduleHeroLaser("hero.ship.shooting");
-      }
+      if (isTouchShooting || (keyboardEnabled && this.fireKey?.isDown)) this.tryHeroShoot();
 
       if (this.time.now >= this.heroLockedUntil) {
         this.hero.setFlipX(isMovingRight && !isMovingLeft);
-        this.playHeroAnimation(isMoving ? "hero.ship.moving-left" : "hero.ship.idle");
+        this.playHeroAnimation(isMoving || this.touchHeroMoving ? "hero.ship.moving-left" : "hero.ship.idle");
       }
+
+      this.touchHeroMoving = false;
+    }
+
+    private setupTouchControls(): void {
+      this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+        if (!this.canStartHeroTouch(pointer)) return;
+
+        this.touchPointerId = pointer.id;
+        this.touchHeroOffsetX = this.hero!.x - pointer.worldX;
+        this.touchHeroMoving = false;
+        this.moveHeroWithPointer(pointer);
+        this.tryHeroShoot();
+      });
+
+      this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+        if (pointer.id !== this.touchPointerId) return;
+
+        this.moveHeroWithPointer(pointer);
+      });
+
+      this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+        if (pointer.id === this.touchPointerId) this.clearHeroTouch();
+      });
+
+      this.input.on("pointerupoutside", (pointer: Phaser.Input.Pointer) => {
+        if (pointer.id === this.touchPointerId) this.clearHeroTouch();
+      });
+
+      this.input.on("gameout", () => {
+        this.clearHeroTouch();
+      });
+    }
+
+    private canStartHeroTouch(pointer: Phaser.Input.Pointer): boolean {
+      if (!this.gameActive || this.isPaused || this.heroDestroyed || !this.hero) return false;
+
+      const bounds = this.hero.getBounds();
+      const touchPadding = 28;
+      bounds.x -= touchPadding;
+      bounds.y -= touchPadding;
+      bounds.width += touchPadding * 2;
+      bounds.height += touchPadding * 2;
+
+      return bounds.contains(pointer.worldX, pointer.worldY);
+    }
+
+    private moveHeroWithPointer(pointer: Phaser.Input.Pointer): void {
+      if (!this.hero) return;
+
+      const previousX = this.hero.x;
+      this.hero.x = Phaser.Math.Clamp(pointer.worldX + this.touchHeroOffsetX, 32, 608);
+      this.touchHeroMoving = Math.abs(this.hero.x - previousX) > 0.25;
+    }
+
+    private clearHeroTouch(): void {
+      this.touchPointerId = undefined;
+      this.touchHeroOffsetX = 0;
+      this.touchHeroMoving = false;
+    }
+
+    private tryHeroShoot(): void {
+      if (this.time.now - this.lastShotAt <= 220) return;
+
+      this.lastShotAt = this.time.now;
+      this.playHeroActionAnimation("hero.ship.shooting");
+      this.scheduleHeroLaser("hero.ship.shooting");
     }
 
     private updateBullets(delta: number) {
@@ -400,9 +468,10 @@ export function startGame(
       this.lastShotAt = 0;
       this.lastInvaderShotAt = this.time.now;
       this.heroLockedUntil = 0;
+      this.clearHeroTouch();
       this.animations?.resetHeroAnimation();
       this.scoreText?.setText("Score 0");
-      this.statusText?.setText("Move: arrows  Fire: space");
+      this.statusText?.setText("Move: arrows/drag  Shoot: space/hold");
 
       this.hero = this.add.sprite(320, 570, this.aiRuntime.key("hero.ship.idle"));
       this.playHeroAnimation("hero.ship.idle", true);
@@ -456,6 +525,7 @@ export function startGame(
     private hideGameMenu(): void {
       this.isPaused = false;
       this.menu?.hide();
+      this.clearHeroTouch();
     }
 
     private showPauseMenu(): void {
@@ -469,7 +539,7 @@ export function startGame(
 
       this.hideGameMenu();
       this.gameActive = true;
-      this.statusText?.setText("Move: arrows  Fire: space");
+      this.statusText?.setText("Move: arrows/drag  Shoot: space/hold");
     }
 
     private setMasterVolume(volume: number): void {
@@ -777,6 +847,10 @@ export function startGame(
     parent: "game",
     width: 640,
     height: 640,
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH
+    },
     backgroundColor: "#10131a",
     scene: SpaceInvadersScene
   });
