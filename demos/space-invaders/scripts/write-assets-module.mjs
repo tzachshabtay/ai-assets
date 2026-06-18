@@ -17,7 +17,7 @@ await writeFile(
     "",
     "export const assets = defineAiAssets(",
     `${JSON.stringify(manifest.assets, null, 2)},`,
-    `${JSON.stringify({ styleGuide: manifest.styleGuide }, null, 2)}`,
+    `${JSON.stringify({ styleGuide: manifest.styleGuide, targets: manifest.targets }, null, 2)}`,
     ");",
     ""
   ].join("\n")
@@ -26,6 +26,7 @@ await writeFile(
 async function readManifestDirectory(rootDir) {
   const assets = {};
   let styleGuide;
+  let targets;
 
   for (const filePath of await jsonFiles(rootDir)) {
     const relativePath = path.relative(rootDir, filePath);
@@ -36,10 +37,15 @@ async function readManifestDirectory(rootDir) {
       continue;
     }
 
+    if (relativePath === "targets.json") {
+      targets = value;
+      continue;
+    }
+
     assets[value.id] = value;
   }
 
-  return { assets, styleGuide };
+  return { assets, styleGuide, targets };
 }
 
 function normalizeAssetUrls(manifest) {

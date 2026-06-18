@@ -3,6 +3,7 @@ import type {
   AiAssetManifest,
   AiAssetSelection,
   AiAssetStyleGuide,
+  AiAssetTarget,
   AiAssetVersion,
   ResolvedAiAsset
 } from "./types.js";
@@ -14,12 +15,16 @@ export function defineAiAsset(asset: AiAssetDefinition): AiAssetDefinition {
 
 export function defineAiAssets(
   assets: Record<string, AiAssetDefinition>,
-  options: { styleGuide?: AiAssetStyleGuide } = {}
+  options: {
+    styleGuide?: AiAssetStyleGuide;
+    targets?: Record<string, AiAssetTarget>;
+  } = {}
 ): AiAssetManifest {
   const manifest: AiAssetManifest = {
     schemaVersion: 1,
     assets,
-    styleGuide: options.styleGuide
+    styleGuide: options.styleGuide,
+    targets: options.targets
   };
 
   assertManifest(manifest);
@@ -46,6 +51,10 @@ export function assertManifest(manifest: AiAssetManifest): void {
   for (const [index, image] of (manifest.styleGuide?.images ?? []).entries()) {
     assertNonEmpty(image.name, `styleGuide.images.${index}.name`);
     assertNonEmpty(image.file, `styleGuide.images.${index}.file`);
+  }
+
+  for (const [targetId, target] of Object.entries(manifest.targets ?? {})) {
+    assertTarget(manifest, targetId, target);
   }
 }
 
@@ -119,13 +128,15 @@ export function resolveAiAsset(
   manifest: AiAssetManifest,
   selection: AiAssetSelection | string
 ): ResolvedAiAsset {
-  const assetId = typeof selection === "string" ? selection : selection.assetId;
+  const requestedAssetId = typeof selection === "string" ? selection : selection.assetId;
+  const targetId = typeof selection === "string" ? undefined : selection.targetId;
+  const assetId = resolveTargetAssetId(manifest, requestedAssetId, targetId);
   const versionName =
     typeof selection === "string" ? undefined : selection.versionName;
   const asset = manifest.assets[assetId];
 
   if (!asset) {
-    throw new Error(`Unknown AI asset "${assetId}".`);
+    throw new Error(`Unknown AI asset "${assetId}" resolved from "${requestedAssetId}".`);
   }
 
   const resolvedVersionName = versionName ?? asset.activeVersion;
@@ -142,6 +153,22 @@ export function resolveAiAsset(
     versionName: resolvedVersionName,
     version
   };
+}
+
+export function resolveTargetAssetId(
+  manifest: AiAssetManifest,
+  assetId: string,
+  targetId?: string
+): string {
+  if (!targetId) return assetId;
+
+  const target = manifest.targets?.[targetId];
+
+  if (!target) {
+    throw new Error(`Unknown AI asset target "${targetId}".`);
+  }
+
+  return target.variants[assetId] ?? assetId;
 }
 
 export function getActiveVersion(asset: AiAssetDefinition): AiAssetVersion {
@@ -180,6 +207,34 @@ function assertVersion(
   assertNonEmpty(version.file, `${assetId}.versions.${versionName}.file`);
   assertNonEmpty(version.prompt, `${assetId}.versions.${versionName}.prompt`);
   assertNonEmpty(version.createdAt, `${assetId}.versions.${versionName}.createdAt`);
+}
+
+function assertTarget(
+  manifest: AiAssetManifest,
+  targetId: string,
+  target: AiAssetTarget
+): void {
+  assertNonEmpty(targetId, "targets key");
+  assertNonEmpty(target.id, `${targetId}.id`);
+
+  if (target.id !== targetId) {
+    throw new Error(`Target key "${targetId}" does not match target id "${target.id}".`);
+  }
+
+  for (const [assetId, variantAssetId] of Object.entries(target.variants)) {
+    assertNonEmpty(assetId, `${targetId}.variants key`);
+    assertNonEmpty(variantAssetId, `${targetId}.variants.${assetId}`);
+
+    if (!manifest.assets[assetId]) {
+      throw new Error(`Target "${targetId}" references unknown asset "${assetId}".`);
+    }
+
+    if (!manifest.assets[variantAssetId]) {
+      throw new Error(
+        `Target "${targetId}" maps "${assetId}" to unknown variant asset "${variantAssetId}".`
+      );
+    }
+  }
 }
 
 function assertNonEmpty(value: string | undefined, label: string): void {

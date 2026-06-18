@@ -1,0 +1,9 @@
+{
+  "mobilePortrait": {
+    "id": "mobilePortrait",
+    "label": "Mobile portrait",
+    "variants": {
+      "background.space": "background.space.mobile-portrait"
+    }
+  }
+}

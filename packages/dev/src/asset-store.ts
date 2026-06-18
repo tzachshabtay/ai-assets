@@ -5,6 +5,7 @@ import {
   type AiAssetDefinition,
   type AiAssetManifest,
   type AiAssetStyleGuide,
+  type AiAssetTarget,
   type AiAssetVersion,
   type GeneratedAssetOption
 } from "./internal.js";
@@ -227,7 +228,17 @@ export async function writeManifestModule(
 ): Promise<void> {
   await mkdir(path.dirname(modulePath), { recursive: true });
   const styleGuideArgument = manifest.styleGuide
-    ? [`, ${JSON.stringify({ styleGuide: manifest.styleGuide }, null, 2)}`]
+    ? { styleGuide: manifest.styleGuide }
+    : {};
+  const targetsArgument = manifest.targets
+    ? { targets: manifest.targets }
+    : {};
+  const optionsArgument = {
+    ...styleGuideArgument,
+    ...targetsArgument
+  };
+  const optionsLines = Object.keys(optionsArgument).length
+    ? [`, ${JSON.stringify(optionsArgument, null, 2)}`]
     : [];
 
   await writeFile(
@@ -237,7 +248,7 @@ export async function writeManifestModule(
       "",
       "export const assets = defineAiAssets(",
       `${JSON.stringify(manifest.assets, null, 2)}`,
-      ...styleGuideArgument,
+      ...optionsLines,
       ");",
       ""
     ].join("\n")
@@ -275,12 +286,18 @@ async function readManifestDirectory(manifestDir: string): Promise<AiAssetManife
   const assets: Record<string, AiAssetDefinition> = {};
   const assetPaths: Record<string, string[]> = {};
   let styleGuide: AiAssetStyleGuide | undefined;
+  let targets: Record<string, AiAssetTarget> | undefined;
 
   for (const filePath of await jsonFiles(manifestDir)) {
     const relativePath = path.relative(manifestDir, filePath);
 
     if (relativePath === "style-guide.json") {
       styleGuide = JSON.parse(await readFile(filePath, "utf8")) as AiAssetStyleGuide;
+      continue;
+    }
+
+    if (relativePath === "targets.json") {
+      targets = JSON.parse(await readFile(filePath, "utf8")) as Record<string, AiAssetTarget>;
       continue;
     }
 
@@ -295,6 +312,7 @@ async function readManifestDirectory(manifestDir: string): Promise<AiAssetManife
     schemaVersion: 1,
     assets,
     styleGuide,
+    targets,
     assetPaths
   };
   assertManifest(manifest);
@@ -309,6 +327,10 @@ async function writeManifestDirectory(
 
   if (manifest.styleGuide) {
     await writeJsonFile(path.join(manifestDir, "style-guide.json"), manifest.styleGuide);
+  }
+
+  if (manifest.targets) {
+    await writeJsonFile(path.join(manifestDir, "targets.json"), manifest.targets);
   }
 
   for (const asset of Object.values(manifest.assets)) {

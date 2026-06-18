@@ -48,6 +48,7 @@ export function startGame(
   assetManifest: AiAssetManifest,
   options: {
     assetBaseUrl?: string;
+    targetId?: string;
     onManifestUpdated?: (manifest: AiAssetManifest) => void;
     installDesigner?: SpaceInvadersDesignerInstaller;
   } = {}
@@ -97,11 +98,17 @@ export function startGame(
     }
 
     preload() {
-      loadAiAssets(this, assetManifest, { baseUrl: options.assetBaseUrl });
+      loadAiAssets(this, assetManifest, {
+        baseUrl: options.assetBaseUrl,
+        targetId: options.targetId
+      });
     }
 
     create() {
-      this.aiRuntime = new AiAssetRuntime(this, assetManifest, { baseUrl: options.assetBaseUrl });
+      this.aiRuntime = new AiAssetRuntime(this, assetManifest, {
+        baseUrl: options.assetBaseUrl,
+        targetId: options.targetId
+      });
       this.animations = new DemoAnimationController(this, this.aiRuntime, assetManifest);
       this.audio = new DemoAudioController(
         this,
@@ -151,7 +158,7 @@ export function startGame(
           return;
         }
 
-        if (assetId === "background.space" && this.background) {
+        if (this.isBackgroundAsset(assetId) && this.background) {
           this.background.setTexture(textureKey);
           this.background.setDisplaySize(640, 640);
         }
@@ -269,6 +276,11 @@ export function startGame(
       }
 
       this.touchHeroMoving = false;
+    }
+
+    private isBackgroundAsset(assetId: string): boolean {
+      return assetId === "background.space" ||
+        assetId === assetManifest.targets?.[options.targetId ?? ""]?.variants["background.space"];
     }
 
     private setupTouchControls(): void {

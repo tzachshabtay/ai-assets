@@ -1,5 +1,6 @@
 import {
   resolveAiAsset,
+  resolveTargetAssetId,
   type AiAssetManifest,
   type AiAssetSelection,
   type ResolvedAiAsset
@@ -12,6 +13,7 @@ export type LoadAiAssetOptions = {
   key?: string;
   baseUrl?: string;
   versionName?: string;
+  targetId?: string;
 };
 
 export function loadAiAsset(
@@ -20,7 +22,12 @@ export function loadAiAsset(
   selection: AiAssetSelection | string,
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset {
-  const assetId = typeof selection === "string" ? selection : selection.assetId;
+  const selectionWithTarget = withTarget(selection, options.targetId);
+  const assetId = resolveTargetAssetId(
+    manifest,
+    selectionWithTarget.assetId,
+    selectionWithTarget.targetId
+  );
   if (
     manifest.assets[assetId]?.kind === "collection" ||
     manifest.assets[assetId]?.kind === "sound" ||
@@ -71,9 +78,7 @@ export function loadAiAsset(
 
   const resolved = resolveAiAsset(
     manifest,
-    typeof selection === "string"
-      ? { assetId: selection, versionName: options.versionName }
-      : { ...selection, versionName: options.versionName ?? selection.versionName }
+    { ...selectionWithTarget, versionName: options.versionName ?? selectionWithTarget.versionName }
   );
   const key = options.key ?? aiTextureKey({
     assetId: resolved.asset.id,
@@ -114,7 +119,12 @@ export function loadAiAudioAsset(
   selection: AiAssetSelection | string,
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset | undefined {
-  const assetId = typeof selection === "string" ? selection : selection.assetId;
+  const selectionWithTarget = withTarget(selection, options.targetId);
+  const assetId = resolveTargetAssetId(
+    manifest,
+    selectionWithTarget.assetId,
+    selectionWithTarget.targetId
+  );
   const asset = manifest.assets[assetId];
 
   if (!asset || !isAudioLikeAsset(asset.kind)) {
@@ -131,9 +141,7 @@ export function loadAiAudioAsset(
 
   const resolved = resolveAiAsset(
     manifest,
-    typeof selection === "string"
-      ? { assetId: selection, versionName: options.versionName }
-      : { ...selection, versionName: options.versionName ?? selection.versionName }
+    { ...selectionWithTarget, versionName: options.versionName ?? selectionWithTarget.versionName }
   );
   const key = options.key ?? aiTextureKey({
     assetId: resolved.asset.id,
@@ -151,7 +159,12 @@ export function loadAiAudioAssets(
   manifest: AiAssetManifest,
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset[] {
+  const targetVariantAssetIds = new Set(
+    Object.values(manifest.targets ?? {}).flatMap((target) => Object.values(target.variants))
+  );
+
   return Object.values(manifest.assets)
+    .filter((asset) => !targetVariantAssetIds.has(asset.id))
     .filter((asset) => asset.kind === "sound" || asset.kind === "music")
     .map((asset) => loadAiAudioAsset(scene, manifest, asset.id, options))
     .filter((asset): asset is ResolvedAiAsset => Boolean(asset));
@@ -166,9 +179,28 @@ export function loadAiAssets(
   manifest: AiAssetManifest,
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset[] {
+  const targetVariantAssetIds = new Set(
+    Object.values(manifest.targets ?? {}).flatMap((target) => Object.values(target.variants))
+  );
+
   return Object.values(manifest.assets)
+    .filter((asset) => !targetVariantAssetIds.has(asset.id))
     .filter((asset) => asset.kind !== "collection" && !isAudioLikeAsset(asset.kind))
     .map((asset) => loadAiAsset(scene, manifest, asset.id, options));
+}
+
+function withTarget(
+  selection: AiAssetSelection | string,
+  targetId?: string
+): AiAssetSelection {
+  if (typeof selection === "string") {
+    return { assetId: selection, targetId };
+  }
+
+  return {
+    ...selection,
+    targetId: selection.targetId ?? targetId
+  };
 }
 
 function isAudioLikeAsset(kind: string): boolean {

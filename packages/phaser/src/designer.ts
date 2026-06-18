@@ -10,6 +10,7 @@ import type {
   AiAssetGenerationSettings,
   AiAssetManifest
 } from "@ai-game-assets/core";
+import { resolveTargetAssetId } from "@ai-game-assets/core";
 import {
   AiAssetDebugClient,
   type DebugStyleGuideDraft,
@@ -53,6 +54,7 @@ export type AiAssetDesignerOptions = {
   assetIds?: string[];
   title?: string;
   optionCount?: number;
+  targetId?: string;
   mount?: HTMLElement;
   restartOnPromote?: boolean;
   previewDisplaySize?:
@@ -167,14 +169,14 @@ export function installAiAssetDesigner(
 
     if (asset.kind !== "collection") {
       const baseOption = document.createElement("option");
-      baseOption.value = assetId;
+      baseOption.value = resolveTargetAssetId(manifest, assetId, options.targetId);
       baseOption.textContent = isVoice ? "Base voice" : "Base image";
       elements.animationSelect.append(baseOption);
     }
 
     for (const [key, linkedAnimation] of linkedAnimations) {
       const option = document.createElement("option");
-      option.value = linkedAnimation.assetId;
+      option.value = resolveTargetAssetId(manifest, linkedAnimation.assetId, options.targetId);
       option.textContent = linkedAnimation.label || readableAssetName(key);
       elements.animationSelect.append(option);
     }
@@ -182,8 +184,8 @@ export function installAiAssetDesigner(
     elements.animationField.hidden = linkedAnimations.length === 0;
     elements.animationField.firstElementChild!.textContent = isVoice ? "Line" : "Animation";
     selectedTargetAssetId = asset.kind === "collection" && linkedAnimations[0]
-      ? linkedAnimations[0][1].assetId
-      : assetId;
+      ? resolveTargetAssetId(manifest, linkedAnimations[0][1].assetId, options.targetId)
+      : resolveTargetAssetId(manifest, assetId, options.targetId);
     elements.animationSelect.value = selectedTargetAssetId;
   };
 

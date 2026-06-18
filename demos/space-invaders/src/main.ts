@@ -7,12 +7,14 @@ const assetApi =
   new URLSearchParams(window.location.search).get("assetApi") ??
   "http://127.0.0.1:3977";
 const debugClient = new AiAssetDebugClient(assetApi);
+const targetId = phonePortraitTargetId();
 
 let manifest: AiAssetManifest;
 
 async function boot(): Promise<void> {
   manifest = await debugClient.getManifest();
   startGame(manifest, {
+    targetId,
     onManifestUpdated: (updatedManifest: AiAssetManifest) => {
       manifest = updatedManifest;
     },
@@ -21,10 +23,17 @@ async function boot(): Promise<void> {
         ...designerOptions,
         client: debugClient,
         assetIds: designerAssetIds,
+        targetId,
         previewDisplaySize: designerPreviewDisplaySize
       });
     }
   });
+}
+
+function phonePortraitTargetId(): string | undefined {
+  return window.innerWidth <= 720 && window.innerHeight > window.innerWidth
+    ? "mobilePortrait"
+    : undefined;
 }
 
 function errorMessage(error: unknown): string {

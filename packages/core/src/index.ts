@@ -18,6 +18,7 @@ export type {
   AiVoiceGenerationSettings,
   AiAssetStyleGuide,
   AiAssetStyleGuideImage,
+  AiAssetTarget,
   AiAssetVersion,
   ResolvedAiAsset
 } from "./types.js";
@@ -29,6 +30,7 @@ export {
   defineAiAssets,
   getActiveVersion,
   resolveAiAsset,
+  resolveTargetAssetId,
   withActiveVersion
 } from "./manifest.js";
 

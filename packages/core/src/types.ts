@@ -132,6 +132,12 @@ export type AiAssetVersion = {
   notes?: string;
 };
 
+export type AiAssetTarget = {
+  id: string;
+  label?: string;
+  variants: Record<string, string>;
+};
+
 export type AiAssetDefinition = {
   id: string;
   kind: AiAssetKind;
@@ -156,11 +162,13 @@ export type AiAssetManifest = {
   assets: Record<string, AiAssetDefinition>;
   styleGuide?: AiAssetStyleGuide;
   assetPaths?: Record<string, string[]>;
+  targets?: Record<string, AiAssetTarget>;
 };
 
 export type AiAssetSelection = {
   assetId: string;
   versionName?: string;
+  targetId?: string;
 };
 
 export type ResolvedAiAsset = {
