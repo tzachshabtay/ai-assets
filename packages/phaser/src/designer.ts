@@ -744,8 +744,8 @@ export function installAiAssetDesigner(
         generationId = currentGenerationId;
         activeGeneration = { controller, id: currentGenerationId };
         elements.regenerateButton.textContent = "Cancel";
+        setStatus(elements, "Generating options...", "busy");
         lockGenerationStatus();
-        setStatus(elements, `Deriving options from ${readableAssetName(deriveRequest.candidate.assetId)}...`, "busy");
 
         try {
           const reference = await referenceImageForCandidate(deriveRequest.candidate);
@@ -789,6 +789,7 @@ export function installAiAssetDesigner(
           );
         } catch (error) {
           if (!isAbortError(error)) {
+            finishGeneration(currentGenerationId);
             setStatus(elements, `Derive failed. ${errorMessage(error)}`, "error");
           }
         } finally {

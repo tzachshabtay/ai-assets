@@ -476,11 +476,13 @@ function drawTile(
       const height = Math.min(source.height, target.height - y);
       const flipX = mirrorX && Math.floor(x / source.width) % 2 === 1;
       const flipY = mirrorY && Math.floor(y / source.height) % 2 === 1;
+      const sourceX = source.x + (flipX ? source.width - width : 0);
+      const sourceY = source.y + (flipY ? source.height - height : 0);
 
       context.save();
       context.translate(target.x + x + (flipX ? width : 0), target.y + y + (flipY ? height : 0));
       context.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-      context.drawImage(image.source, source.x, source.y, width, height, 0, 0, width, height);
+      context.drawImage(image.source, sourceX, sourceY, width, height, 0, 0, width, height);
       context.restore();
     }
   }
