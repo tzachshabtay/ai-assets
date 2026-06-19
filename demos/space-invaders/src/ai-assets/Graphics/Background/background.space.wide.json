@@ -1,7 +1,7 @@
 {
   "id": "background.space.wide",
   "kind": "image",
-  "prompt": "Wide tablet and web background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near wide screen edges.",
+  "prompt": "Wide tablet and web background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near wide screen edges.\n\nExtend the referenced source target into the requested canvas. Preserve the original asset identity and visual style while filling the new area naturally.",
   "dimensions": {
     "width": 1024,
     "height": 768
@@ -12,7 +12,7 @@
     "quality": "low",
     "format": "png"
   },
-  "activeVersion": "default",
+  "activeVersion": "promoted-1781890691125",
   "versions": {
     "default": {
       "name": "default",
@@ -22,6 +22,27 @@
       "model": "starter-asset",
       "parentVersion": "background.space:promoted-1780545088449",
       "notes": "Starter wide variant using the current desktop background until a wide-specific version is generated."
+    },
+    "promoted-1781890691125": {
+      "name": "promoted-1781890691125",
+      "file": "/assets/background.space.wide.promoted-1781890691125.png",
+      "prompt": "Wide tablet and web background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near wide screen edges.\n\nExtend the referenced source target into the requested canvas. Preserve the original asset identity and visual style while filling the new area naturally.",
+      "createdAt": "2026-06-19T17:38:11.174Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "opaque",
+        "quality": "low",
+        "format": "png"
+      },
+      "audioSettings": {},
+      "audioPlayback": {},
+      "voiceSettings": {},
+      "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
     }
-  }
+  },
+  "audioSettings": {},
+  "audioPlayback": {},
+  "voiceSettings": {}
 }
