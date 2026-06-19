@@ -59,7 +59,6 @@
       "audioPlayback": {
         "volume": 1.5,
         "trimStartSeconds": 0,
-        "trimEndSeconds": 1.12,
         "playbackRate": 1
       },
       "voiceSettings": {
@@ -77,7 +76,6 @@
   "audioPlayback": {
     "volume": 1.5,
     "trimStartSeconds": 0,
-    "trimEndSeconds": 1.12,
     "playbackRate": 1
   },
   "settings": {}
