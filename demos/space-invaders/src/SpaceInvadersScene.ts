@@ -165,6 +165,7 @@ export function startGame(
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
         assetManifest.assets[assetId] = asset;
+        this.pixelCollision.invalidateTexture(textureKey);
 
         if (isRuntimeAudioAsset(asset)) {
           this.audio?.setPlaybackOverride(assetId, asset.audioPlayback);
@@ -939,6 +940,10 @@ export function startGame(
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH
+    },
+    fps: {
+      target: 60,
+      limit: 60
     },
     backgroundColor: "#10131a",
     scene: SpaceInvadersScene
