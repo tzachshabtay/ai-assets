@@ -737,7 +737,6 @@ export function installAiAssetDesigner(
         const controller = new AbortController();
         const currentGenerationId = generationId + 1;
         const streamedOptions: GeneratedDebugOption[] = [];
-        const reference = await referenceImageForCandidate(deriveRequest.candidate);
         const prompt = deriveRequest.strategy === "extend"
           ? `${elements.promptInput.value}\n\nExtend the referenced source target into the requested canvas. Preserve the original asset identity and visual style while filling the new area naturally.`
           : elements.promptInput.value;
@@ -749,6 +748,8 @@ export function installAiAssetDesigner(
         setStatus(elements, `Deriving options from ${readableAssetName(deriveRequest.candidate.assetId)}...`, "busy");
 
         try {
+          const reference = await referenceImageForCandidate(deriveRequest.candidate);
+
           await client.generateStream({
             assetId: derivationAssetId,
             prompt,

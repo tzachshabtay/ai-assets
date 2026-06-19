@@ -7,6 +7,7 @@ import type {
 import type { GeneratedDebugOption } from "./debug-client.js";
 import {
   imageSourceToDataUrl,
+  isSvgSource,
   loadImageElement,
   mimeTypeFromDataUrl,
   positiveIntegerInput,
@@ -21,6 +22,8 @@ export type DeriveCandidate = {
   assetId: string;
   asset: AiAssetDefinition;
   src: string;
+  dimensions?: AiAssetDimensions;
+  frameGrid?: AiAssetFrameGrid;
 };
 
 export type DeriveDialogResult = {
@@ -33,6 +36,12 @@ export type DeriveDialogResult = {
   cropY?: number;
   mirrorX?: boolean;
   mirrorY?: boolean;
+};
+
+type CanvasDrawable = {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
 };
 
 export async function openDeriveDialog(options: {
@@ -164,7 +173,7 @@ export async function openDeriveDialog(options: {
   const update = () => {
     const candidate = selectedCandidate();
     const strategy = strategySelect.value as DeriveStrategy;
-    const sourceDimensions = defaultFrameDimensions(candidate.asset);
+    const sourceDimensions = candidateFrameDimensions(candidate);
     const targetDimensions = dimensions();
     const canGrow = targetDimensions.width > sourceDimensions.width ||
       targetDimensions.height > sourceDimensions.height;
@@ -202,21 +211,24 @@ export async function openDeriveDialog(options: {
   cancelButton.addEventListener("click", () => dialog.remove());
   confirmButton.addEventListener("click", async () => {
     confirmButton.disabled = true;
+    const result: DeriveDialogResult = {
+      strategy: strategySelect.value as DeriveStrategy,
+      candidate: selectedCandidate(),
+      dimensions: dimensions(),
+      frameCount: options.asset.frameGrid
+        ? positiveIntegerInput(frameCountInput, defaultFrameCount(options.asset))
+        : undefined,
+      scaleMode: scaleModeSelect.value === "stretch" ? "stretch" : "fit",
+      cropX: nonNegativeIntegerInput(cropXInput),
+      cropY: nonNegativeIntegerInput(cropYInput),
+      mirrorX: mirrorXInput.checked,
+      mirrorY: mirrorYInput.checked
+    };
+
+    dialog.remove();
+
     try {
-      await options.onConfirm({
-        strategy: strategySelect.value as DeriveStrategy,
-        candidate: selectedCandidate(),
-        dimensions: dimensions(),
-        frameCount: options.asset.frameGrid
-          ? positiveIntegerInput(frameCountInput, defaultFrameCount(options.asset))
-          : undefined,
-        scaleMode: scaleModeSelect.value === "stretch" ? "stretch" : "fit",
-        cropX: nonNegativeIntegerInput(cropXInput),
-        cropY: nonNegativeIntegerInput(cropYInput),
-        mirrorX: mirrorXInput.checked,
-        mirrorY: mirrorYInput.checked
-      });
-      dialog.remove();
+      await options.onConfirm(result);
     } finally {
       confirmButton.disabled = false;
     }
@@ -238,13 +250,14 @@ export async function createLocalDerivedOption(options: {
   mirrorX?: boolean;
   mirrorY?: boolean;
 }): Promise<GeneratedDebugOption> {
-  const sourceImage = await loadImageElement(options.source.src);
+  const sourceImage = await loadCanvasDrawable(options.source.src);
   const targetGeometry = targetGeometryForAsset(
     options.targetAsset,
     options.dimensions,
     options.frameCount
   );
-  const sourceGrid = options.source.asset.frameGrid;
+  const sourceGrid = options.source.frameGrid ?? options.source.asset.frameGrid;
+  const sourceDimensions = options.source.dimensions ?? options.source.asset.dimensions;
   const sourceFrameCount = sourceGrid
     ? sourceGrid.frameCount ?? sourceGrid.columns * sourceGrid.rows
     : 1;
@@ -263,8 +276,8 @@ export async function createLocalDerivedOption(options: {
   context.clearRect(0, 0, canvas.width, canvas.height);
 
   for (let frame = 0; frame < targetFrameCount; frame += 1) {
-    const sourceRect = frameRect(sourceGrid, sourceImage, frame % sourceFrameCount);
-    const targetRect = frameRect(targetGeometry.frameGrid, undefined, frame);
+    const sourceRect = frameRect(sourceGrid, sourceImage, frame % sourceFrameCount, sourceDimensions);
+    const targetRect = frameRect(targetGeometry.frameGrid, undefined, frame, targetGeometry.dimensions);
 
     if (options.strategy === "crop") {
       drawCrop(context, sourceImage, sourceRect, targetRect, options.cropX ?? 0, options.cropY ?? 0);
@@ -274,6 +287,8 @@ export async function createLocalDerivedOption(options: {
       drawScale(context, sourceImage, sourceRect, targetRect, options.scaleMode ?? "fit");
     }
   }
+
+  assertCanvasHasPixels(canvas, context);
 
   const dataUrl = canvas.toDataURL("image/png");
 
@@ -302,6 +317,37 @@ export async function referenceImageForCandidate(candidate: DeriveCandidate): Pr
     dataUrl: candidate.src.startsWith("data:")
       ? candidate.src
       : await imageSourceToDataUrl(candidate.src)
+  };
+}
+
+async function loadCanvasDrawable(src: string): Promise<CanvasDrawable> {
+  if (!isSvgSource(src) && typeof createImageBitmap === "function") {
+    const response = await fetch(src);
+
+    if (!response.ok) {
+      throw new Error(`Could not load source target image (${response.status}).`);
+    }
+
+    const blob = await response.blob();
+
+    if (!blob.type.includes("svg")) {
+      const bitmap = await createImageBitmap(blob);
+
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height
+      };
+    }
+  }
+
+  const dataUrl = src.startsWith("data:") ? src : await imageSourceToDataUrl(src);
+  const image = await loadImageElement(dataUrl);
+
+  return {
+    source: image,
+    width: image.naturalWidth,
+    height: image.naturalHeight
   };
 }
 
@@ -339,15 +385,16 @@ function targetGeometryForAsset(
 
 function frameRect(
   frameGrid: AiAssetFrameGrid | undefined,
-  image: HTMLImageElement | undefined,
-  frame: number
+  image: CanvasDrawable | undefined,
+  frame: number,
+  dimensions?: AiAssetDimensions
 ): { x: number; y: number; width: number; height: number } {
   if (!frameGrid) {
     return {
       x: 0,
       y: 0,
-      width: image?.naturalWidth ?? 1,
-      height: image?.naturalHeight ?? 1
+      width: image?.width ?? dimensions?.width ?? 1,
+      height: image?.height ?? dimensions?.height ?? 1
     };
   }
 
@@ -366,13 +413,13 @@ function frameRect(
 
 function drawScale(
   context: CanvasRenderingContext2D,
-  image: HTMLImageElement,
+  image: CanvasDrawable,
   source: { x: number; y: number; width: number; height: number },
   target: { x: number; y: number; width: number; height: number },
   mode: "fit" | "stretch"
 ): void {
   if (mode === "stretch") {
-    context.drawImage(image, source.x, source.y, source.width, source.height, target.x, target.y, target.width, target.height);
+    context.drawImage(image.source, source.x, source.y, source.width, source.height, target.x, target.y, target.width, target.height);
     return;
   }
 
@@ -380,7 +427,7 @@ function drawScale(
   const width = source.width * scale;
   const height = source.height * scale;
   context.drawImage(
-    image,
+    image.source,
     source.x,
     source.y,
     source.width,
@@ -394,7 +441,7 @@ function drawScale(
 
 function drawCrop(
   context: CanvasRenderingContext2D,
-  image: HTMLImageElement,
+  image: CanvasDrawable,
   source: { x: number; y: number; width: number; height: number },
   target: { x: number; y: number; width: number; height: number },
   cropX: number,
@@ -403,7 +450,7 @@ function drawCrop(
   const sourceX = source.x + Math.max(0, Math.min(cropX, Math.max(0, source.width - target.width)));
   const sourceY = source.y + Math.max(0, Math.min(cropY, Math.max(0, source.height - target.height)));
   context.drawImage(
-    image,
+    image.source,
     sourceX,
     sourceY,
     Math.min(target.width, source.width),
@@ -417,7 +464,7 @@ function drawCrop(
 
 function drawTile(
   context: CanvasRenderingContext2D,
-  image: HTMLImageElement,
+  image: CanvasDrawable,
   source: { x: number; y: number; width: number; height: number },
   target: { x: number; y: number; width: number; height: number },
   mirrorX: boolean,
@@ -433,10 +480,28 @@ function drawTile(
       context.save();
       context.translate(target.x + x + (flipX ? width : 0), target.y + y + (flipY ? height : 0));
       context.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-      context.drawImage(image, source.x, source.y, width, height, 0, 0, width, height);
+      context.drawImage(image.source, source.x, source.y, width, height, 0, 0, width, height);
       context.restore();
     }
   }
+}
+
+function assertCanvasHasPixels(canvas: HTMLCanvasElement, context: CanvasRenderingContext2D): void {
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const stride = Math.max(4, Math.floor(pixels.length / 4096 / 4) * 4);
+
+  for (let index = 3; index < pixels.length; index += stride) {
+    if (pixels[index] > 0) return;
+  }
+
+  throw new Error("Derived image was empty. Try another source target or dimensions.");
+}
+
+function candidateFrameDimensions(candidate: DeriveCandidate): AiAssetDimensions {
+  return {
+    width: candidate.frameGrid?.frameWidth ?? candidate.dimensions?.width ?? defaultFrameDimensions(candidate.asset).width,
+    height: candidate.frameGrid?.frameHeight ?? candidate.dimensions?.height ?? defaultFrameDimensions(candidate.asset).height
+  };
 }
 
 function defaultFrameDimensions(asset: AiAssetDefinition): AiAssetDimensions {
