@@ -19,6 +19,10 @@
     "android:install:debug": "npm run android:build:debug && ANDROID_HOME=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools} sh -c '\"$ANDROID_HOME/platform-tools/adb\" install -r android/app/build/outputs/apk/debug/app-debug.apk'",
     "android:open": "cap open android",
     "android:run": "npm run android:sync && JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} ANDROID_HOME=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools} cap run android",
+    "ios:add": "npm run build:tablet && CAPACITOR_WEB_DIR=dist/tablet cap add ios --packagemanager SPM",
+    "ios:sync": "npm run build:tablet && CAPACITOR_WEB_DIR=dist/tablet cap sync ios",
+    "ios:open": "CAPACITOR_WEB_DIR=dist/tablet cap open ios",
+    "ios:run": "npm run ios:sync && CAPACITOR_WEB_DIR=dist/tablet cap run ios",
     "dev": "node dev-server.mjs",
     "typecheck": "npm run generate-assets-module && tsc -p tsconfig.json --noEmit"
   },
@@ -28,6 +32,7 @@
     "@ai-game-assets/phaser": "file:../../packages/phaser",
     "@capacitor/android": "^8.4.0",
     "@capacitor/core": "^8.4.0",
+    "@capacitor/ios": "^8.4.1",
     "phaser": ">=4"
   },
   "devDependencies": {
