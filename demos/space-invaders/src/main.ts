@@ -7,7 +7,7 @@ const assetApi =
   new URLSearchParams(window.location.search).get("assetApi") ??
   "http://127.0.0.1:3977";
 const debugClient = new AiAssetDebugClient(assetApi);
-const targetId = phonePortraitTargetId();
+const targetId = displayTargetId();
 
 let manifest: AiAssetManifest;
 
@@ -30,10 +30,12 @@ async function boot(): Promise<void> {
   });
 }
 
-function phonePortraitTargetId(): string | undefined {
-  return window.innerWidth <= 720 && window.innerHeight > window.innerWidth
-    ? "mobilePortrait"
-    : undefined;
+function displayTargetId(): string | undefined {
+  if (window.innerHeight <= window.innerWidth) return undefined;
+  if (window.innerWidth <= 720) return "mobilePortrait";
+  if (window.innerWidth <= 1180) return "ipadPortrait";
+
+  return undefined;
 }
 
 function errorMessage(error: unknown): string {

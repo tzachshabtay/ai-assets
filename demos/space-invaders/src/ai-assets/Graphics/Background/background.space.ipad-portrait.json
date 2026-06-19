@@ -1,0 +1,27 @@
+{
+  "id": "background.space.ipad-portrait",
+  "kind": "image",
+  "prompt": "Portrait iPad background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near tablet edges.",
+  "dimensions": {
+    "width": 768,
+    "height": 1024
+  },
+  "settings": {
+    "model": "gpt-image-2",
+    "background": "opaque",
+    "quality": "low",
+    "format": "png"
+  },
+  "activeVersion": "default",
+  "versions": {
+    "default": {
+      "name": "default",
+      "file": "/assets/background.space.promoted-1780545088449.png",
+      "prompt": "Portrait iPad background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near tablet edges.",
+      "createdAt": "2026-06-19T00:00:00.000Z",
+      "model": "starter-asset",
+      "parentVersion": "background.space:promoted-1780545088449",
+      "notes": "Starter iPad portrait variant using the current desktop background until a tablet-specific version is generated."
+    }
+  }
+}

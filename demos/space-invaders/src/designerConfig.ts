@@ -59,6 +59,7 @@ export const designerPreviewDisplaySize = {
   "ui.button.clicked": { width: 190, height: 58 },
   "background.space": { width: 180, height: 180 },
   "background.space.mobile-portrait": { width: 101, height: 180 },
+  "background.space.ipad-portrait": { width: 135, height: 180 },
   "background.stars": { width: 32, height: 32 },
   "background.stars.twinkle-white": { width: 32, height: 32 },
   "background.stars.blue-pulse": { width: 32, height: 32 },

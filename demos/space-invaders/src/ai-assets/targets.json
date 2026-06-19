@@ -5,5 +5,12 @@
     "variants": {
       "background.space": "background.space.mobile-portrait"
     }
+  },
+  "ipadPortrait": {
+    "id": "ipadPortrait",
+    "label": "iPad portrait",
+    "variants": {
+      "background.space": "background.space.ipad-portrait"
+    }
   }
 }
