@@ -1,7 +1,7 @@
 {
   "id": "background.space.mobile-portrait",
   "kind": "image",
-  "prompt": "Portrait mobile background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near phone edges.",
+  "prompt": "Portrait mobile background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near phone edges.\n\nExtend the referenced source target into the requested canvas. Preserve the original asset identity and visual style while filling the new area naturally.",
   "dimensions": {
     "width": 412,
     "height": 915
@@ -12,7 +12,7 @@
     "quality": "low",
     "format": "png"
   },
-  "activeVersion": "promoted-1781749057940",
+  "activeVersion": "promoted-1781834999254",
   "versions": {
     "default": {
       "name": "default",
@@ -39,6 +39,24 @@
       "audioPlayback": {},
       "voiceSettings": {},
       "parentVersion": "default",
+      "notes": "Promoted from the AI asset designer."
+    },
+    "promoted-1781834999254": {
+      "name": "promoted-1781834999254",
+      "file": "/assets/background.space.mobile-portrait.promoted-1781834999254.png",
+      "prompt": "Portrait mobile background for a 2D space invaders game. Deep outer space, readable but subdued behind gameplay, no text, no ships, no enemies and no stars. Keep the central gameplay area clear and leave safe visual room near phone edges.\n\nExtend the referenced source target into the requested canvas. Preserve the original asset identity and visual style while filling the new area naturally.",
+      "createdAt": "2026-06-19T02:09:59.309Z",
+      "model": "gpt-image-2",
+      "settings": {
+        "model": "gpt-image-2",
+        "background": "opaque",
+        "quality": "low",
+        "format": "png"
+      },
+      "audioSettings": {},
+      "audioPlayback": {},
+      "voiceSettings": {},
+      "parentVersion": "promoted-1781749057940",
       "notes": "Promoted from the AI asset designer."
     }
   },
