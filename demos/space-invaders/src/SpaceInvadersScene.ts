@@ -507,7 +507,7 @@ export function startGame(
       this.scoreText?.setText("Score 0");
       this.statusText?.setText("Move: arrows/drag  Shoot: space/hold");
 
-      this.hero = this.add.sprite(gameSize.width / 2, gameSize.height - 70, this.aiRuntime.key("hero.ship.idle"));
+      this.hero = this.add.sprite(gameSize.width / 2, this.heroStartY(), this.aiRuntime.key("hero.ship.idle"));
       this.playHeroAnimation("hero.ship.idle", true);
       this.createHeroLifeBar();
       this.spawnInvaders();
@@ -844,6 +844,12 @@ export function startGame(
       const columns = 8;
 
       return (gameSize.width - ((columns - 1) * columnSpacing)) / 2;
+    }
+
+    private heroStartY(): number {
+      const bottomMargin = options.targetId === "mobilePortrait" ? 170 : 70;
+
+      return gameSize.height - bottomMargin;
     }
 
     private setupAppLifecycleAudio(): void {
