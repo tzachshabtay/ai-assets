@@ -34,3 +34,13 @@ export {
 export type { AiAssetDevServerOptions } from "./server.js";
 
 export { createAiAssetDevServer } from "./server.js";
+
+export type { BuildManifestOptions } from "./build-manifest.js";
+
+export {
+  buildManifestModule,
+  normalizeAssetUrls,
+  pruneManifestForBuild,
+  readManifestDirectory,
+  referencedAssetFiles
+} from "./build-manifest.js";

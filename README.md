@@ -100,3 +100,19 @@ await devServer.listen();
 ```
 
 The game runtime can call the local server in debug mode via `AiAssetDebugClient`. Production builds should not start or bundle the dev server.
+
+## Production Asset Manifests
+
+`@ai-game-assets/dev` includes a CLI for turning an `ai-assets` folder into a TypeScript manifest module. It can prune production builds to active versions and copy only the referenced asset files for the requested targets.
+
+```sh
+ai-game-assets-dev build-manifest \
+  --manifest-dir=src/ai-assets \
+  --module-out=src/assets.ts \
+  --active-only \
+  --targets=default,wide,mobilePortrait \
+  --asset-source-dir=public/assets \
+  --asset-out-dir=dist/web/assets
+```
+
+Game projects should still copy their own app shell files, such as `index.html`, CSS, and icons, as part of their normal bundler/build step.
