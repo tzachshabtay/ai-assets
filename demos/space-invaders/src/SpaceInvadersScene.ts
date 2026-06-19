@@ -949,7 +949,6 @@ function gameSizeForTargetBackground(
   manifest: AiAssetManifest,
   targetId: string | undefined
 ): { width: number; height: number } {
-  const width = 640;
   const backgroundAssetId = targetId
     ? manifest.targets?.[targetId]?.variants["background.space"] ?? "background.space"
     : "background.space";
@@ -958,12 +957,20 @@ function gameSizeForTargetBackground(
   const assetHeight = backgroundAsset?.dimensions?.height;
 
   if (!assetWidth || !assetHeight || assetWidth <= 0 || assetHeight <= 0) {
-    return { width, height: 640 };
+    return { width: 640, height: 640 };
+  }
+
+  const aspect = assetWidth / assetHeight;
+  if (aspect >= 1) {
+    return {
+      width: Math.max(640, Math.round(640 * aspect)),
+      height: 640
+    };
   }
 
   return {
-    width,
-    height: Math.max(640, Math.round(width * (assetHeight / assetWidth)))
+    width: 640,
+    height: Math.max(640, Math.round(640 / aspect))
   };
 }
 

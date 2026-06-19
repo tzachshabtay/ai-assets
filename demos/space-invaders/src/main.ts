@@ -2,6 +2,7 @@ import { AiAssetDebugClient, installAiAssetDesigner } from "@ai-game-assets/phas
 import type { AiAssetManifest } from "@ai-game-assets/core";
 import { startGame } from "./SpaceInvadersScene.js";
 import { designerAssetIds, designerPreviewDisplaySize } from "./designerConfig.js";
+import { displayTargetId } from "./displayTarget.js";
 
 const assetApi =
   new URLSearchParams(window.location.search).get("assetApi") ??
@@ -28,14 +29,6 @@ async function boot(): Promise<void> {
       });
     }
   });
-}
-
-function displayTargetId(): string | undefined {
-  if (window.innerHeight <= window.innerWidth) return undefined;
-  if (window.innerWidth <= 720) return "mobilePortrait";
-  if (window.innerWidth <= 1180) return "ipadPortrait";
-
-  return undefined;
 }
 
 function errorMessage(error: unknown): string {

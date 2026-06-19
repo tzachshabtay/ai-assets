@@ -6,11 +6,11 @@
       "background.space": "background.space.mobile-portrait"
     }
   },
-  "ipadPortrait": {
-    "id": "ipadPortrait",
-    "label": "iPad portrait",
+  "wide": {
+    "id": "wide",
+    "label": "Wide",
     "variants": {
-      "background.space": "background.space.ipad-portrait"
+      "background.space": "background.space.wide"
     }
   }
 }
