@@ -8,6 +8,13 @@
     "build": "npm run build:dev",
     "build:dev": "esbuild src/main.ts --bundle --format=esm --sourcemap --outfile=public/game.js",
     "build:production": "npm run generate-assets-module && esbuild src/main.production.ts --bundle --format=esm --minify --outfile=public/game.js",
+    "android:add": "npm run build:production && cap add android",
+    "android:sync": "npm run build:production && cap sync android",
+    "android:build:debug": "npm run android:sync && cd android && JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} ANDROID_HOME=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools} ./gradlew assembleDebug",
+    "android:devices": "ANDROID_HOME=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools} sh -c '\"$ANDROID_HOME/platform-tools/adb\" devices'",
+    "android:install:debug": "npm run android:build:debug && ANDROID_HOME=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools} sh -c '\"$ANDROID_HOME/platform-tools/adb\" install -r android/app/build/outputs/apk/debug/app-debug.apk'",
+    "android:open": "cap open android",
+    "android:run": "npm run android:sync && JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} ANDROID_HOME=${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools} cap run android",
     "dev": "node dev-server.mjs",
     "typecheck": "npm run generate-assets-module && tsc -p tsconfig.json --noEmit"
   },
@@ -15,9 +22,12 @@
     "@ai-game-assets/core": "file:../../packages/core",
     "@ai-game-assets/dev": "file:../../packages/dev",
     "@ai-game-assets/phaser": "file:../../packages/phaser",
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
     "phaser": ">=4"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.0",
     "esbuild": "^0.25.12",
     "typescript": "^5.8.0"
   }

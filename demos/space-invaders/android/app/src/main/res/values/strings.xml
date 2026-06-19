@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">AI Assets Invaders</string>
+    <string name="title_activity_main">AI Assets Invaders</string>
+    <string name="package_name">com.aigameassets.spaceinvaders</string>
+    <string name="custom_url_scheme">com.aigameassets.spaceinvaders</string>
+</resources>

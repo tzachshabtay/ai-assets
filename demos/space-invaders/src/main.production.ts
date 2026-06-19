@@ -3,11 +3,5 @@ import { startGame } from "./SpaceInvadersScene.js";
 
 startGame(assets, {
   assetBaseUrl: new URL(".", globalThis.location.href).href,
-  targetId: phonePortraitTargetId()
+  targetId: "mobilePortrait"
 });
-
-function phonePortraitTargetId(): string | undefined {
-  return window.innerWidth <= 720 && window.innerHeight > window.innerWidth
-    ? "mobilePortrait"
-    : undefined;
-}
