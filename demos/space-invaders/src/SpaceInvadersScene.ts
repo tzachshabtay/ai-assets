@@ -93,6 +93,10 @@ export function startGame(
     private touchPointerId?: number;
     private touchHeroOffsetX = 0;
     private touchHeroMoving = false;
+    private hudTop = 14;
+    private hudScoreY = 42;
+    private playfieldTop = 112;
+    private removeLifecycleListeners?: () => void;
 
     constructor() {
       super("space-invaders");
@@ -119,10 +123,12 @@ export function startGame(
         options.assetBaseUrl
       );
       this.animations.initialize();
+      this.updateLayoutMetrics();
       this.cursors = this.input.keyboard?.createCursorKeys();
       this.fireKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
       this.escapeKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
       this.setupTouchControls();
+      this.setupAppLifecycleAudio();
       this.sound.volume = this.masterVolume;
       if ((this.sound as Phaser.Sound.BaseSoundManager).locked) {
         this.sound.once(Phaser.Sound.Events.UNLOCKED, () => {
@@ -144,15 +150,15 @@ export function startGame(
       this.background.setDisplaySize(gameSize.width, gameSize.height).setDepth(-90);
       this.starAnimationKeys = this.animations.starAnimationKeys();
       this.spawnStars();
-      this.add.text(18, 14, "AI Assets Invaders", {
+      this.add.text(18, this.hudTop, "AI Assets Invaders", {
         color: "#f8fafc",
         fontSize: "20px"
       });
-      this.scoreText = this.add.text(18, 42, "Score 0", {
+      this.scoreText = this.add.text(18, this.hudScoreY, "Score 0", {
         color: "#b9c1cf",
         fontSize: "15px"
       });
-      this.statusText = this.add.text(210, 42, "Move: arrows/drag  Shoot: space/hold", {
+      this.statusText = this.add.text(210, this.hudScoreY, "Move: arrows/drag  Shoot: space/hold", {
         color: "#b9c1cf",
         fontSize: "15px"
       });
@@ -243,6 +249,10 @@ export function startGame(
       this.createGameMenu("AI Assets Invaders");
       this.audio.loadSoundAssets();
       this.audio.loadMusicAssets();
+      this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+        this.removeLifecycleListeners?.();
+        this.removeLifecycleListeners = undefined;
+      });
     }
 
     update(time: number, delta: number) {
@@ -278,7 +288,7 @@ export function startGame(
 
       if (isMovingLeft) this.hero.x -= speed;
       if (isMovingRight) this.hero.x += speed;
-      this.hero.x = Phaser.Math.Clamp(this.hero.x, 32, 608);
+      this.hero.x = Phaser.Math.Clamp(this.hero.x, 32, gameSize.width - 32);
 
       if (isTouchShooting || (keyboardEnabled && this.fireKey?.isDown)) this.tryHeroShoot();
 
@@ -342,7 +352,7 @@ export function startGame(
       if (!this.hero) return;
 
       const previousX = this.hero.x;
-      this.hero.x = Phaser.Math.Clamp(pointer.worldX + this.touchHeroOffsetX, 32, 608);
+      this.hero.x = Phaser.Math.Clamp(pointer.worldX + this.touchHeroOffsetX, 32, gameSize.width - 32);
       this.touchHeroMoving = Math.abs(this.hero.x - previousX) > 0.25;
     }
 
@@ -406,7 +416,7 @@ export function startGame(
     private correctInvaderEdgeHit(): void {
       const formationBounds = this.invaderFormationBounds();
       const leftLimit = 24;
-      const rightLimit = 616;
+      const rightLimit = gameSize.width - 24;
       let correctionX = 0;
 
       if (formationBounds.left < leftLimit) {
@@ -585,8 +595,8 @@ export function startGame(
         for (let col = 0; col < 8; col += 1) {
           const invaderType = Phaser.Utils.Array.GetRandom(invaderTypes) as InvaderType;
           const invader = this.add.sprite(
-            112 + col * 60,
-            118 + row * 58,
+            this.invaderStartX() + col * 60,
+            this.playfieldTop + 34 + row * 58,
             this.aiRuntime.key(invaderType.idle)
           ) as InvaderSprite;
           invader.invaderType = invaderType;
@@ -690,8 +700,9 @@ export function startGame(
       this.heroLifeIcons = [];
 
       for (let index = 0; index < maxHeroLives; index += 1) {
-        const x = 618 - ((maxHeroLives - 1 - index) * heroLifeIconSpacing);
-        const silhouette = this.add.image(x, 30, this.aiRuntime.key("hero.ship"));
+        const x = gameSize.width - 22 - ((maxHeroLives - 1 - index) * heroLifeIconSpacing);
+        const y = this.hudTop + 16;
+        const silhouette = this.add.image(x, y, this.aiRuntime.key("hero.ship"));
         silhouette.setDisplaySize(heroLifeIconSize, heroLifeIconSize);
         silhouette.setDepth(39);
         silhouette.setTint(0x94a3b8);
@@ -701,7 +712,7 @@ export function startGame(
 
         const icon = this.add.image(
           x,
-          30,
+          y,
           this.aiRuntime.key("hero.ship")
         );
         icon.setDisplaySize(heroLifeIconSize, heroLifeIconSize);
@@ -821,6 +832,54 @@ export function startGame(
       this.animations?.playHeroAnimation(this.hero, animationKey, forceRestart);
     }
 
+    private updateLayoutMetrics(): void {
+      const safeTop = topSafeInsetForGame(gameSize);
+      this.hudTop = safeTop + 12;
+      this.hudScoreY = this.hudTop + 28;
+      this.playfieldTop = this.hudScoreY + 54;
+    }
+
+    private invaderStartX(): number {
+      const columnSpacing = 60;
+      const columns = 8;
+
+      return (gameSize.width - ((columns - 1) * columnSpacing)) / 2;
+    }
+
+    private setupAppLifecycleAudio(): void {
+      let isBackgrounded = false;
+      const pause = () => {
+        if (isBackgrounded) return;
+
+        isBackgrounded = true;
+        this.audio?.pauseAll();
+      };
+      const resume = () => {
+        if (!isBackgrounded) return;
+
+        isBackgrounded = false;
+        this.audio?.resumeAll();
+      };
+      const onVisibilityChange = () => {
+        if (document.visibilityState === "hidden") {
+          pause();
+        } else {
+          resume();
+        }
+      };
+      const onPageHide = () => pause();
+      const onPageShow = () => resume();
+
+      document.addEventListener("visibilitychange", onVisibilityChange);
+      globalThis.addEventListener("pagehide", onPageHide);
+      globalThis.addEventListener("pageshow", onPageShow);
+      this.removeLifecycleListeners = () => {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+        globalThis.removeEventListener("pagehide", onPageHide);
+        globalThis.removeEventListener("pageshow", onPageShow);
+      };
+    }
+
     private playHeroActionAnimation(animationKey: string): void {
       const duration = this.animations?.playHeroActionAnimation(this.hero, animationKey, () => {
         if (this.time.now >= this.heroLockedUntil) {
@@ -900,4 +959,32 @@ function gameSizeForTargetBackground(
     width,
     height: Math.max(640, Math.round(width * (assetHeight / assetWidth)))
   };
+}
+
+function topSafeInsetForGame(gameSize: { width: number; height: number }): number {
+  const viewportWidth = globalThis.visualViewport?.width ?? globalThis.innerWidth ?? gameSize.width;
+  const viewportHeight = globalThis.visualViewport?.height ?? globalThis.innerHeight ?? gameSize.height;
+  const scale = Math.min(viewportWidth / gameSize.width, viewportHeight / gameSize.height) || 1;
+  const cssSafeTop = Math.max(readCssSafeAreaInsetTop(), coarsePointerTopInset());
+
+  return Math.ceil(cssSafeTop / scale);
+}
+
+function coarsePointerTopInset(): number {
+  return globalThis.matchMedia?.("(pointer: coarse)").matches ? 34 : 0;
+}
+
+function readCssSafeAreaInsetTop(): number {
+  if (typeof document === "undefined") return 0;
+
+  const probe = document.createElement("div");
+  probe.style.position = "fixed";
+  probe.style.visibility = "hidden";
+  probe.style.pointerEvents = "none";
+  probe.style.paddingTop = "env(safe-area-inset-top)";
+  document.body.appendChild(probe);
+  const value = Number.parseFloat(globalThis.getComputedStyle(probe).paddingTop);
+  probe.remove();
+
+  return Number.isFinite(value) ? value : 0;
 }

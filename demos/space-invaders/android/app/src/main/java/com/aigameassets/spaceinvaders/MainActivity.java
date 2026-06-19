@@ -26,6 +26,25 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    @Override
+    public void onPause() {
+        WebView webView = getBridge() == null ? null : getBridge().getWebView();
+        if (webView != null) {
+            webView.onPause();
+        }
+        super.onPause();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        WebView webView = getBridge() == null ? null : getBridge().getWebView();
+        if (webView != null) {
+            webView.onResume();
+        }
+        enableImmersiveMode();
+    }
+
     private void allowStartupAudio() {
         if (getBridge() == null) return;
 

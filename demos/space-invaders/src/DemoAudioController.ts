@@ -37,6 +37,15 @@ export class DemoAudioController {
     this.setMusicTrackVolume(gameMusicAssetId, this.gameMusicVolume);
   }
 
+  pauseAll(): void {
+    this.scene.sound.pauseAll();
+  }
+
+  resumeAll(): void {
+    this.scene.sound.resumeAll();
+    this.syncMusicTrackVolumes();
+  }
+
   playAudioAsset(
     assetId: string,
     config?: Phaser.Types.Sound.SoundConfig
