@@ -39,7 +39,7 @@ jobs:
           npm run build --workspace @ai-game-assets/phaser
 
       - name: Build production demo
-        run: npm run build:production --workspace @ai-game-assets/demo-space-invaders
+        run: npm run build:web --workspace @ai-game-assets/demo-space-invaders
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -47,7 +47,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: demos/space-invaders/public
+          path: demos/space-invaders/dist/web
 
   deploy:
     name: Deploy to GitHub Pages
