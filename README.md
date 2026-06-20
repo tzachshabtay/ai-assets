@@ -1,109 +1,181 @@
 # AI Game Assets
 
-Prompt-aware AI asset tooling for TypeScript 2D games.
+Prompt-aware AI asset tooling for TypeScript 2D games. The library lets a game keep the creative intent for every asset next to the asset itself: prompts, dimensions, generation settings, saved versions, target variants, animation frame metadata, audio playback metadata, and voice direction.
 
-This project targets Phaser 4 first, with a small engine adapter boundary so other TS/JS engines can be added later.
+The first runtime adapter is for Phaser. The core package is engine-neutral, so other engines can use the same manifests and build pipeline later.
 
-## Concept
+## Why This Exists
 
-An asset is not only a PNG. It is a tracked creative object:
+Game teams usually treat generated assets as exported files. This project treats them as editable source material:
 
-- stable asset id
-- source prompt
-- generation settings
-- named saved versions
-- selected active version
-- runtime helpers for swapping versions in debug mode
-
-In production, the game only loads normal image files and manifests. In development, a local Node service can call image generation, save files, and update the manifest.
+- each asset has a stable id, prompt, settings, and version history
+- debug builds can regenerate, upload, preview, edit, promote, or revert assets while the game is running
+- production builds load plain static files with no AI keys, no local server, and no designer UI
+- targets such as `default`, `mobilePortrait`, and `wide` can override only the assets that need a different size
+- old versions can remain available for iteration without being bundled into production
 
 ## Packages
 
-- `@ai-game-assets/core`: engine-neutral schema and manifest helpers
-- `@ai-game-assets/dev`: local-only generation and save pipeline
-- `@ai-game-assets/phaser`: Phaser 4 runtime adapter
+| Package | Purpose |
+| --- | --- |
+| `@ai-game-assets/core` | Engine-neutral asset types, manifest validation, version helpers, and target resolution. |
+| `@ai-game-assets/phaser` | Phaser loader/runtime helpers plus the in-game asset designer. |
+| `@ai-game-assets/dev` | Local development server, OpenAI image/SVG provider, ElevenLabs audio/voice provider, asset store, and production manifest builder. |
 
-## Status
+Install the packages you need:
 
-Early scaffold. The public API is intentionally small while the asset/version model settles.
+```sh
+npm install @ai-game-assets/core @ai-game-assets/phaser
+npm install -D @ai-game-assets/dev
+```
 
-## Engine Choice
+## Concepts
 
-The first-class target is Phaser 4. It is the strongest fit for this project because it is a complete 2D game framework with scene, loader, texture, animation, and debug-time extension points. PixiJS is excellent rendering infrastructure, but it is not a full game engine. Excalibur remains the most interesting TypeScript-first future adapter.
+An asset is a manifest entry. Its `kind` controls how it is generated, edited, loaded, and previewed.
 
-## Example Manifest
+Supported kinds:
+
+- `image`, `spritesheet`, `animation`: graphical assets, including frame grids and per-frame metadata
+- `sound`, `music`: generated or uploaded audio with trim, volume, loop, and optional effects metadata
+- `voice`: a reusable generated voice identity
+- `voice-line`: spoken text that can use a `voice` asset and direction notes
+- `collection`: a logical grouping asset
+
+A version is a saved file plus the prompt/settings used to produce it. `activeVersion` is the version the game should currently use. The designer can temporarily preview another version, and the standard Promote action makes the choice permanent.
+
+A target maps a base asset id to a target-specific variant. For example, the game can use `background.space` on desktop, `background.space.mobile-portrait` on phones, and `background.space.wide` on tablets, while all non-overridden assets fall back to the base id.
+
+A style guide is optional manifest-level creative direction. It can include a text prompt and reference images, and is applied to generations when present.
+
+## Minimal Manifest
 
 ```ts
 import { defineAiAssets } from "@ai-game-assets/core";
 
 export const assets = defineAiAssets({
-  "hero.idle": {
-    id: "hero.idle",
+  "hero.ship": {
+    id: "hero.ship",
     kind: "image",
-    prompt: "Draw a small heroic knight in an idle pose, pixel art, transparent background.",
-    dimensions: { width: 32, height: 32 },
-    settings: {
-      model: "gpt-image-2",
-      background: "auto",
-      quality: "auto",
-      format: "png"
-    },
+    prompt: "Compact arcade hero spaceship, readable silhouette, transparent background.",
+    dimensions: { width: 72, height: 72 },
+    settings: { model: "gpt-image-2", format: "png", quality: "low" },
     activeVersion: "default",
     versions: {
       default: {
         name: "default",
-        file: "/assets/hero.idle.default.png",
-        prompt: "Draw a small heroic knight in an idle pose, pixel art, transparent background.",
-        createdAt: "2026-05-30T00:00:00.000Z",
+        file: "/assets/hero.ship.default.png",
+        prompt: "Compact arcade hero spaceship, readable silhouette, transparent background.",
+        createdAt: "2026-06-20T00:00:00.000Z",
         model: "gpt-image-2"
       }
+    },
+    linkedAnimationAssets: {
+      idle: { label: "Idle", assetId: "hero.ship.idle" }
     }
+  },
+  "hero.ship.idle": {
+    id: "hero.ship.idle",
+    kind: "spritesheet",
+    prompt: "Subtle engine glow idle loop.",
+    dimensions: { width: 144, height: 144 },
+    frameGrid: { frameWidth: 72, frameHeight: 72, columns: 2, rows: 2, frameCount: 4 },
+    animations: [{ key: "idle", frames: [0, 1, 2, 3], frameRate: 8, repeat: -1 }],
+    settings: { model: "gpt-image-2", format: "png", quality: "low" },
+    activeVersion: "default",
+    versions: {}
   }
 });
 ```
 
-## Phaser Usage
+For larger projects, keep assets as JSON files in folders and generate the TypeScript module during development or build.
+
+## Phaser Runtime
+
+Load assets in `preload`, create animations after loading, and use `AiAssetRuntime` to resolve active texture keys with target fallback.
 
 ```ts
-import { loadAiAssets, AiAssetRuntime } from "@ai-game-assets/phaser";
-import { assets } from "./assets";
+import {
+  AiAssetRuntime,
+  createAiAnimations,
+  loadAiAssets
+} from "@ai-game-assets/phaser";
+import { assets } from "./assets.js";
 
-class MainScene extends Phaser.Scene {
+class GameScene extends Phaser.Scene {
+  private aiAssets!: AiAssetRuntime;
+
   preload() {
-    loadAiAssets(this, assets);
+    loadAiAssets(this, assets, { targetId: "mobilePortrait" });
   }
 
   create() {
-    const aiAssets = new AiAssetRuntime(this, assets);
-    this.add.image(100, 100, aiAssets.key("hero.idle"));
+    this.aiAssets = new AiAssetRuntime(this, assets, { targetId: "mobilePortrait" });
+    createAiAnimations(this, assets, { targetId: "mobilePortrait" });
+
+    const hero = this.add.sprite(200, 500, this.aiAssets.key("hero.ship.idle"));
+    hero.play(this.aiAssets.animationKey("hero.ship.idle", "idle"));
   }
 }
 ```
 
-## Local Generation Server
+The Phaser package also includes helpers for loading audio, applying animation frame transforms, binding frame timing metadata to running animations, loading placeholders for missing graphics, and requesting first-draft generation from the dev server.
+
+## In-Game Designer
+
+`@ai-game-assets/phaser` includes a debug-only designer overlay. It is installed by the game, but the UI and behavior are library-provided.
+
+The designer supports:
+
+- breadcrumb navigation through folder-organized assets
+- target-aware editing and deriving variants from other targets
+- prompt, dimensions, format, frame-grid, audio length, and voice settings
+- streaming generation options as they complete
+- cancelable generations
+- upload for images, spritesheets, animation frames, sound effects, music, and voice lines
+- version history, revert, promote, and delete
+- style guide prompt and reference image management
+- animation editor with per-frame delay, offset, scale, rotation, and tags
+- frame touch-up editor for raster images
+- audio editor with waveform preview, trim markers, volume, loop, and playback settings
+
+Production builds should not bundle or install the designer.
+
+## Local Dev Server
+
+Use the dev server only during development. It reads and writes a folder of JSON asset definitions, stores generated files, and exposes endpoints used by the designer.
 
 ```ts
 import {
   createAiAssetDevServer,
+  createElevenLabsAudioProvider,
   createOpenAiImageProvider
 } from "@ai-game-assets/dev";
 
-const devServer = createAiAssetDevServer({
-  manifestPath: "src/assets.ai.json",
+const server = createAiAssetDevServer({
+  manifestDir: "src/ai-assets",
   manifestModulePath: "src/assets.ts",
   assetsDir: "public/assets",
   publicPathPrefix: "/assets",
-  provider: createOpenAiImageProvider()
+  provider: createOpenAiImageProvider(),
+  audioProvider: createElevenLabsAudioProvider()
 });
 
-await devServer.listen();
+await server.listen({ port: 3977 });
 ```
 
-The game runtime can call the local server in debug mode via `AiAssetDebugClient`. Production builds should not start or bundle the dev server.
+Environment variables:
 
-## Production Asset Manifests
+- `OPENAI_API_KEY`: required for graphical generations
+- `OPENAI_IMAGE_MODEL`: optional, defaults to the provider default
+- `OPENAI_SVG_MODEL`: optional text/code model for direct SVG generation
+- `ELEVENLABS_API_KEY`: required for audio and voice generation
+- `ELEVENLABS_OUTPUT_FORMAT`: optional audio output format
 
-`@ai-game-assets/dev` includes a CLI for turning an `ai-assets` folder into a TypeScript manifest module. It can prune production builds to active versions and copy only the referenced asset files for the requested targets.
+OpenAI and ElevenLabs are independent. A project can generate graphics without an ElevenLabs key, or audio without an OpenAI key.
+
+## Production Builds
+
+The dev package includes a CLI that turns an `ai-assets` folder into a TypeScript manifest module. It can prune to active versions, select target variants, and copy only referenced files.
 
 ```sh
 ai-game-assets-dev build-manifest \
@@ -115,4 +187,25 @@ ai-game-assets-dev build-manifest \
   --asset-out-dir=dist/web/assets
 ```
 
-Game projects should still copy their own app shell files, such as `index.html`, CSS, and icons, as part of their normal bundler/build step.
+Typical build profiles:
+
+- web: include `default` plus responsive targets such as `wide` and `mobilePortrait`
+- phone app: include the phone target plus fallback defaults
+- tablet app: include the tablet target plus fallback defaults
+
+Only the active version of each included asset should be bundled for production. Keep generated source modules such as `src/assets.ts` out of source control when they can be rebuilt from the JSON asset folder.
+
+## Repository Workflows
+
+This repository publishes packages with a manual GitHub Actions workflow. The intended release flow is:
+
+1. run the npm release workflow with `dry_run=true`
+2. review the pack/build result
+3. rerun with `dry_run=false`
+4. the workflow publishes packages, tags the version, and creates release notes from commits
+
+The Space Invaders demo has its own production build and GitHub Pages deployment.
+
+## Demo
+
+The main example is [Space Invaders](./demos/space-invaders/README.md). It exercises most of the library: images, spritesheets, animation metadata, targets, generated SVGs, SFX, music, voices, uploads, version history, derivation, and native mobile/tablet builds.
