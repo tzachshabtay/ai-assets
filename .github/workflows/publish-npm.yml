@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build packages
+        run: npm run build:packages
+
       - name: Set package versions
         shell: bash
         run: |
@@ -62,11 +65,21 @@ jobs:
             --workspace @ai-game-assets/phaser \
             --no-git-tag-version
 
+      - name: Set published dependency versions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            version="${{ github.event.release.tag_name }}"
+          else
+            version="${{ inputs.version }}"
+          fi
+
+          version="${version#v}"
+
           npm pkg set "dependencies.@ai-game-assets/core=$version" --workspace @ai-game-assets/dev
           npm pkg set "dependencies.@ai-game-assets/core=$version" --workspace @ai-game-assets/phaser
-
-      - name: Build packages
-        run: npm run build:packages
 
       - name: Publish diagnostics
         shell: bash
