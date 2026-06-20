@@ -56,7 +56,7 @@ echo "Node version: $(node --version)"
 echo "npm version: $(npm --version)"
 
 npm ci
-npx tsc -b packages/core packages/dev packages/phaser --force
+npm run build:packages
 npm run ios:sync --workspace @ai-game-assets/demo-space-invaders
 
 echo "Capacitor iOS app is ready for archiving."

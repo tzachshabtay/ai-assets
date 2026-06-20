@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "build:packages": "tsc -b packages/core packages/dev packages/phaser --force",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {

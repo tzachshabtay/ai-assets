@@ -66,10 +66,7 @@ jobs:
           npm pkg set "dependencies.@ai-game-assets/core=$version" --workspace @ai-game-assets/phaser
 
       - name: Build packages
-        run: |
-          npm run build --workspace @ai-game-assets/core
-          npm run build --workspace @ai-game-assets/dev
-          npm run build --workspace @ai-game-assets/phaser
+        run: npm run build:packages
 
       - name: Publish diagnostics
         shell: bash

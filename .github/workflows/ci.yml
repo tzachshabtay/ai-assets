@@ -25,10 +25,7 @@ jobs:
         run: npm ci
 
       - name: Build library packages
-        run: |
-          npm run build --workspace @ai-game-assets/core
-          npm run build --workspace @ai-game-assets/dev
-          npm run build --workspace @ai-game-assets/phaser
+        run: npm run build:packages
 
       - name: Typecheck workspaces
         run: npm run typecheck --workspaces --if-present
