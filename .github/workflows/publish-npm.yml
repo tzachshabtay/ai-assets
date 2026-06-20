@@ -220,6 +220,22 @@ jobs:
 
           tag="${{ steps.release.outputs.tag }}"
           version="${{ steps.release.outputs.version }}"
+          notes_file="$(mktemp)"
+          previous_tag="$(git describe --tags --abbrev=0 --match '[0-9]*' "$GITHUB_SHA^" 2>/dev/null || true)"
+
+          {
+            echo "## Changes"
+            echo
+
+            if [[ -n "$previous_tag" ]]; then
+              git log --reverse --pretty=format:'- %s (%h)' "$previous_tag..$GITHUB_SHA"
+              echo
+              echo
+              echo "**Full Changelog**: https://github.com/${GITHUB_REPOSITORY}/compare/${previous_tag}...${tag}"
+            else
+              git log --reverse --pretty=format:'- %s (%h)' "$GITHUB_SHA"
+            fi
+          } > "$notes_file"
 
           git tag "$tag" "$GITHUB_SHA"
           git push origin "$tag"
@@ -227,4 +243,4 @@ jobs:
           gh release create "$tag" \
             --target "$GITHUB_SHA" \
             --title "Release $version" \
-            --generate-notes
+            --notes-file "$notes_file"
