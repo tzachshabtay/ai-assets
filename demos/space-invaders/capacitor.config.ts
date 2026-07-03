@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.aigameassets.spaceinvaders",
+  appId: "com.aiassets.invaders",
   appName: "AI Assets Invaders",
   webDir: process.env.CAPACITOR_WEB_DIR ?? "dist/phone",
   bundledWebRuntime: false,

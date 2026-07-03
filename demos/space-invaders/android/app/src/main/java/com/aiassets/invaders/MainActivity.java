@@ -1,4 +1,4 @@
-package com.aigameassets.spaceinvaders;
+package com.aiassets.invaders;
 
 import android.os.Bundle;
 import android.view.View;
