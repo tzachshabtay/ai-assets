@@ -1,5 +1,7 @@
 # AI Game Assets
 
+[![AI Game Assets demo video](https://img.youtube.com/vi/LaXCj2oczyI/hqdefault.jpg)](https://youtu.be/LaXCj2oczyI)
+
 Prompt-aware AI asset tooling for TypeScript 2D games. The library lets a game keep the creative intent for every asset next to the asset itself: prompts, dimensions, generation settings, saved versions, target variants, animation frame metadata, audio playback metadata, and voice direction.
 
 The first runtime adapter is for Phaser. The core package is engine-neutral, so other engines can use the same manifests and build pipeline later.
