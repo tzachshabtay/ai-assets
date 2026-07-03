@@ -211,3 +211,7 @@ The Space Invaders demo has its own production build and GitHub Pages deployment
 ## Demo
 
 The main example is [Space Invaders](./demos/space-invaders/README.md). It exercises most of the library: images, spritesheets, animation metadata, targets, generated SVGs, SFX, music, voices, uploads, version history, derivation, and native mobile/tablet builds.
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
