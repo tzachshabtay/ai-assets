@@ -130,6 +130,7 @@ export function installAiAssetDesigner(
   ensureDesignerStyles();
 
   const client = options.client ?? new AiAssetDebugClient();
+  const resolveAssetUrl = (file: string) => client.assetUrl(file);
   let manifest = options.manifest;
   let selectedAssetId = options.assetIds?.[0] ?? Object.keys(manifest.assets)[0];
   let selectedTargetId = options.targetId;
@@ -138,7 +139,7 @@ export function installAiAssetDesigner(
   let stopCurrentAnimationPreview: (() => void) | undefined;
   let editedCurrentOption: GeneratedDebugOption | undefined;
   let previewedVersionName: string | undefined;
-  let styleGuideDraft = styleGuideDraftFromManifest(manifest);
+  let styleGuideDraft = styleGuideDraftFromManifest(manifest, resolveAssetUrl);
   const formatDrafts = new Map<string, AiAssetFormat>();
   let activeGeneration:
     | {
@@ -235,12 +236,13 @@ export function installAiAssetDesigner(
       asset.frameGrid?.frameCount ??
       (asset.frameGrid ? asset.frameGrid.columns * asset.frameGrid.rows : 1)
     );
+    const activeVersionSource = activeVersion?.file ? resolveAssetUrl(activeVersion.file) : "";
     elements.frameCountField.hidden = asset.kind === "image" || !asset.frameGrid;
     elements.versionLabel.textContent = `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
-    elements.currentImage.src = activeVersion?.file ?? "";
+    elements.currentImage.src = activeVersionSource;
     renderAudioPlayer({
       container: elements.currentAudio,
-      src: activeVersion?.file ?? "",
+      src: activeVersionSource,
       label: readableAssetName(assetId),
       playback: activeVersion?.audioPlayback
     });
@@ -346,7 +348,7 @@ export function installAiAssetDesigner(
         targetLabel,
         assetId,
         asset,
-        src: activeVersion.file
+        src: resolveAssetUrl(activeVersion.file)
       });
     };
 
@@ -493,20 +495,22 @@ export function installAiAssetDesigner(
     selectedOption = editedCurrentOption;
     elements.promoteButton.disabled = !selectedOption;
     if (isAudioAsset(asset)) {
+      const activeVersionSource = resolveAssetUrl(activeVersion.file);
       renderAudioPlayer({
         container: elements.currentAudio,
-        src: activeVersion.file,
+        src: activeVersionSource,
         label: readableAssetName(selectedTargetAssetId),
         playback: activeVersion.audioPlayback
       });
-      options.onPreview(selectedTargetAssetId, activeVersion.file, asset);
+      options.onPreview(selectedTargetAssetId, activeVersionSource, asset);
     } else {
-      elements.currentImage.src = activeVersion.file;
+      const activeVersionSource = resolveAssetUrl(activeVersion.file);
+      elements.currentImage.src = activeVersionSource;
       previewCurrentAsset({
         scene: options.scene,
         manifest,
         assetId: selectedTargetAssetId,
-        src: activeVersion.file,
+        src: activeVersionSource,
         onPreview: options.onPreview
       });
     }
@@ -863,6 +867,7 @@ export function installAiAssetDesigner(
       root: elements.root,
       asset,
       assetId: selectedTargetAssetId,
+      resolveAssetUrl,
       async onSelect(versionName, option) {
         const optionAsset = assetWithGeneratedGeometry(asset, option);
 
@@ -964,10 +969,11 @@ export function installAiAssetDesigner(
         root: elements.root,
         asset,
         assetId: selectedTargetAssetId,
-        src: editedCurrentOption?.dataUrl ?? activeVersion.file,
+        src: editedCurrentOption?.dataUrl ?? resolveAssetUrl(activeVersion.file),
         initialPlayback: editedCurrentOption?.audioPlayback ?? activeVersion.audioPlayback,
         onConfirm: async (audioPlayback) => {
-          const dataUrl = editedCurrentOption?.dataUrl ?? await imageSourceToDataUrl(activeVersion.file);
+          const dataUrl = editedCurrentOption?.dataUrl ??
+            await imageSourceToDataUrl(resolveAssetUrl(activeVersion.file));
           const optionAsset = {
             ...asset,
             audioPlayback
@@ -1016,13 +1022,13 @@ export function installAiAssetDesigner(
       root: elements.root,
       asset,
       assetId: selectedTargetAssetId,
-      src: editedCurrentOption?.dataUrl ?? activeVersion.file,
+      src: editedCurrentOption?.dataUrl ?? resolveAssetUrl(activeVersion.file),
       displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset),
       initialAnimations: editedCurrentOption?.animations ?? asset.animations,
       onConfirm: async ({ animations, dataUrl: editedDataUrl }) => {
         const dataUrl = editedDataUrl ??
           editedCurrentOption?.dataUrl ??
-          await imageSourceToDataUrl(activeVersion.file);
+          await imageSourceToDataUrl(resolveAssetUrl(activeVersion.file));
         const optionAsset = {
           ...asset,
           animations
@@ -1074,7 +1080,7 @@ export function installAiAssetDesigner(
       root: elements.root,
       asset,
       title: readableAssetName(selectedTargetAssetId),
-      frameSrc: editedCurrentOption?.dataUrl ?? activeVersion.file,
+      frameSrc: editedCurrentOption?.dataUrl ?? resolveAssetUrl(activeVersion.file),
       displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset),
       onSave: async (dataUrl) => {
         const optionAsset = {

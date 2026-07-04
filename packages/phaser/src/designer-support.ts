@@ -2187,6 +2187,7 @@ export async function openAssetVersionsDialog(options: {
   root: HTMLElement;
   asset: AiAssetDefinition;
   assetId: string;
+  resolveAssetUrl?(file: string): string;
   onSelect(versionName: string, option: GeneratedDebugOption): void | Promise<void>;
   onDelete(versionName: string): void | Promise<void>;
 }): Promise<void> {
@@ -2228,7 +2229,8 @@ export async function openAssetVersionsDialog(options: {
   };
 
   const selectVersion = async (versionName: string, version: AiAssetVersion) => {
-    const dataUrl = await imageSourceToDataUrl(version.file);
+    const source = options.resolveAssetUrl?.(version.file) ?? version.file;
+    const dataUrl = await imageSourceToDataUrl(source);
     await options.onSelect(versionName, {
       index: -1,
       dataUrl,
@@ -2263,16 +2265,17 @@ export async function openAssetVersionsDialog(options: {
 
       const preview = document.createElement("div");
       preview.className = "ai-game-assets-designer__version-preview";
+      const source = options.resolveAssetUrl?.(version.file) ?? version.file;
       if (isAudioAsset(options.asset)) {
         renderAudioPlayer({
           container: preview,
-          src: version.file,
+          src: source,
           label: versionName,
           playback: version.audioPlayback
         });
       } else {
         const image = document.createElement("img");
-        image.src = version.file;
+        image.src = source;
         image.alt = versionName;
         preview.append(image);
       }
@@ -3345,12 +3348,15 @@ export async function imageSourceToDataUrl(src: string): Promise<string> {
   });
 }
 
-export function styleGuideDraftFromManifest(manifest: AiAssetManifest): StyleGuideDraft {
+export function styleGuideDraftFromManifest(
+  manifest: AiAssetManifest,
+  resolveAssetUrl?: (file: string) => string
+): StyleGuideDraft {
   return {
     prompt: manifest.styleGuide?.prompt ?? "",
     images: (manifest.styleGuide?.images ?? []).map((image) => ({
       name: image.name,
-      src: image.file
+      src: resolveAssetUrl?.(image.file) ?? image.file
     }))
   };
 }

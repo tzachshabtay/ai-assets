@@ -73,6 +73,13 @@ async function routeRequest(
     return;
   }
 
+  if (
+    (request.method === "GET" || request.method === "HEAD") &&
+    await serveGeneratedAsset(options, url, response, request.method === "HEAD")
+  ) {
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/__ai-assets/manifest") {
     sendJson(response, 200, await readManifest(options.manifestPath));
     return;
@@ -670,7 +677,7 @@ function optionFromDataUrl(
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {
-    ...corsHeaders(),
+    ...accessControlHeaders(),
     "Content-Type": "application/json"
   });
   response.end(JSON.stringify(body));
@@ -678,7 +685,86 @@ function sendJson(response: ServerResponse, status: number, body: unknown): void
 
 function corsHeaders(): Record<string, string> {
   return {
-    "Content-Type": "application/json",
+    ...accessControlHeaders(),
+    "Content-Type": "application/json"
+  };
+}
+
+async function serveGeneratedAsset(
+  options: AiAssetDevServerOptions,
+  url: URL,
+  response: ServerResponse,
+  headOnly: boolean
+): Promise<boolean> {
+  const publicPathPrefix = normalizePublicPathPrefix(options.publicPathPrefix);
+
+  if (!publicPathPrefix) return false;
+  if (
+    url.pathname !== publicPathPrefix &&
+    !url.pathname.startsWith(`${publicPathPrefix}/`)
+  ) {
+    return false;
+  }
+
+  const relativePath = decodeURIComponent(url.pathname.slice(publicPathPrefix.length));
+  if (!relativePath || relativePath === "/") return false;
+
+  const assetsRoot = path.resolve(options.assetsDir);
+  const filePath = path.resolve(assetsRoot, `.${relativePath}`);
+
+  if (filePath !== assetsRoot && !filePath.startsWith(`${assetsRoot}${path.sep}`)) {
+    return false;
+  }
+
+  let file: Buffer;
+  try {
+    file = await readFile(filePath);
+  } catch {
+    return false;
+  }
+
+  response.writeHead(200, {
+    ...accessControlHeaders(),
+    "Content-Type": contentTypeForFile(filePath),
+    "Cache-Control": "no-cache"
+  });
+  response.end(headOnly ? undefined : file);
+  return true;
+}
+
+function normalizePublicPathPrefix(publicPathPrefix: string | undefined): string | undefined {
+  if (!publicPathPrefix) return undefined;
+  const trimmed = publicPathPrefix.trim();
+  if (!trimmed) return undefined;
+  return `/${trimmed.replace(/^\/+|\/+$/g, "")}`;
+}
+
+function contentTypeForFile(filePath: string): string {
+  switch (path.extname(filePath).toLowerCase()) {
+    case ".gif":
+      return "image/gif";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".mp3":
+      return "audio/mpeg";
+    case ".ogg":
+      return "audio/ogg";
+    case ".png":
+      return "image/png";
+    case ".svg":
+      return "image/svg+xml";
+    case ".wav":
+      return "audio/wav";
+    case ".webp":
+      return "image/webp";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function accessControlHeaders(): Record<string, string> {
+  return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS"

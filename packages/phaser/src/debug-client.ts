@@ -136,6 +136,18 @@ export class AiAssetDebugClient {
     this.endpoint = endpoint.replace(/\/$/, "");
   }
 
+  assetUrl(file: string): string {
+    if (
+      file.startsWith("data:") ||
+      file.startsWith("blob:") ||
+      /^https?:\/\//i.test(file)
+    ) {
+      return file;
+    }
+
+    return `${this.endpoint}/${file.replace(/^\//, "")}`;
+  }
+
   async generate(
     request: GenerateDebugOptionsRequest,
     options: AiAssetDebugClientRequestOptions = {}

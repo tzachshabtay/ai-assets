@@ -176,7 +176,6 @@ import {
 
 const server = createAiAssetDevServer({
   manifestPath: "src/ai-assets",
-  manifestModulePath: "src/assets.ts",
   assetsDir: "public/assets",
   publicPathPrefix: "/assets",
   provider: createOpenAiImageProvider(),
@@ -185,6 +184,8 @@ const server = createAiAssetDevServer({
 
 await server.listen({ port: 3977 });
 ```
+
+When `publicPathPrefix` is set, the dev server also serves generated files from `assetsDir` at that path. For example, `publicPathPrefix: "/assets"` makes newly promoted files available from `http://127.0.0.1:3977/assets/...`. The Phaser designer resolves saved asset previews through its `AiAssetDebugClient`, so promoted images and audio stay visible even when the game dev server ignores generated files to avoid reloads.
 
 Environment variables:
 
@@ -198,9 +199,9 @@ OpenAI and ElevenLabs are independent. A project can generate graphics without a
 
 ### Avoiding Dev Refreshes On Promote
 
-When `manifestModulePath` points at a source file such as `src/assets.ts`, Promote rewrites that file. Vite and similar dev servers may refresh the page if the running game imports that module directly. `restartOnPromote: false` only disables the designer's explicit reload; it cannot stop your bundler from reacting to a watched source file change.
+When `manifestModulePath` points at a source file such as `src/assets.ts`, Promote rewrites that file. Vite and similar dev servers may refresh the page if the running game imports that module directly or watches the generated module. `restartOnPromote: false` only disables the designer's explicit reload; it cannot stop your bundler from reacting to a watched source file change.
 
-For the smoothest in-game iteration, load the manifest from the dev server while running in development and keep the generated module for production or fallback builds:
+For the smoothest in-game iteration, omit `manifestModulePath` from the long-running dev server, load the manifest from the dev server while running in development, and generate the TypeScript module separately for production or fallback builds:
 
 ```ts
 import type { AiAssetManifest } from "@ai-game-assets/core";
