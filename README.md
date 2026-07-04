@@ -94,11 +94,14 @@ For larger projects, keep assets as JSON files in folders and generate the TypeS
 ## Phaser Runtime
 
 Load assets in `preload`, create animations after loading, and use `AiAssetRuntime` to resolve active texture keys with target fallback.
+For sprites and images that should update while the in-game designer previews or promotes assets, bind them with `bindTexture`.
 
 ```ts
 import {
   AiAssetRuntime,
+  AiAssetDebugClient,
   createAiAnimations,
+  installAiAssetDesigner,
   loadAiAssets
 } from "@ai-game-assets/phaser";
 import { assets } from "./assets.js";
@@ -112,13 +115,31 @@ class GameScene extends Phaser.Scene {
 
   create() {
     this.aiAssets = new AiAssetRuntime(this, assets, { targetId: "mobilePortrait" });
-    createAiAnimations(this, assets, { targetId: "mobilePortrait" });
+    createAiAnimations(this, assets, {
+      assetId: "hero.ship.idle",
+      targetId: "mobilePortrait"
+    });
 
     const hero = this.add.sprite(200, 500, this.aiAssets.key("hero.ship.idle"));
-    hero.play(this.aiAssets.animationKey("hero.ship.idle", "idle"));
+    this.aiAssets.bindTexture(hero, "hero.ship.idle");
+    hero.play("idle");
   }
 }
 ```
+
+`bindTexture` records the relationship between a Phaser image/sprite and an AI asset id. When the designer previews a new option, promotes a generated asset, or creates a first draft, the runtime can update bound objects automatically.
+
+```ts
+installAiAssetDesigner({
+  scene: this,
+  manifest: assets,
+  client: new AiAssetDebugClient("http://127.0.0.1:3977"),
+  restartOnPromote: false,
+  ...this.aiAssets.designerCallbacks()
+});
+```
+
+`designerCallbacks()` provides `onPreview`, `onAssetReady`, and `onManifestUpdated`. Use it when your game can express "this object displays this asset" through `bindTexture`; write custom callbacks only for richer behavior such as recreating animations, refreshing audio systems, or updating non-Phaser UI.
 
 The Phaser package also includes helpers for loading audio, applying animation frame transforms, binding frame timing metadata to running animations, loading placeholders for missing graphics, and requesting first-draft generation from the dev server.
 
@@ -154,7 +175,7 @@ import {
 } from "@ai-game-assets/dev";
 
 const server = createAiAssetDevServer({
-  manifestDir: "src/ai-assets",
+  manifestPath: "src/ai-assets",
   manifestModulePath: "src/assets.ts",
   assetsDir: "public/assets",
   publicPathPrefix: "/assets",
@@ -174,6 +195,31 @@ Environment variables:
 - `ELEVENLABS_OUTPUT_FORMAT`: optional audio output format
 
 OpenAI and ElevenLabs are independent. A project can generate graphics without an ElevenLabs key, or audio without an OpenAI key.
+
+### Avoiding Dev Refreshes On Promote
+
+When `manifestModulePath` points at a source file such as `src/assets.ts`, Promote rewrites that file. Vite and similar dev servers may refresh the page if the running game imports that module directly. `restartOnPromote: false` only disables the designer's explicit reload; it cannot stop your bundler from reacting to a watched source file change.
+
+For the smoothest in-game iteration, load the manifest from the dev server while running in development and keep the generated module for production or fallback builds:
+
+```ts
+import type { AiAssetManifest } from "@ai-game-assets/core";
+import { AiAssetDebugClient } from "@ai-game-assets/phaser";
+
+async function loadAssetsManifest(): Promise<AiAssetManifest> {
+  if (import.meta.env.DEV) {
+    try {
+      return await new AiAssetDebugClient("http://127.0.0.1:3977").getManifest();
+    } catch (error) {
+      console.warn("Falling back to bundled AI asset manifest.", error);
+    }
+  }
+
+  return (await import("./assets.js")).assets;
+}
+```
+
+Then pass the loaded manifest into your game scene instead of importing `assets.ts` from that scene. That keeps source-code promotion available without forcing a dev-page refresh.
 
 ## Production Builds
 

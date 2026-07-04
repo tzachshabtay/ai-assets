@@ -31,7 +31,12 @@ export type {
 
 export { ensureMissingAiAssetFirstDrafts } from "./first-drafts.js";
 
-export type { AiAssetRuntimeOptions } from "./runtime.js";
+export type {
+  AiAssetBindTextureOptions,
+  AiAssetRuntimeDesignerCallbacks,
+  AiAssetRuntimeOptions,
+  AiAssetTextureBinding
+} from "./runtime.js";
 
 export { AiAssetRuntime } from "./runtime.js";
 
