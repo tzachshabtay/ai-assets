@@ -13,22 +13,45 @@ const targetId = displayTargetId();
 let manifest: AiAssetManifest;
 
 async function boot(): Promise<void> {
-  manifest = await debugClient.getManifest();
+  const loaded = await loadAssetsManifest();
+  manifest = loaded.manifest;
   startGame(manifest, {
+    assetBaseUrl: loaded.assetBaseUrl,
     targetId,
     onManifestUpdated: (updatedManifest: AiAssetManifest) => {
       manifest = updatedManifest;
     },
-    installDesigner: (designerOptions) => {
-      installAiAssetDesigner({
-        ...designerOptions,
-        client: debugClient,
-        assetIds: designerAssetIds,
-        targetId,
-        previewDisplaySize: designerPreviewDisplaySize
-      });
-    }
+    installDesigner: loaded.debugClient
+      ? (designerOptions) => {
+          installAiAssetDesigner({
+            ...designerOptions,
+            client: loaded.debugClient,
+            assetIds: designerAssetIds,
+            targetId,
+            previewDisplaySize: designerPreviewDisplaySize
+          });
+        }
+      : undefined
   });
+}
+
+async function loadAssetsManifest(): Promise<{
+  manifest: AiAssetManifest;
+  debugClient?: AiAssetDebugClient;
+  assetBaseUrl?: string;
+}> {
+  try {
+    return {
+      manifest: await debugClient.getManifest(),
+      debugClient,
+      assetBaseUrl: assetApi
+    };
+  } catch (error) {
+    console.warn("Falling back to bundled AI asset manifest.", error);
+    return {
+      manifest: (await import("./assets.js")).assets
+    };
+  }
 }
 
 function errorMessage(error: unknown): string {

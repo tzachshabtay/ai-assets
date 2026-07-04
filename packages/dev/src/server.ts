@@ -726,6 +726,7 @@ async function serveGeneratedAsset(
   response.writeHead(200, {
     ...accessControlHeaders(),
     "Content-Type": contentTypeForFile(filePath),
+    "Content-Length": String(file.byteLength),
     "Cache-Control": "no-cache"
   });
   response.end(headOnly ? undefined : file);

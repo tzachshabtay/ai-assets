@@ -115,6 +115,7 @@ export function startGame(
         baseUrl: options.assetBaseUrl,
         targetId: options.targetId
       });
+      const designerCallbacks = this.aiRuntime.designerCallbacks();
       this.animations = new DemoAnimationController(this, this.aiRuntime, assetManifest);
       this.audio = new DemoAudioController(
         this,
@@ -147,6 +148,9 @@ export function startGame(
         gameSize.height / 2,
         this.aiRuntime.key("background.space")
       );
+      this.aiRuntime.bindTexture(this.background, "background.space", {
+        setInitialTexture: false
+      });
       this.background.setDisplaySize(gameSize.width, gameSize.height).setDepth(-90);
       this.starAnimationKeys = this.animations.starAnimationKeys();
       this.spawnStars();
@@ -164,7 +168,7 @@ export function startGame(
       });
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
-        assetManifest.assets[assetId] = asset;
+        designerCallbacks.onPreview(assetId, textureKey, asset);
         this.pixelCollision.invalidateTexture(textureKey);
 
         if (isRuntimeAudioAsset(asset)) {
@@ -178,7 +182,6 @@ export function startGame(
         }
 
         if (this.isBackgroundAsset(assetId) && this.background) {
-          this.background.setTexture(textureKey);
           this.background.setDisplaySize(gameSize.width, gameSize.height);
         }
 
@@ -235,8 +238,8 @@ export function startGame(
         scene: this,
         manifest: assetManifest,
         onManifestUpdated: (updatedManifest) => {
+          designerCallbacks.onManifestUpdated(updatedManifest);
           options.onManifestUpdated?.(updatedManifest);
-          Object.assign(assetManifest.assets, updatedManifest.assets);
         },
         onPreview: (assetId, textureKey, asset) => {
           this.applyAssetTexture?.(assetId, textureKey, asset);

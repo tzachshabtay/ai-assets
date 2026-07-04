@@ -34,7 +34,7 @@ npm run dev --workspace @ai-game-assets/demo-space-invaders
 
 Open the URL printed by the dev server. The default ports are `4177` for the game and `3977` for the asset API, but the server automatically moves to available ports when either port is busy.
 
-The dev entry point fetches the manifest from the local asset API, starts the Phaser game, and installs the designer overlay. Production entry points import a generated static manifest and do not install the designer.
+The dev entry point fetches the manifest from the local asset API, loads asset files through that same API, starts the Phaser game, and installs the designer overlay. `src/assets.ts` is generated for fallback and production-style builds, but the live dev server does not rewrite it on promote. Production entry points import a generated static manifest and do not install the designer.
 
 ## Environment
 

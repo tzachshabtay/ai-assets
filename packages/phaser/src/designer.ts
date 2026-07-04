@@ -240,12 +240,16 @@ export function installAiAssetDesigner(
     elements.frameCountField.hidden = asset.kind === "image" || !asset.frameGrid;
     elements.versionLabel.textContent = `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
     elements.currentImage.src = activeVersionSource;
-    renderAudioPlayer({
-      container: elements.currentAudio,
-      src: activeVersionSource,
-      label: readableAssetName(assetId),
-      playback: activeVersion?.audioPlayback
-    });
+    if (isAudio) {
+      renderAudioPlayer({
+        container: elements.currentAudio,
+        src: activeVersionSource,
+        label: readableAssetName(assetId),
+        playback: activeVersion?.audioPlayback
+      });
+    } else {
+      elements.currentAudio.innerHTML = "";
+    }
     elements.currentImage.alt = `${readableAssetName(assetId)} active version`;
     elements.currentPreview.setAttribute(
       "aria-label",
@@ -840,7 +844,7 @@ export function installAiAssetDesigner(
         if (promotedVersion?.file) {
           (options.onAssetReady ?? options.onPreview)(
             selectedTargetAssetId,
-            promotedVersion.file,
+            resolveAssetUrl(promotedVersion.file),
             promotedAsset
           );
         }
