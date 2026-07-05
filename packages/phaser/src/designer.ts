@@ -10,7 +10,11 @@ import type {
   AiAssetGenerationSettings,
   AiAssetManifest
 } from "@ai-game-assets/core";
-import { resolveTargetAssetId } from "@ai-game-assets/core";
+import {
+  linkedAnimationAssetIds,
+  resolveTargetAssetId,
+  topLevelAiAssetIds
+} from "@ai-game-assets/core";
 import {
   AiAssetDebugClient,
   type DebugStyleGuideDraft,
@@ -58,6 +62,7 @@ export type AiAssetDesignerOptions = {
   client?: AiAssetDebugClient;
   autoFirstDrafts?: boolean;
   assetIds?: string[];
+  showLinkedAnimationAssets?: boolean;
   title?: string;
   optionCount?: number;
   targetId?: string;
@@ -132,7 +137,8 @@ export function installAiAssetDesigner(
   const client = options.client ?? new AiAssetDebugClient();
   const resolveAssetUrl = (file: string) => client.assetUrl(file);
   let manifest = options.manifest;
-  let selectedAssetId = options.assetIds?.[0] ?? Object.keys(manifest.assets)[0];
+  const visibleAssetIds = () => visibleDesignerAssetIds(manifest, options);
+  let selectedAssetId = visibleAssetIds()[0] ?? Object.keys(manifest.assets)[0];
   let selectedTargetId = options.targetId;
   let selectedTargetAssetId = selectedAssetId;
   let selectedOption: GeneratedDebugOption | undefined;
@@ -155,7 +161,10 @@ export function installAiAssetDesigner(
 
   let elements;
   try {
-    elements = createDesignerElements(options, manifest, selectedAssetId);
+    elements = createDesignerElements({
+      ...options,
+      assetIds: visibleAssetIds()
+    }, manifest, selectedAssetId);
   } catch (error) {
     console.error("AI asset designer failed to create UI elements.", error);
     throw error;
@@ -400,7 +409,7 @@ export function installAiAssetDesigner(
       container: elements.assetBrowser,
       manifest,
       selectedAssetId,
-      assetIds: options.assetIds,
+      assetIds: visibleAssetIds(),
       onSelect(assetId) {
         selectedAssetId = assetId;
         syncAsset(selectedAssetId);
@@ -1126,7 +1135,7 @@ export function installAiAssetDesigner(
       scene: options.scene,
       manifest,
       client,
-      assetIds: options.assetIds,
+      assetIds: visibleAssetIds(),
       continueOnError: true,
       onManifestUpdated: (updatedManifest) => {
         manifest = updatedManifest;
@@ -1163,4 +1172,22 @@ export function installAiAssetDesigner(
       elements.root.remove();
     }
   };
+}
+
+function visibleDesignerAssetIds(
+  manifest: AiAssetManifest,
+  options: AiAssetDesignerOptions
+): string[] {
+  const configuredAssetIds = options.assetIds
+    ? options.assetIds.filter((assetId) => Boolean(manifest.assets[assetId]))
+    : topLevelAiAssetIds(manifest);
+
+  if (options.showLinkedAnimationAssets) {
+    return configuredAssetIds;
+  }
+
+  const linkedAssetIds = new Set(linkedAnimationAssetIds(manifest));
+  const visibleAssetIds = configuredAssetIds.filter((assetId) => !linkedAssetIds.has(assetId));
+
+  return visibleAssetIds.length > 0 ? visibleAssetIds : configuredAssetIds;
 }

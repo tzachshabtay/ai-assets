@@ -127,6 +127,23 @@ class GameScene extends Phaser.Scene {
 }
 ```
 
+`loadAiAssets` loads top-level graphical assets and expands their `linkedAnimationAssets` automatically. For games that spawn assets dynamically, use `loadAiAssetSet` with the root ids you may create at runtime; linked animation assets are included by default:
+
+```ts
+import { topLevelAiAssetIds } from "@ai-game-assets/core";
+import { loadAiAssetSet } from "@ai-game-assets/phaser";
+
+preload() {
+  loadAiAssetSet(this, assets, [
+    ...topLevelAiAssetIds(assets),
+    "enemy.monkey",
+    "enemy.snake"
+  ]);
+}
+```
+
+Linked animation assets such as `enemy.monkey.idle` are implementation details of the parent asset. The in-game designer hides them from the top-level asset browser by default and exposes them through the parent asset's animation selector. Pass `showLinkedAnimationAssets: true` to the designer only when you intentionally want those child assets listed as standalone entries.
+
 `bindTexture` records the relationship between a Phaser image/sprite and an AI asset id. When the designer previews a new option, promotes a generated asset, or creates a first draft, the runtime can update bound objects automatically.
 
 ```ts

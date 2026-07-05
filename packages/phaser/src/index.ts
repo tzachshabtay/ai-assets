@@ -1,9 +1,11 @@
 export type {
+  LoadAiAssetSetOptions,
   LoadAiAssetOptions
 } from "./loader.js";
 
 export {
   loadAiAsset,
+  loadAiAssetSet,
   loadAiAudioAsset,
   loadAiAudioAssets,
   loadAiAssets

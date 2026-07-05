@@ -1,6 +1,9 @@
 import {
+  expandAiAssetIds,
   resolveAiAsset,
   resolveTargetAssetId,
+  topLevelAiAssetIds,
+  type ExpandAiAssetIdsOptions,
   type AiAssetManifest,
   type AiAssetSelection,
   type ResolvedAiAsset
@@ -15,6 +18,8 @@ export type LoadAiAssetOptions = {
   versionName?: string;
   targetId?: string;
 };
+
+export type LoadAiAssetSetOptions = LoadAiAssetOptions & ExpandAiAssetIdsOptions;
 
 export function loadAiAsset(
   scene: PhaserSceneLike,
@@ -179,13 +184,21 @@ export function loadAiAssets(
   manifest: AiAssetManifest,
   options: LoadAiAssetOptions = {}
 ): ResolvedAiAsset[] {
-  const targetVariantAssetIds = new Set(
-    Object.values(manifest.targets ?? {}).flatMap((target) => Object.values(target.variants))
-  );
+  return loadAiAssetSet(scene, manifest, topLevelAiAssetIds(manifest), options);
+}
 
-  return Object.values(manifest.assets)
-    .filter((asset) => !targetVariantAssetIds.has(asset.id))
-    .filter((asset) => asset.kind !== "collection" && !isAudioLikeAsset(asset.kind))
+export function loadAiAssetSet(
+  scene: PhaserSceneLike,
+  manifest: AiAssetManifest,
+  assetIds: string[],
+  options: LoadAiAssetSetOptions = {}
+): ResolvedAiAsset[] {
+  return expandAiAssetIds(manifest, assetIds, {
+    includeLinkedAnimations: options.includeLinkedAnimations,
+    targetId: options.targetId
+  })
+    .map((assetId) => manifest.assets[assetId])
+    .filter((asset) => asset && asset.kind !== "collection" && !isAudioLikeAsset(asset.kind))
     .map((asset) => loadAiAsset(scene, manifest, asset.id, options));
 }
 

@@ -8,6 +8,15 @@ import type {
   ResolvedAiAsset
 } from "./types.js";
 
+export type ExpandAiAssetIdsOptions = {
+  includeLinkedAnimations?: boolean;
+  targetId?: string;
+};
+
+export type TopLevelAiAssetIdsOptions = {
+  includeTargetVariants?: boolean;
+};
+
 export function defineAiAsset(asset: AiAssetDefinition): AiAssetDefinition {
   assertAsset(asset);
   return asset;
@@ -171,6 +180,69 @@ export function resolveTargetAssetId(
   return target.variants[assetId] ?? assetId;
 }
 
+export function linkedAnimationAssetIds(
+  manifest: AiAssetManifest,
+  assetIds: string[] = Object.keys(manifest.assets),
+  options: Pick<ExpandAiAssetIdsOptions, "targetId"> = {}
+): string[] {
+  const linkedIds = new Set<string>();
+
+  for (const assetId of assetIds) {
+    collectLinkedAnimationAssetIds(manifest, assetId, linkedIds, new Set(), options.targetId);
+  }
+
+  return [...linkedIds];
+}
+
+export function expandAiAssetIds(
+  manifest: AiAssetManifest,
+  assetIds: string[],
+  options: ExpandAiAssetIdsOptions = {}
+): string[] {
+  const includeLinkedAnimations = options.includeLinkedAnimations ?? true;
+  const expandedIds: string[] = [];
+  const seen = new Set<string>();
+
+  const add = (assetId: string) => {
+    const resolvedAssetId = resolveTargetAssetId(manifest, assetId, options.targetId);
+    if (seen.has(resolvedAssetId)) return;
+
+    const asset = manifest.assets[resolvedAssetId];
+    if (!asset) return;
+
+    seen.add(resolvedAssetId);
+    expandedIds.push(resolvedAssetId);
+
+    if (!includeLinkedAnimations) return;
+
+    for (const sourceAsset of linkedAnimationSourceAssets(manifest, assetId, resolvedAssetId)) {
+      for (const linkedAnimation of Object.values(sourceAsset.linkedAnimationAssets ?? {})) {
+        add(linkedAnimation.assetId);
+      }
+    }
+  };
+
+  for (const assetId of assetIds) {
+    add(assetId);
+  }
+
+  return expandedIds;
+}
+
+export function topLevelAiAssetIds(
+  manifest: AiAssetManifest,
+  options: TopLevelAiAssetIdsOptions = {}
+): string[] {
+  const targetVariantAssetIds = options.includeTargetVariants
+    ? new Set<string>()
+    : new Set(Object.values(manifest.targets ?? {}).flatMap((target) => Object.values(target.variants)));
+  const linkedIds = new Set(linkedAnimationAssetIds(manifest));
+
+  return Object.keys(manifest.assets)
+    .filter((assetId) => !targetVariantAssetIds.has(assetId))
+    .filter((assetId) => !linkedIds.has(assetId));
+}
+
 export function getActiveVersion(asset: AiAssetDefinition): AiAssetVersion {
   const version = asset.versions[asset.activeVersion];
 
@@ -195,6 +267,53 @@ export function withActiveVersion(
     ...asset,
     activeVersion
   };
+}
+
+function collectLinkedAnimationAssetIds(
+  manifest: AiAssetManifest,
+  assetId: string,
+  linkedIds: Set<string>,
+  visiting: Set<string>,
+  targetId?: string
+): void {
+  const resolvedAssetId = resolveTargetAssetId(manifest, assetId, targetId);
+  if (visiting.has(resolvedAssetId)) return;
+
+  const asset = manifest.assets[resolvedAssetId];
+  if (!asset) return;
+
+  visiting.add(resolvedAssetId);
+
+  for (const sourceAsset of linkedAnimationSourceAssets(manifest, assetId, resolvedAssetId)) {
+    for (const linkedAnimation of Object.values(sourceAsset.linkedAnimationAssets ?? {})) {
+      const linkedAssetId = resolveTargetAssetId(manifest, linkedAnimation.assetId, targetId);
+      if (manifest.assets[linkedAssetId]) {
+        linkedIds.add(linkedAssetId);
+        collectLinkedAnimationAssetIds(manifest, linkedAnimation.assetId, linkedIds, visiting, targetId);
+      }
+    }
+  }
+
+  visiting.delete(resolvedAssetId);
+}
+
+function linkedAnimationSourceAssets(
+  manifest: AiAssetManifest,
+  assetId: string,
+  resolvedAssetId: string
+): AiAssetDefinition[] {
+  const sources: AiAssetDefinition[] = [];
+  const logicalAsset = manifest.assets[assetId];
+  const resolvedAsset = manifest.assets[resolvedAssetId];
+
+  if (logicalAsset) {
+    sources.push(logicalAsset);
+  }
+  if (resolvedAsset && resolvedAsset !== logicalAsset) {
+    sources.push(resolvedAsset);
+  }
+
+  return sources;
 }
 
 function assertVersion(

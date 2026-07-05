@@ -1,9 +1,9 @@
 import Phaser from "phaser";
 import {
   AiAssetRuntime,
-  loadAiAssets,
+  loadAiAssetSet,
 } from "@ai-game-assets/phaser";
-import type { AiAssetDefinition, AiAssetManifest } from "@ai-game-assets/core";
+import { topLevelAiAssetIds, type AiAssetDefinition, type AiAssetManifest } from "@ai-game-assets/core";
 import {
   alienLaserSfxAssetId,
   gameOverSfxAssetId,
@@ -104,7 +104,7 @@ export function startGame(
     }
 
     preload() {
-      loadAiAssets(this, assetManifest, {
+      loadAiAssetSet(this, assetManifest, topLevelAiAssetIds(assetManifest), {
         baseUrl: options.assetBaseUrl,
         targetId: options.targetId
       });

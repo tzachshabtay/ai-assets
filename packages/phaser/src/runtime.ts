@@ -40,6 +40,7 @@ export class AiAssetRuntime {
   readonly baseUrl?: string;
   readonly targetId?: string;
   private readonly textureBindings = new Set<StoredTextureBinding>();
+  private readonly warnedMissingTextureKeys = new Set<string>();
 
   constructor(
     scene: PhaserSceneLike,
@@ -71,7 +72,9 @@ export class AiAssetRuntime {
   }
 
   setTexture(target: PhaserImageLike, selection: AiAssetSelection | string): void {
-    target.setTexture(this.key(selection));
+    const key = this.key(selection);
+    this.warnIfMissingTexture(selection, key);
+    target.setTexture(key);
   }
 
   bindTexture(
@@ -168,6 +171,20 @@ export class AiAssetRuntime {
   private resolveAssetId(selection: AiAssetSelection | string): string {
     const withTarget = this.withTarget(selection);
     return resolveTargetAssetId(this.manifest, withTarget.assetId, withTarget.targetId);
+  }
+
+  private warnIfMissingTexture(selection: AiAssetSelection | string, key: string): void {
+    if (!this.scene.textures || this.scene.textures.exists(key)) return;
+    if (this.warnedMissingTextureKeys.has(key)) return;
+
+    this.warnedMissingTextureKeys.add(key);
+
+    const assetId = this.resolveAssetId(selection);
+    console.warn(
+      `AI asset texture "${key}" for "${assetId}" has not been loaded. ` +
+      `Preload the asset with loadAiAssetSet(scene, manifest, ["${assetId}"]) ` +
+      "or include it in loadAiAssets before binding it to a Phaser object."
+    );
   }
 
   private bindingMatchesAsset(binding: StoredTextureBinding, assetId: string): boolean {

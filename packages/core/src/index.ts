@@ -28,10 +28,18 @@ export {
   assertManifest,
   defineAiAsset,
   defineAiAssets,
+  expandAiAssetIds,
   getActiveVersion,
+  linkedAnimationAssetIds,
   resolveAiAsset,
   resolveTargetAssetId,
+  topLevelAiAssetIds,
   withActiveVersion
+} from "./manifest.js";
+
+export type {
+  ExpandAiAssetIdsOptions,
+  TopLevelAiAssetIdsOptions
 } from "./manifest.js";
 
 export {
