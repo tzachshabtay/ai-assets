@@ -1633,10 +1633,23 @@ export function hexByte(value: number): string {
 export function loadImageElement(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
+    if (shouldUseAnonymousCrossOrigin(src)) {
+      image.crossOrigin = "anonymous";
+    }
     image.onload = () => resolve(image);
     image.onerror = () => reject(new Error("Could not load image."));
     image.src = src;
   });
+}
+
+function shouldUseAnonymousCrossOrigin(src: string): boolean {
+  if (src.startsWith("data:") || src.startsWith("blob:")) return false;
+
+  try {
+    return new URL(src, window.location.href).origin !== window.location.origin;
+  } catch {
+    return false;
+  }
 }
 
 export function audioDurationFromDataUrl(src: string): Promise<number | undefined> {
@@ -2640,6 +2653,10 @@ export async function openAnimationEditor(options: {
   touchUpFrameButton.type = "button";
   touchUpFrameButton.textContent = "Touch up...";
 
+  const feedback = document.createElement("div");
+  feedback.className = "ai-game-assets-designer__modal-feedback";
+  feedback.hidden = true;
+
   const confirmButton = document.createElement("button");
   confirmButton.type = "button";
   confirmButton.textContent = "Confirm";
@@ -2648,7 +2665,7 @@ export async function openAnimationEditor(options: {
   actions.className = "ai-game-assets-designer__modal-actions";
   actions.append(uploadFrameButton, touchUpFrameButton, cancelButton, confirmButton);
 
-  card.append(title, stage, strip, fields, actions);
+  card.append(title, stage, strip, fields, feedback, actions);
   dialog.append(card);
   options.root.append(dialog);
 
@@ -2714,6 +2731,12 @@ export async function openAnimationEditor(options: {
   };
 
   const selectedFrameSlotsArray = () => [...selectedFrameSlots].sort((left, right) => left - right);
+
+  const setFeedback = (message: string, kind: "idle" | "busy" | "error" = "idle") => {
+    feedback.textContent = message;
+    feedback.dataset.kind = kind;
+    feedback.hidden = message.length === 0;
+  };
 
   const selectFrame = (index: number, event: MouseEvent) => {
     if (event.shiftKey) {
@@ -2898,36 +2921,47 @@ export async function openAnimationEditor(options: {
   touchUpFrameButton.addEventListener("click", async () => {
     if (touchUpFrameButton.disabled || selectedFrameSlots.size !== 1) return;
 
-    const [frameSlot] = selectedFrameSlotsArray();
-    const frame = baseAnimation.frames[frameSlot] ?? 0;
-    const frameSrc = await spriteSheetFrameToDataUrl({
-      src: spriteSheetSrc,
-      frameGrid,
-      frame
-    });
+    touchUpFrameButton.disabled = true;
+    setFeedback("Opening frame touch-up...", "busy");
 
-    await openFrameTouchUpEditor({
-      root: options.root,
-      asset: previewAsset(),
-      title: `${readableAssetName(options.assetId)} frame ${frameSlot + 1}`,
-      frameSrc,
-      spriteSheetSrc,
-      frameSlot,
-      frame,
-      displaySize: options.displaySize,
-      onSave: async (editedFrameSrc) => {
-        spriteSheetSrc = await replaceSpriteSheetFrames({
-          src: spriteSheetSrc,
-          uploadSrc: editedFrameSrc,
-          frameGrid,
-          frames: [frame]
-        });
-        editedSpriteSheetSrc = spriteSheetSrc;
-        renderStrip();
-        syncInputs();
-        restartPreview();
-      }
-    });
+    try {
+      const [frameSlot] = selectedFrameSlotsArray();
+      const frame = baseAnimation.frames[frameSlot] ?? 0;
+      const frameSrc = await spriteSheetFrameToDataUrl({
+        src: spriteSheetSrc,
+        frameGrid,
+        frame
+      });
+
+      await openFrameTouchUpEditor({
+        root: options.root,
+        asset: previewAsset(),
+        title: `${readableAssetName(options.assetId)} frame ${frameSlot + 1}`,
+        frameSrc,
+        spriteSheetSrc,
+        frameSlot,
+        frame,
+        displaySize: options.displaySize,
+        onSave: async (editedFrameSrc) => {
+          spriteSheetSrc = await replaceSpriteSheetFrames({
+            src: spriteSheetSrc,
+            uploadSrc: editedFrameSrc,
+            frameGrid,
+            frames: [frame]
+          });
+          editedSpriteSheetSrc = spriteSheetSrc;
+          renderStrip();
+          syncInputs();
+          restartPreview();
+        }
+      });
+      setFeedback("");
+    } catch (error) {
+      console.error("AI asset frame touch-up failed.", error);
+      setFeedback(`Could not open frame touch-up: ${errorMessage(error)}`, "error");
+    } finally {
+      syncInputs();
+    }
   });
 
   const close = () => {
@@ -3879,6 +3913,18 @@ export function ensureDesignerStyles(): void {
   position: relative;
   overflow: hidden;
   background: #0f1218;
+}
+.ai-game-assets-designer__modal-feedback {
+  min-height: 17px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: #9ca8ba;
+}
+.ai-game-assets-designer__modal-feedback[data-kind="busy"] {
+  color: #9ed7ff;
+}
+.ai-game-assets-designer__modal-feedback[data-kind="error"] {
+  color: #ffb4b4;
 }
 .ai-game-assets-designer__version-list {
   display: grid;
