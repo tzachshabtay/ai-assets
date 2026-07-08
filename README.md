@@ -160,6 +160,22 @@ installAiAssetDesigner({
 
 The Phaser package also includes helpers for loading audio, applying animation frame transforms, binding frame timing metadata to running animations, loading placeholders for missing graphics, and requesting first-draft generation from the dev server.
 
+For animation assets, prefer `AiAssetRuntime.playAnimation` when playing an AI asset on a Phaser sprite. It creates the Phaser animation if needed, plays the selected linked animation state, applies per-frame `delayMs`, and applies frame `offsetX`, `offsetY`, `scaleX`, `scaleY`, and `rotation` metadata by default:
+
+```ts
+const playback = aiRuntime.playAnimation(monkey, "enemy.monkey", "idle");
+
+// Explicit opt-out when the game wants to ignore designer-authored frame transforms.
+aiRuntime.playAnimation(monkey, "enemy.monkey", "idle", {
+  applyFrameTransforms: false
+});
+
+// Detach the frame transform handler if the object outlives this playback binding.
+playback.destroy();
+```
+
+`createAiAnimations` only registers Phaser animation frames and frame durations. If an animation contains offset, scale, or rotation metadata, `createAiAnimations` warns in development-style usage unless you pass `{ onFrameTransforms: "ignore" }`. Use that option only when you intentionally bind transforms yourself or intentionally ignore them.
+
 ## In-Game Designer
 
 `@ai-game-assets/phaser` includes a debug-only designer overlay. It is installed by the game, but the UI and behavior are library-provided.

@@ -39,6 +39,7 @@ export type PhaserTextureManagerLike = {
 
 export type PhaserAnimationsLike = {
   create(config: unknown): unknown;
+  exists?(key: string): boolean;
   remove?(key: string): unknown;
   generateFrameNumbers(
     key: string,

@@ -2,7 +2,6 @@ import Phaser from "phaser";
 import {
   AiAssetRuntime,
   applyAiAnimationFrameTransform,
-  bindAiAnimationFrameTransforms,
   createAiAnimations,
 } from "@ai-game-assets/phaser";
 import type { AiAssetAnimation, AiAssetDefinition, AiAssetManifest } from "@ai-game-assets/core";
@@ -36,15 +35,15 @@ export class DemoAnimationController {
   ) {}
 
   initialize(): void {
-    createAiAnimations(this.scene, this.assetManifest, "hero.ship.idle");
-    createAiAnimations(this.scene, this.assetManifest, "hero.ship.moving-left");
-    createAiAnimations(this.scene, this.assetManifest, "hero.ship.shooting");
-    createAiAnimations(this.scene, this.assetManifest, "hero.ship.hit");
-    createAiAnimations(this.scene, this.assetManifest, "hero.ship.explosion");
-    for (const assetId of starAnimationAssetIds) createAiAnimations(this.scene, this.assetManifest, assetId);
-    for (const assetId of laserAnimationAssetIds) createAiAnimations(this.scene, this.assetManifest, assetId);
-    for (const assetId of uiAnimationAssetIds) createAiAnimations(this.scene, this.assetManifest, assetId);
-    for (const assetId of invaderAnimationAssetIds) createAiAnimations(this.scene, this.assetManifest, assetId);
+    this.createAnimation("hero.ship.idle");
+    this.createAnimation("hero.ship.moving-left");
+    this.createAnimation("hero.ship.shooting");
+    this.createAnimation("hero.ship.hit");
+    this.createAnimation("hero.ship.explosion");
+    for (const assetId of starAnimationAssetIds) this.createAnimation(assetId);
+    for (const assetId of laserAnimationAssetIds) this.createAnimation(assetId);
+    for (const assetId of uiAnimationAssetIds) this.createAnimation(assetId);
+    for (const assetId of invaderAnimationAssetIds) this.createAnimation(assetId);
 
     this.registerHeroAnimationSize(this.assetManifest.assets["hero.ship.idle"]);
     this.registerHeroAnimationSize(this.assetManifest.assets["hero.ship.moving-left"]);
@@ -54,6 +53,12 @@ export class DemoAnimationController {
     for (const assetId of invaderAnimationAssetIds) {
       this.registerInvaderAnimationSize(this.assetManifest.assets[assetId]);
     }
+  }
+
+  private createAnimation(assetId: string): void {
+    createAiAnimations(this.scene, this.assetManifest, assetId, {
+      onFrameTransforms: "ignore"
+    });
   }
 
   recreateHeroAnimations(
@@ -186,13 +191,10 @@ export class DemoAnimationController {
     const size = this.displaySizeForAsset(asset);
     laser.setDisplaySize(size.width, size.height);
     laser.setDepth(8);
-    laser.play(animationKey);
-    bindAiAnimationFrameTransforms(
-      laser,
-      this.animationForKey(animationKey),
-      size,
-      { eventName: Phaser.Animations.Events.ANIMATION_UPDATE }
-    );
+    this.runtime.playAnimation(laser, animationKey, undefined, {
+      frameTransform: { eventName: Phaser.Animations.Events.ANIMATION_UPDATE },
+      frameTransformSize: size
+    });
 
     return laser;
   }
@@ -201,10 +203,11 @@ export class DemoAnimationController {
     const size = laserHitDisplaySizes[animationKey] ??
       this.displaySizeForAsset(this.assetManifest.assets[animationKey]);
     const hit = this.scene.add.sprite(x, y, this.runtime.key(animationKey));
+    let playback: { destroy(): void } | undefined;
     const fallbackDestroy = this.scene.time.delayedCall(
       this.animationDuration(animationKey) + 80,
       () => {
-        transformBinding.detach();
+        playback?.destroy();
         hit.destroy();
       }
     );
@@ -212,19 +215,22 @@ export class DemoAnimationController {
     hit.setDisplaySize(size.width, size.height);
     hit.setOrigin(0.5, animationKey === "laser.red.hit" ? 1 : 0);
     hit.setDepth(20);
-    hit.play(animationKey, true);
-    const transformBinding = bindAiAnimationFrameTransforms(
+    playback = this.runtime.playAnimation(
       hit,
-      this.animationForKey(animationKey),
-      size,
+      animationKey,
+      undefined,
       {
-        eventName: Phaser.Animations.Events.ANIMATION_UPDATE,
-        originY: animationKey === "laser.red.hit" ? 1 : 0
+        forceRestart: true,
+        frameTransform: {
+          eventName: Phaser.Animations.Events.ANIMATION_UPDATE,
+          originY: animationKey === "laser.red.hit" ? 1 : 0
+        },
+        frameTransformSize: size
       }
     );
     hit.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
       fallbackDestroy.remove(false);
-      transformBinding.detach();
+      playback?.destroy();
       hit.destroy();
     });
   }

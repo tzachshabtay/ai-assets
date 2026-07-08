@@ -1,10 +1,24 @@
 import {
   resolveAiAsset,
   resolveTargetAssetId,
+  type AiAssetAnimation,
   type AiAssetDefinition,
   type AiAssetManifest,
   type AiAssetSelection
 } from "@ai-game-assets/core";
+import {
+  aiAssetAnimationSize,
+  animationDurationMs,
+  animationHasFrameTransforms,
+  createAiAnimations
+} from "./animations.js";
+import {
+  bindAiAnimationFrameTransforms,
+  type AiAssetFrameTransformBinding,
+  type AiAssetFrameTransformOptions,
+  type AiAssetFrameTransformSize,
+  type AiAssetFrameTransformTarget
+} from "./frame-transforms.js";
 import { aiTextureKey } from "./keys.js";
 import { aiAssetPlaceholderDataUrl } from "./placeholder.js";
 import type { PhaserImageLike, PhaserSceneLike } from "./phaser-types.js";
@@ -22,6 +36,33 @@ export type AiAssetTextureBinding = {
 
 export type AiAssetBindTextureOptions = {
   setInitialTexture?: boolean;
+};
+
+export type AiAssetAnimationPlaybackTarget = PhaserImageLike & {
+  play(key: string | { key: string; randomFrame?: boolean }, ignoreIfPlaying?: boolean): unknown;
+  setDisplaySize?(width: number, height: number): unknown;
+  setOrigin?(x: number, y: number): unknown;
+  setRotation?(radians: number): unknown;
+  on?(eventName: string, handler: (...args: unknown[]) => void): unknown;
+  off?(eventName: string, handler: (...args: unknown[]) => void): unknown;
+  once?(eventName: string, handler: (...args: unknown[]) => void): unknown;
+};
+
+export type AiAssetPlayAnimationOptions = {
+  applyFrameTransforms?: boolean;
+  forceRestart?: boolean;
+  randomFrame?: boolean;
+  frameTransform?: AiAssetFrameTransformOptions;
+  frameTransformSize?: AiAssetFrameTransformSize;
+};
+
+export type AiAssetAnimationPlayback = {
+  readonly assetId: string;
+  readonly animation?: AiAssetAnimation;
+  readonly animationKey?: string;
+  readonly durationMs: number;
+  readonly frameTransforms?: AiAssetFrameTransformBinding;
+  destroy(): void;
 };
 
 export type AiAssetRuntimeDesignerCallbacks = {
@@ -100,6 +141,53 @@ export class AiAssetRuntime {
     return binding;
   }
 
+  playAnimation(
+    target: AiAssetAnimationPlaybackTarget,
+    selection: AiAssetSelection | string,
+    stateOrAnimationKey?: string,
+    options: AiAssetPlayAnimationOptions = {}
+  ): AiAssetAnimationPlayback {
+    const animationSelection = this.resolveAnimationSelection(selection, stateOrAnimationKey);
+    const asset = this.manifest.assets[animationSelection.assetId];
+    const animation = this.animationForState(asset, stateOrAnimationKey);
+
+    if (!animation) {
+      this.setTexture(target, animationSelection.selection);
+
+      return {
+        assetId: animationSelection.assetId,
+        durationMs: 0,
+        destroy() {}
+      };
+    }
+
+    if (!this.scene.anims?.exists?.(animation.key)) {
+      createAiAnimations(this.scene, this.manifest, animationSelection.selection, {
+        onFrameTransforms: "ignore"
+      });
+    }
+
+    target.play(
+      options.randomFrame
+        ? { key: animation.key, randomFrame: true }
+        : animation.key,
+      options.forceRestart ? false : true
+    );
+
+    const frameTransforms = this.bindAnimationFrameTransforms(target, asset, animation, options);
+
+    return {
+      assetId: animationSelection.assetId,
+      animation,
+      animationKey: animation.key,
+      durationMs: animationDurationMs(animation),
+      frameTransforms,
+      destroy() {
+        frameTransforms?.detach();
+      }
+    };
+  }
+
   applyAssetTexture(assetId: string, textureKey: string, asset: AiAssetDefinition): void {
     this.manifest.assets[assetId] = asset;
 
@@ -173,6 +261,69 @@ export class AiAssetRuntime {
     return resolveTargetAssetId(this.manifest, withTarget.assetId, withTarget.targetId);
   }
 
+  private resolveAnimationSelection(
+    selection: AiAssetSelection | string,
+    stateOrAnimationKey: string | undefined
+  ): { assetId: string; selection: AiAssetSelection } {
+    const baseSelection = this.withTarget(selection);
+    const baseAssetId = resolveTargetAssetId(this.manifest, baseSelection.assetId, baseSelection.targetId);
+    const baseAsset = this.manifest.assets[baseAssetId];
+    const linkedAssetId = stateOrAnimationKey
+      ? baseAsset?.linkedAnimationAssets?.[stateOrAnimationKey]?.assetId
+      : undefined;
+    const animationAssetSelection = {
+      assetId: linkedAssetId ?? baseSelection.assetId,
+      targetId: baseSelection.targetId
+    };
+
+    return {
+      assetId: resolveTargetAssetId(
+        this.manifest,
+        animationAssetSelection.assetId,
+        animationAssetSelection.targetId
+      ),
+      selection: animationAssetSelection
+    };
+  }
+
+  private animationForState(
+    asset: AiAssetDefinition | undefined,
+    stateOrAnimationKey: string | undefined
+  ): AiAssetAnimation | undefined {
+    return stateOrAnimationKey
+      ? asset?.animations?.find((animation) => animation.key === stateOrAnimationKey) ?? asset?.animations?.[0]
+      : asset?.animations?.[0];
+  }
+
+  private bindAnimationFrameTransforms(
+    target: AiAssetAnimationPlaybackTarget,
+    asset: AiAssetDefinition | undefined,
+    animation: AiAssetAnimation,
+    options: AiAssetPlayAnimationOptions
+  ): AiAssetFrameTransformBinding | undefined {
+    if (options.applyFrameTransforms === false) return undefined;
+    if (!animationHasFrameTransforms(animation)) return undefined;
+
+    if (!isFrameTransformTarget(target)) {
+      console.warn(
+        `AI asset animation "${animation.key}" includes frame transform metadata, ` +
+        "but the playback target does not expose setDisplaySize, setOrigin, and setRotation. " +
+        "Pass { applyFrameTransforms: false } to playAnimation to silence this warning."
+      );
+      return undefined;
+    }
+
+    const binding = bindAiAnimationFrameTransforms(
+      target,
+      animation,
+      options.frameTransformSize ?? aiAssetAnimationSize(asset),
+      options.frameTransform
+    );
+    target.once?.("destroy", () => binding.detach());
+
+    return binding;
+  }
+
   private warnIfMissingTexture(selection: AiAssetSelection | string, key: string): void {
     if (!this.scene.textures || this.scene.textures.exists(key)) return;
     if (this.warnedMissingTextureKeys.has(key)) return;
@@ -201,6 +352,16 @@ export class AiAssetRuntime {
 
 function isTextureAsset(asset: AiAssetDefinition): boolean {
   return asset.kind === "image" || asset.kind === "spritesheet" || asset.kind === "animation";
+}
+
+function isFrameTransformTarget(
+  target: AiAssetAnimationPlaybackTarget
+): target is AiAssetAnimationPlaybackTarget & AiAssetFrameTransformTarget {
+  return (
+    typeof target.setDisplaySize === "function" &&
+    typeof target.setOrigin === "function" &&
+    typeof target.setRotation === "function"
+  );
 }
 
 function syncRecord<T>(target: Record<string, T>, source: Record<string, T>): void {

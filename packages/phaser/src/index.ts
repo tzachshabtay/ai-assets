@@ -11,7 +11,17 @@ export {
   loadAiAssets
 } from "./loader.js";
 
-export { createAiAnimations } from "./animations.js";
+export {
+  aiAssetAnimationSize,
+  animationDurationMs,
+  animationHasFrameTransforms,
+  createAiAnimations
+} from "./animations.js";
+
+export type {
+  CreateAiAnimationsFrameTransformHandling,
+  CreateAiAnimationsOptions
+} from "./animations.js";
 
 export type {
   AiAssetFrameTransformBinding,
@@ -34,7 +44,10 @@ export type {
 export { ensureMissingAiAssetFirstDrafts } from "./first-drafts.js";
 
 export type {
+  AiAssetAnimationPlayback,
+  AiAssetAnimationPlaybackTarget,
   AiAssetBindTextureOptions,
+  AiAssetPlayAnimationOptions,
   AiAssetRuntimeDesignerCallbacks,
   AiAssetRuntimeOptions,
   AiAssetTextureBinding
