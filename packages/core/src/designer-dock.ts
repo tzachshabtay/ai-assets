@@ -272,6 +272,10 @@ function ensureDockStyles(document: Document): void {
 .ai-game-assets-in-game-designer-dock > .ai-game-assets-in-game-designer-dock__button:focus-visible {
   transform: translateY(-1px);
 }
+.ai-game-assets-in-game-designer-dock.is-panel-open > .ai-game-assets-in-game-designer-dock__button:hover,
+.ai-game-assets-in-game-designer-dock.is-panel-open > .ai-game-assets-in-game-designer-dock__button:focus-visible {
+  transform: none;
+}
 .ai-game-assets-in-game-designer-dock__panel {
   position: fixed !important;
   top: 64px !important;
