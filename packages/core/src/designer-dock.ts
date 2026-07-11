@@ -36,6 +36,7 @@ type DockState = {
   document: Document;
   root: HTMLDivElement;
   items: Map<string, DockItem>;
+  layoutAnimations: Map<HTMLButtonElement, Animation>;
   activeId?: string;
   nextSequence: number;
 };
@@ -143,6 +144,7 @@ function ensureDockState(document: Document): DockState {
     document,
     root,
     items: new Map(),
+    layoutAnimations: new Map(),
     nextSequence: 0
   };
   states.set(document, state);
@@ -153,6 +155,7 @@ function activateDockItem(state: DockState, activeId: string | undefined): void 
   if (activeId !== undefined && !state.items.has(activeId)) return;
 
   state.activeId = activeId;
+  setDockPanelOpenState(state, activeId !== undefined);
   const changed: DockItem[] = [];
 
   for (const item of state.items.values()) {
@@ -181,8 +184,11 @@ function removeDockItem(state: DockState, item: DockItem): void {
   const wasOpen = item.open;
   state.items.delete(item.id);
   if (state.activeId === item.id) state.activeId = undefined;
+  setDockPanelOpenState(state, state.activeId !== undefined);
 
   item.button.removeEventListener("click", item.onButtonClick);
+  state.layoutAnimations.get(item.button)?.cancel();
+  state.layoutAnimations.delete(item.button);
   item.button.classList.remove("ai-game-assets-in-game-designer-dock__button", "is-open");
   item.button.removeAttribute("aria-controls");
   item.button.setAttribute("aria-expanded", "false");
@@ -225,7 +231,15 @@ function ensureDockStyles(document: Document): void {
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+  max-width: calc(100vw - 28px);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: gap 160ms ease;
+}
+.ai-game-assets-in-game-designer-dock.is-panel-open {
+  flex-direction: row;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 .ai-game-assets-in-game-designer-dock > .ai-game-assets-in-game-designer-dock__button {
   box-sizing: border-box;
@@ -260,12 +274,12 @@ function ensureDockStyles(document: Document): void {
 }
 .ai-game-assets-in-game-designer-dock__panel {
   position: fixed !important;
-  top: 14px !important;
-  right: 124px !important;
+  top: 64px !important;
+  right: 14px !important;
   z-index: 2147483646 !important;
   display: block !important;
-  max-width: calc(100vw - 138px) !important;
-  max-height: calc(100vh - 28px) !important;
+  max-width: calc(100vw - 28px) !important;
+  max-height: calc(100vh - 78px) !important;
   margin: 0 !important;
 }
 .ai-game-assets-in-game-designer-dock__panel[hidden] {
@@ -273,6 +287,35 @@ function ensureDockStyles(document: Document): void {
 }
 `;
   document.head.append(style);
+}
+
+function setDockPanelOpenState(state: DockState, isOpen: boolean): void {
+  if (state.root.classList.contains("is-panel-open") === isOpen) return;
+
+  const buttons = [...state.items.values()].map((item) => item.button);
+  const previousRects = new Map(buttons.map((button) => [button, button.getBoundingClientRect()]));
+  state.root.classList.toggle("is-panel-open", isOpen);
+
+  if (state.document.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  for (const button of buttons) {
+    const previousRect = previousRects.get(button);
+    if (!previousRect) continue;
+    const nextRect = button.getBoundingClientRect();
+    const translateX = previousRect.left - nextRect.left;
+    const translateY = previousRect.top - nextRect.top;
+    if (translateX === 0 && translateY === 0) continue;
+
+    state.layoutAnimations.get(button)?.cancel();
+    const animation = button.animate(
+      [
+        { transform: `translate(${translateX}px, ${translateY}px)` },
+        { transform: "translate(0, 0)" }
+      ],
+      { duration: 180, easing: "cubic-bezier(0.22, 1, 0.36, 1)" }
+    );
+    state.layoutAnimations.set(button, animation);
+  }
 }
 
 function safeDomId(value: string): string {
