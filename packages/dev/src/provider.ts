@@ -424,8 +424,6 @@ function gameAssetPrompt(
       `Cell rectangles are: ${gridCellRectangles(request)}.`,
       `Frame centers must be at these cell centers: ${gridCellCenters(request)}.`,
       "Each grid cell must contain exactly one complete frame of the subject. Do not place a nested spritesheet, turnaround sheet, contact sheet, labels, thumbnails, or multiple mini-poses inside any single cell.",
-      "Use locked registration across every cell: keep the camera, subject origin, scale, and orientation identical unless the asset prompt explicitly requests that exact property to change.",
-      "If the prompt names any part of the sprite as still, static, locked, or unmoving, render that part at the same pixel coordinates and scale in every frame; animate only the explicitly requested parts.",
       "Keep the character centered at a consistent scale in every cell, leaving transparent padding inside the cell.",
       "The grid layout is mandatory even if the animation would look nicer in another arrangement."
     );
@@ -463,7 +461,7 @@ function gameAssetPrompt(
 
   if (context.variation) {
     lines.push(
-      `Variation seed: ${context.variation}. Use this seed to make this option visually distinct from sibling options without changing the requested animation behavior. Vary rendering details, palette accents, or explicitly requested secondary effects only; do not introduce extra motion, pose changes, timing changes, or camera movement. Preserve the asset brief, frame grid, transparency instructions, and same exact character identity.`,
+      `Variation seed: ${context.variation}. Use this seed to make this option visually distinct from sibling options, not a near-duplicate. Vary the animation timing, pose rhythm, secondary motion, and effect shape while preserving the asset brief, frame grid, transparency instructions, and same exact character identity.`,
       variationDirectionPromptLine(context.variationIndex ?? 0)
     );
   }
