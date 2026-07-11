@@ -1,4 +1,8 @@
-import type { AiAssetDimensions, AiAssetGenerationSettings } from "@ai-game-assets/core";
+import type {
+  AiAssetDimensions,
+  AiAssetFrameGrid,
+  AiAssetGenerationSettings
+} from "@ai-game-assets/core";
 import { PNG } from "pngjs";
 import type {
   GenerateAssetReference,
@@ -529,6 +533,223 @@ export function resizePngToDimensions(image: Uint8Array, dimensions: AiAssetDime
   return PNG.sync.write(target);
 }
 
+type SpriteFrameBounds = {
+  frame: number;
+  column: number;
+  row: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFrameGrid): Buffer {
+  const png = PNG.sync.read(Buffer.from(image));
+  const margin = frameGrid.margin ?? 0;
+  const spacing = frameGrid.spacing ?? 0;
+  const frameCount = Math.min(
+    frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows,
+    frameGrid.columns * frameGrid.rows
+  );
+  const frames = Array.from({ length: frameCount }, (_, frame) => {
+    const column = frame % frameGrid.columns;
+    const row = Math.floor(frame / frameGrid.columns);
+    const originX = margin + column * (frameGrid.frameWidth + spacing);
+    const originY = margin + row * (frameGrid.frameHeight + spacing);
+
+    return visibleSpriteFrameBounds(png, {
+      frame,
+      column,
+      row,
+      originX,
+      originY,
+      width: frameGrid.frameWidth,
+      height: frameGrid.frameHeight
+    });
+  }).filter((frame): frame is SpriteFrameBounds => frame !== undefined);
+
+  if (!frames.length) return Buffer.from(image);
+
+  const columnShifts = spriteFrameAxisShifts({
+    frames,
+    groupCount: frameGrid.columns,
+    frameSize: frameGrid.frameWidth,
+    group: (frame) => frame.column,
+    min: (frame) => frame.minX,
+    max: (frame) => frame.maxX
+  });
+  const rowShifts = spriteFrameAxisShifts({
+    frames,
+    groupCount: frameGrid.rows,
+    frameSize: frameGrid.frameHeight,
+    group: (frame) => frame.row,
+    min: (frame) => frame.minY,
+    max: (frame) => frame.maxY
+  });
+
+  if (columnShifts.every((shift) => shift === 0) && rowShifts.every((shift) => shift === 0)) {
+    return Buffer.from(image);
+  }
+
+  const source = Buffer.from(png.data);
+
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    const column = frame % frameGrid.columns;
+    const row = Math.floor(frame / frameGrid.columns);
+    const originX = margin + column * (frameGrid.frameWidth + spacing);
+    const originY = margin + row * (frameGrid.frameHeight + spacing);
+    const shiftX = columnShifts[column] ?? 0;
+    const shiftY = rowShifts[row] ?? 0;
+
+    if (
+      originX < 0 ||
+      originY < 0 ||
+      originX + frameGrid.frameWidth > png.width ||
+      originY + frameGrid.frameHeight > png.height
+    ) {
+      continue;
+    }
+
+    clearPngRect(png, originX, originY, frameGrid.frameWidth, frameGrid.frameHeight);
+    copyShiftedPngRect(png, source, {
+      originX,
+      originY,
+      width: frameGrid.frameWidth,
+      height: frameGrid.frameHeight,
+      shiftX,
+      shiftY
+    });
+  }
+
+  return PNG.sync.write(png);
+}
+
+function visibleSpriteFrameBounds(
+  png: PNG,
+  options: {
+    frame: number;
+    column: number;
+    row: number;
+    originX: number;
+    originY: number;
+    width: number;
+    height: number;
+  }
+): SpriteFrameBounds | undefined {
+  if (
+    options.originX < 0 ||
+    options.originY < 0 ||
+    options.originX + options.width > png.width ||
+    options.originY + options.height > png.height
+  ) {
+    return undefined;
+  }
+
+  let minX = options.width;
+  let minY = options.height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < options.height; y += 1) {
+    for (let x = 0; x < options.width; x += 1) {
+      const alpha = png.data[((options.originY + y) * png.width + options.originX + x) * 4 + 3] ?? 0;
+
+      if (alpha < 16) continue;
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) return undefined;
+
+  return {
+    frame: options.frame,
+    column: options.column,
+    row: options.row,
+    minX,
+    minY,
+    maxX,
+    maxY
+  };
+}
+
+function spriteFrameAxisShifts(options: {
+  frames: SpriteFrameBounds[];
+  groupCount: number;
+  frameSize: number;
+  group(frame: SpriteFrameBounds): number;
+  min(frame: SpriteFrameBounds): number;
+  max(frame: SpriteFrameBounds): number;
+}): number[] {
+  return Array.from({ length: options.groupCount }, (_, groupIndex) => {
+    const frames = options.frames.filter((frame) => options.group(frame) === groupIndex);
+
+    if (!frames.length) return 0;
+
+    const averageCenter = frames.reduce(
+      (total, frame) => total + (options.min(frame) + options.max(frame)) / 2,
+      0
+    ) / frames.length;
+    const desiredShift = Math.round((options.frameSize / 2) - averageCenter);
+    const minimumShift = Math.max(...frames.map((frame) => -options.min(frame)));
+    const maximumShift = Math.min(
+      ...frames.map((frame) => options.frameSize - 1 - options.max(frame))
+    );
+
+    return Math.min(maximumShift, Math.max(minimumShift, desiredShift));
+  });
+}
+
+function clearPngRect(png: PNG, x: number, y: number, width: number, height: number): void {
+  for (let localY = 0; localY < height; localY += 1) {
+    for (let localX = 0; localX < width; localX += 1) {
+      const offset = ((y + localY) * png.width + x + localX) * 4;
+      png.data[offset] = 0;
+      png.data[offset + 1] = 0;
+      png.data[offset + 2] = 0;
+      png.data[offset + 3] = 0;
+    }
+  }
+}
+
+function copyShiftedPngRect(
+  png: PNG,
+  source: Buffer,
+  options: {
+    originX: number;
+    originY: number;
+    width: number;
+    height: number;
+    shiftX: number;
+    shiftY: number;
+  }
+): void {
+  for (let y = 0; y < options.height; y += 1) {
+    const targetY = y + options.shiftY;
+
+    if (targetY < 0 || targetY >= options.height) continue;
+
+    for (let x = 0; x < options.width; x += 1) {
+      const targetX = x + options.shiftX;
+
+      if (targetX < 0 || targetX >= options.width) continue;
+
+      const sourceOffset = ((options.originY + y) * png.width + options.originX + x) * 4;
+      const targetOffset = (
+        (options.originY + targetY) * png.width + options.originX + targetX
+      ) * 4;
+
+      png.data[targetOffset] = source[sourceOffset] ?? 0;
+      png.data[targetOffset + 1] = source[sourceOffset + 1] ?? 0;
+      png.data[targetOffset + 2] = source[sourceOffset + 2] ?? 0;
+      png.data[targetOffset + 3] = source[sourceOffset + 3] ?? 0;
+    }
+  }
+}
+
 export function featherBackgroundEdges(
   png: PNG,
   transparent: Uint8Array,
@@ -735,4 +956,3 @@ export function alphaAt(png: PNG, index: number): number {
 export function setAlpha(png: PNG, index: number, alpha: number): void {
   png.data[index * 4 + 3] = alpha;
 }
-

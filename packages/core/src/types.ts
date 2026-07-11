@@ -66,6 +66,7 @@ export type AiAssetGenerationSettings = {
   quality?: AiAssetQuality;
   background?: AiAssetBackground;
   format?: AiAssetFormat;
+  frameAlignment?: "center" | "none";
   moderation?: "auto" | "low";
   referenceAssetIds?: string[];
 };

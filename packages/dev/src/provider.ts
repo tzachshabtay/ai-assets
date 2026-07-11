@@ -11,6 +11,7 @@ import type {
 import { randomUUID } from "node:crypto";
 
 import {
+  alignSpriteSheetFrames,
   hexColor,
   referenceLockPromptLines,
   removeChromaBackground,
@@ -107,6 +108,16 @@ export function createOpenAiImageProvider(
       const requestedBackground = resolveRequestedBackground(request, options);
       const background = normalizeBackgroundForModel(model, requestedBackground);
       const chromaKey = selectChromaKey(request);
+      const postprocessTransparency = shouldPostprocessTransparency(request, {
+        prompt,
+        model,
+        outputFormat,
+        requestedBackground
+      });
+      const frameAlignment =
+        request.settings?.frameAlignment ??
+        request.asset.settings?.frameAlignment ??
+        "center";
       const allReferences = [
         ...(request.references ?? []),
         ...(request.styleReferences ?? []).map((reference, index) => ({
@@ -159,17 +170,14 @@ export function createOpenAiImageProvider(
             throw new Error("OpenAI image generation response did not include b64_json.");
           }
           const image = Buffer.from(item.b64_json, "base64");
-          const processedImage = resizePngToDimensions(
-            shouldPostprocessTransparency(request, {
-              prompt,
-              model,
-              outputFormat,
-              requestedBackground
-            })
-              ? removeChromaBackground(image, chromaKey)
-              : image,
+          const resizedImage = resizePngToDimensions(
+            postprocessTransparency ? removeChromaBackground(image, chromaKey) : image,
             dimensions
           );
+          const processedImage =
+            postprocessTransparency && request.asset.frameGrid && frameAlignment === "center"
+              ? alignSpriteSheetFrames(resizedImage, request.asset.frameGrid)
+              : resizedImage;
 
           const option: GeneratedAssetOption = {
             image: processedImage,
@@ -184,7 +192,8 @@ export function createOpenAiImageProvider(
               ...request.settings,
               model,
               background,
-              format: outputFormat === "jpeg" ? "jpg" : outputFormat
+              format: outputFormat === "jpeg" ? "jpg" : outputFormat,
+              ...(postprocessTransparency && request.asset.frameGrid ? { frameAlignment } : {})
             }
           };
 

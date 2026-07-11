@@ -91,6 +91,10 @@ export const assets = defineAiAssets({
 
 For larger projects, keep assets as JSON files in folders and generate the TypeScript module during development or build.
 
+Transparent spritesheet generations are aligned to their declared frame grid by default. The provider
+normalizes the generated row and column placement without scaling individual frames. Set
+`settings.frameAlignment` to `"none"` when an animation intentionally translates within its frame cells.
+
 ## Phaser Runtime
 
 Load assets in `preload`, create animations after loading, and use `AiAssetRuntime` to resolve active texture keys with target fallback.
