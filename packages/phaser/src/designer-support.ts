@@ -3018,12 +3018,32 @@ export function setFrameElementBackground(
 ): void {
   const column = options.frame % options.frameGrid.columns;
   const row = Math.floor(options.frame / options.frameGrid.columns);
+  const margin = options.frameGrid.margin ?? 0;
+  const spacing = options.frameGrid.spacing ?? 0;
+  const frameWidth = options.frameGrid.frameWidth;
+  const frameHeight = options.frameGrid.frameHeight;
+  const scale = Math.min(
+    options.displaySize.width / frameWidth,
+    options.displaySize.height / frameHeight
+  );
+  const sheetWidth =
+    (margin * 2) +
+    (options.frameGrid.columns * frameWidth) +
+    (Math.max(0, options.frameGrid.columns - 1) * spacing);
+  const sheetHeight =
+    (margin * 2) +
+    (options.frameGrid.rows * frameHeight) +
+    (Math.max(0, options.frameGrid.rows - 1) * spacing);
+  const sourceX = margin + (column * (frameWidth + spacing));
+  const sourceY = margin + (row * (frameHeight + spacing));
+  const frameOffsetX = (options.displaySize.width - (frameWidth * scale)) / 2;
+  const frameOffsetY = (options.displaySize.height - (frameHeight * scale)) / 2;
 
   frameElement.style.backgroundImage = `url("${cssUrl(options.src)}")`;
   frameElement.style.backgroundSize =
-    `${options.frameGrid.columns * options.displaySize.width}px ${options.frameGrid.rows * options.displaySize.height}px`;
+    `${sheetWidth * scale}px ${sheetHeight * scale}px`;
   frameElement.style.backgroundPosition =
-    `${-(column * options.displaySize.width)}px ${-(row * options.displaySize.height)}px`;
+    `${frameOffsetX - (sourceX * scale)}px ${frameOffsetY - (sourceY * scale)}px`;
 }
 
 export function ensureFramePreviewElement(element: HTMLElement): HTMLElement {
@@ -4036,15 +4056,16 @@ export function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__frame-thumb {
   flex: 0 0 auto;
-  border: 2px solid #384251;
+  border: 0;
   border-radius: 6px;
   background-color: #0f1218;
+  box-shadow: inset 0 0 0 2px #384251;
   position: relative;
   overflow: hidden;
   cursor: pointer;
 }
 .ai-game-assets-designer__frame-thumb.is-selected {
-  border-color: #6ed3ff;
+  box-shadow: inset 0 0 0 2px #6ed3ff;
 }
 .ai-game-assets-designer__frame-fields {
   display: grid;
