@@ -34,7 +34,6 @@ export {
   resolveAiAsset,
   resolveTargetAssetId,
   topLevelAiAssetIds,
-  withoutAiAnimationFrameTransforms,
   withActiveVersion
 } from "./manifest.js";
 

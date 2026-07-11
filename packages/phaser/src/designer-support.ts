@@ -11,7 +11,6 @@ import type {
   AiAssetManifest,
   AiAssetVersion
 } from "@ai-game-assets/core";
-import { withoutAiAnimationFrameTransforms } from "@ai-game-assets/core";
 import type { DebugStyleGuideDraft, GeneratedDebugOption } from "./debug-client.js";
 import type {
   AiAssetDesignerOptions,
@@ -687,7 +686,6 @@ export async function uploadedOptionFromFile(options: {
     model: "uploaded",
     dimensions: geometry.dimensions,
     frameGrid: geometry.frameGrid,
-    animations: withoutAiAnimationFrameTransforms(options.asset.animations),
     settings: {
       ...options.asset.settings,
       format: normalizeAssetFormatFromMimeType(mimeType, options.file.name)
@@ -3171,16 +3169,34 @@ export function isVoiceAsset(asset: AiAssetDefinition | undefined): boolean {
 
 export function assetWithGeneratedGeometry(
   asset: AiAssetDefinition,
-  option: GeneratedDebugOption
+  option: GeneratedDebugOption,
+  options: { inheritAnimations?: boolean } = {}
 ): AiAssetDefinition {
   return {
     ...asset,
     dimensions: option.dimensions ?? asset.dimensions,
     frameGrid: option.frameGrid ?? asset.frameGrid,
-    animations: option.animations ?? asset.animations,
+    animations: option.animations ??
+      (options.inheritAnimations
+        ? asset.animations
+        : candidateAnimationDefinitions(asset, option.frameGrid ?? asset.frameGrid)),
     audioPlayback: option.audioPlayback ?? asset.audioPlayback,
     voiceSettings: option.voiceSettings ?? asset.voiceSettings
   };
+}
+
+function candidateAnimationDefinitions(
+  asset: AiAssetDefinition,
+  frameGrid: AiAssetDefinition["frameGrid"] | undefined
+): AiAssetDefinition["animations"] {
+  if (!frameGrid || !asset.animations?.length) return undefined;
+
+  const frameCount = frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows;
+  const frames = Array.from({ length: frameCount }, (_, index) => index);
+
+  // This is runtime-only playback structure, derived from the candidate's grid.
+  // It deliberately does not copy prompt, timings, tags, or transforms.
+  return asset.animations.map(({ key, frameRate, repeat }) => ({ key, frameRate, repeat, frames }));
 }
 
 export function positiveIntegerInput(input: HTMLInputElement, fallback: number): number {

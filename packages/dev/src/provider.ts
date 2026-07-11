@@ -8,7 +8,6 @@ import type {
   AiVoiceGenerationSettings,
   AiAssetGenerationSettings
 } from "@ai-game-assets/core";
-import { withoutAiAnimationFrameTransforms } from "@ai-game-assets/core";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -180,7 +179,6 @@ export function createOpenAiImageProvider(
             revisedPrompt: item.revised_prompt,
             dimensions,
             frameGrid: request.asset.frameGrid,
-            animations: withoutAiAnimationFrameTransforms(request.asset.animations),
             settings: {
               ...request.asset.settings,
               ...request.settings,
@@ -251,7 +249,6 @@ async function generateSvgAssets(
       model: context.model,
       dimensions,
       frameGrid: request.asset.frameGrid,
-      animations: withoutAiAnimationFrameTransforms(request.asset.animations),
       settings: {
         ...request.asset.settings,
         ...request.settings,

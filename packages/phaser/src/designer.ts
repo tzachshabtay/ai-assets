@@ -833,7 +833,10 @@ export function installAiAssetDesigner(
         revisedPrompt: selectedOption.revisedPrompt,
         dimensions: selectedOption.dimensions,
         frameGrid: selectedOption.frameGrid,
-        animations: selectedOption.animations,
+        animations: assetWithGeneratedGeometry(
+          manifest.assets[selectedTargetAssetId],
+          selectedOption
+        ).animations,
         settings: selectedOption.settings,
         audioSettings: selectedOption.audioSettings,
         audioPlayback: selectedOption.audioPlayback,
@@ -882,7 +885,7 @@ export function installAiAssetDesigner(
       assetId: selectedTargetAssetId,
       resolveAssetUrl,
       async onSelect(versionName, option) {
-        const optionAsset = assetWithGeneratedGeometry(asset, option);
+        const optionAsset = assetWithGeneratedGeometry(asset, option, { inheritAnimations: true });
 
         for (const item of elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
           item.classList.remove("is-selected");

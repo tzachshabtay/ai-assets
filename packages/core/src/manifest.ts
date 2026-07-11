@@ -40,20 +40,6 @@ export function defineAiAssets(
   return manifest;
 }
 
-/**
- * Creates animation definitions that are safe for a newly generated visual.
- * Frame transforms describe a specific sheet's alignment and must not leak
- * into a different candidate sheet.
- */
-export function withoutAiAnimationFrameTransforms(
-  animations: AiAssetDefinition["animations"]
-): AiAssetDefinition["animations"] {
-  return animations?.map(({ frameTimings, ...animation }) => ({
-    ...animation,
-    frameTimings: frameTimings?.map(({ delayMs, tag }) => ({ delayMs, tag }))
-  }));
-}
-
 export function assertManifest(manifest: AiAssetManifest): void {
   if (manifest.schemaVersion !== 1) {
     throw new Error(`Unsupported AI asset manifest schema: ${manifest.schemaVersion}`);

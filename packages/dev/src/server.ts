@@ -8,8 +8,7 @@ import {
   type AiAssetFrameGrid,
   type AiAssetManifest,
   type AiAssetStyleGuide,
-  type AiVoiceGenerationSettings,
-  withoutAiAnimationFrameTransforms
+  type AiVoiceGenerationSettings
 } from "@ai-game-assets/core";
 import type { AiImageProvider } from "./provider.js";
 import type { GeneratedAssetOption, GeneratedAssetOptionCallback } from "./provider.js";
@@ -419,8 +418,6 @@ function serializeGeneratedOption(option: GeneratedAssetOption, index: number) {
     revisedPrompt: option.revisedPrompt,
     dimensions: option.dimensions,
     frameGrid: option.frameGrid,
-    // Candidate sheets do not inherit alignment transforms from an older active sheet.
-    animations: withoutAiAnimationFrameTransforms(option.animations),
     settings: option.settings,
     audioSettings: option.audioSettings,
     audioPlayback: option.audioPlayback,

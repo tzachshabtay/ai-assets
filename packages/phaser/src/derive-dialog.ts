@@ -2,8 +2,7 @@ import {
   type AiAssetDefinition,
   type AiAssetDimensions,
   type AiAssetFormat,
-  type AiAssetFrameGrid,
-  withoutAiAnimationFrameTransforms
+  type AiAssetFrameGrid
 } from "@ai-game-assets/core";
 import type { GeneratedDebugOption } from "./debug-client.js";
 import {
@@ -301,7 +300,6 @@ export async function createLocalDerivedOption(options: {
     model: `derived-${options.strategy}`,
     dimensions: targetGeometry.dimensions,
     frameGrid: targetGeometry.frameGrid,
-    animations: animationFramesForGeometry(options.targetAsset, targetGeometry.frameGrid),
     settings: {
       ...options.targetAsset.settings,
       format: "png"
@@ -516,20 +514,6 @@ function defaultFrameDimensions(asset: AiAssetDefinition): AiAssetDimensions {
 
 function defaultFrameCount(asset: AiAssetDefinition): number {
   return asset.frameGrid?.frameCount ?? (asset.frameGrid ? asset.frameGrid.columns * asset.frameGrid.rows : 1);
-}
-
-function animationFramesForGeometry(
-  asset: AiAssetDefinition,
-  frameGrid: AiAssetFrameGrid | undefined
-) {
-  if (!frameGrid) return asset.animations;
-
-  const frameCount = frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows;
-
-  return withoutAiAnimationFrameTransforms(asset.animations)?.map((animation) => ({
-    ...animation,
-    frames: Array.from({ length: frameCount }, (_, index) => index)
-  }));
 }
 
 function numericField(value: number): HTMLInputElement {
