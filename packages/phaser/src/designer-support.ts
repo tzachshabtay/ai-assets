@@ -3036,14 +3036,21 @@ export function setFrameElementBackground(
     (Math.max(0, options.frameGrid.rows - 1) * spacing);
   const sourceX = margin + (column * (frameWidth + spacing));
   const sourceY = margin + (row * (frameHeight + spacing));
-  const frameOffsetX = (options.displaySize.width - (frameWidth * scale)) / 2;
-  const frameOffsetY = (options.displaySize.height - (frameHeight * scale)) / 2;
+  const displayFrameWidth = frameWidth * scale;
+  const displayFrameHeight = frameHeight * scale;
+  const frameOffsetX = (options.displaySize.width - displayFrameWidth) / 2;
+  const frameOffsetY = (options.displaySize.height - displayFrameHeight) / 2;
 
+  frameElement.style.inset = "auto";
+  frameElement.style.left = `${frameOffsetX}px`;
+  frameElement.style.top = `${frameOffsetY}px`;
+  frameElement.style.width = `${displayFrameWidth}px`;
+  frameElement.style.height = `${displayFrameHeight}px`;
   frameElement.style.backgroundImage = `url("${cssUrl(options.src)}")`;
   frameElement.style.backgroundSize =
     `${sheetWidth * scale}px ${sheetHeight * scale}px`;
   frameElement.style.backgroundPosition =
-    `${frameOffsetX - (sourceX * scale)}px ${frameOffsetY - (sourceY * scale)}px`;
+    `${-(sourceX * scale)}px ${-(sourceY * scale)}px`;
 }
 
 export function ensureFramePreviewElement(element: HTMLElement): HTMLElement {
