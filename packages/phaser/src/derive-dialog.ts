@@ -1,8 +1,9 @@
-import type {
-  AiAssetDefinition,
-  AiAssetDimensions,
-  AiAssetFormat,
-  AiAssetFrameGrid
+import {
+  type AiAssetDefinition,
+  type AiAssetDimensions,
+  type AiAssetFormat,
+  type AiAssetFrameGrid,
+  withoutAiAnimationFrameTransforms
 } from "@ai-game-assets/core";
 import type { GeneratedDebugOption } from "./debug-client.js";
 import {
@@ -525,12 +526,9 @@ function animationFramesForGeometry(
 
   const frameCount = frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows;
 
-  return asset.animations?.map((animation) => ({
+  return withoutAiAnimationFrameTransforms(asset.animations)?.map((animation) => ({
     ...animation,
-    frames: Array.from({ length: frameCount }, (_, index) => index),
-    frameTimings: animation.frameTimings
-      ? Array.from({ length: frameCount }, (_, index) => animation.frameTimings?.[index] ?? {})
-      : undefined
+    frames: Array.from({ length: frameCount }, (_, index) => index)
   }));
 }
 

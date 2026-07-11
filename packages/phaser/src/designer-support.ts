@@ -11,6 +11,7 @@ import type {
   AiAssetManifest,
   AiAssetVersion
 } from "@ai-game-assets/core";
+import { withoutAiAnimationFrameTransforms } from "@ai-game-assets/core";
 import type { DebugStyleGuideDraft, GeneratedDebugOption } from "./debug-client.js";
 import type {
   AiAssetDesignerOptions,
@@ -686,7 +687,7 @@ export async function uploadedOptionFromFile(options: {
     model: "uploaded",
     dimensions: geometry.dimensions,
     frameGrid: geometry.frameGrid,
-    animations: options.asset.animations,
+    animations: withoutAiAnimationFrameTransforms(options.asset.animations),
     settings: {
       ...options.asset.settings,
       format: normalizeAssetFormatFromMimeType(mimeType, options.file.name)

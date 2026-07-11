@@ -186,6 +186,7 @@ The designer supports:
 - target-aware editing and deriving variants from other targets
 - prompt, dimensions, format, frame-grid, audio length, and voice settings
 - streaming generation options as they complete
+- generated animation candidates begin without inherited offset, scale, or rotation transforms; add those deliberately in the animation editor after choosing a sheet
 - cancelable generations
 - upload for images, spritesheets, animation frames, sound effects, music, and voice lines
 - version history, revert, promote, and delete
