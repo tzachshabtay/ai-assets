@@ -12,6 +12,7 @@ import type {
 } from "@ai-game-assets/core";
 import {
   linkedAnimationAssetIds,
+  registerInGameDesignerPanel,
   resolveTargetAssetId,
   topLevelAiAssetIds
 } from "@ai-game-assets/core";
@@ -173,9 +174,25 @@ export function installAiAssetDesigner(
   mount.append(elements.root);
   bindKeyboardCapture(elements.root, options.scene);
 
-  const setOpen = (isOpen: boolean) => {
+  const applyOpenState = (isOpen: boolean) => {
     elements.root.dataset.open = String(isOpen);
     elements.toggle.setAttribute("aria-expanded", String(isOpen));
+  };
+  const dockPanel = registerInGameDesignerPanel({
+    id: "ai-game-assets.assets",
+    label: "Assets",
+    panel: elements.panel,
+    button: elements.toggle,
+    order: 10,
+    ariaLabel: "Toggle AI asset designer",
+    onOpenChange: applyOpenState
+  });
+  const setOpen = (isOpen: boolean) => {
+    if (isOpen) {
+      dockPanel.open();
+    } else {
+      dockPanel.close();
+    }
   };
 
   const syncAnimationChoices = (assetId: string) => {
@@ -449,10 +466,6 @@ export function installAiAssetDesigner(
     unlockGenerationStatus();
     return true;
   };
-
-  elements.toggle.addEventListener("click", () => {
-    setOpen(elements.root.dataset.open !== "true");
-  });
 
   elements.assetSelect.addEventListener("change", () => {
     selectedAssetId = elements.assetSelect.value;
@@ -1172,6 +1185,7 @@ export function installAiAssetDesigner(
     destroy: () => {
       activeGeneration?.controller.abort();
       stopStatusAnimation(elements.status);
+      dockPanel.destroy();
       elements.root.remove();
     }
   };

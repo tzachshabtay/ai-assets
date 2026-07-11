@@ -48,3 +48,12 @@ export {
 } from "./generation.js";
 
 export type { CreateVersionInput } from "./generation.js";
+
+export {
+  registerInGameDesignerPanel
+} from "./designer-dock.js";
+
+export type {
+  InGameDesignerPanelOptions,
+  InGameDesignerPanelRegistration
+} from "./designer-dock.js";
