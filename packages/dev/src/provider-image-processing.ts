@@ -318,8 +318,15 @@ export function shouldRequestRgbaPng(
     return false;
   }
 
+  if (context.requestedBackground === "opaque") {
+    return false;
+  }
+
+  if (context.requestedBackground === "transparent") {
+    return true;
+  }
+
   return (
-    context.requestedBackground === "transparent" ||
     /\btransparent\b/i.test(context.prompt) ||
     /\btransparent\b/i.test(request.asset.prompt)
   );

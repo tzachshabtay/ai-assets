@@ -95,17 +95,18 @@ export function createOpenAiImageProvider(
       const prompt = request.prompt ?? request.asset.prompt;
       const requestedFormat =
         request.settings?.format ?? request.asset.settings?.format ?? "png";
+      const requestedBackground = resolveRequestedBackground(request, options);
       if (requestedFormat === "svg") {
         return generateSvgAssets(request, {
           apiKey,
           model: request.settings?.model ?? options.svgModel ?? process.env.OPENAI_SVG_MODEL ?? "gpt-5",
           prompt,
-          count: request.count ?? 1
+          count: request.count ?? 1,
+          requestedBackground
         }, onOption);
       }
 
       const outputFormat = normalizeOutputFormat(requestedFormat);
-      const requestedBackground = resolveRequestedBackground(request, options);
       const background = normalizeBackgroundForModel(model, requestedBackground);
       const chromaKey = selectChromaKey(request);
       const postprocessTransparency = shouldPostprocessTransparency(request, {
@@ -216,6 +217,7 @@ async function generateSvgAssets(
     model: string;
     prompt: string;
     count: number;
+    requestedBackground: AiAssetGenerationSettings["background"];
   },
   onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
@@ -231,6 +233,7 @@ async function generateSvgAssets(
   return Promise.all(Array.from({ length: context.count }, async (_, index) => {
     const prompt = svgAssetPrompt(request, {
       prompt: context.prompt,
+      requestedBackground: context.requestedBackground,
       variation: context.count > 1 ? createVariationSeed(index) : undefined,
       variationIndex: index,
       variationCount: context.count
@@ -262,6 +265,7 @@ async function generateSvgAssets(
         ...request.asset.settings,
         ...request.settings,
         model: context.model,
+        background: context.requestedBackground,
         format: "svg"
       }
     };
@@ -275,6 +279,7 @@ function svgAssetPrompt(
   request: GenerateAssetRequest,
   context: {
     prompt: string;
+    requestedBackground: AiAssetGenerationSettings["background"];
     variation?: string;
     variationIndex?: number;
     variationCount?: number;
@@ -310,10 +315,19 @@ function svgAssetPrompt(
     lines.push(
       `Spritesheet contract: create exactly ${frameCount} animation frames arranged in the first ${frameCount} cells of a fixed grid with ${request.asset.frameGrid.columns} columns and ${request.asset.frameGrid.rows} rows.`,
       `Each frame cell is exactly ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}. The full SVG canvas is ${dimensions.width}x${dimensions.height}.`,
-      `Use one complete frame per grid cell, ordered left-to-right then top-to-bottom. Cell rectangles are: ${gridCellRectangles(request)}.`,
-      "Keep the background transparent by leaving empty areas unpainted. Do not draw visible grid lines, labels, frame numbers, or cell borders."
+      `Use one complete frame per grid cell, ordered left-to-right then top-to-bottom. Cell rectangles are: ${gridCellRectangles(request)}.`
     );
-  } else if (request.asset.settings?.background === "opaque") {
+
+    if (context.requestedBackground === "opaque") {
+      lines.push(
+        "Fill every frame cell edge-to-edge with opaque artwork. Preserve stationary background scenery across frames. Do not draw visible grid lines, labels, frame numbers, or cell borders."
+      );
+    } else {
+      lines.push(
+        "Keep the background transparent by leaving empty areas unpainted. Do not draw visible grid lines, labels, frame numbers, or cell borders."
+      );
+    }
+  } else if (context.requestedBackground === "opaque") {
     lines.push(
       "Create one continuous opaque scene covering the full SVG canvas. Do not create a spritesheet, contact sheet, labels, or panels."
     );
@@ -384,7 +398,7 @@ function isSupportedResponseImageMimeType(mimeType: string): boolean {
     mimeType === "image/gif";
 }
 
-function gameAssetPrompt(
+export function gameAssetPrompt(
   request: GenerateAssetRequest,
   context: {
     prompt: string;
@@ -428,14 +442,26 @@ function gameAssetPrompt(
     lines.push(
       `Spritesheet contract: exactly ${frameCount} animation frames arranged in the first ${frameCount} cells of a fixed grid with ${request.asset.frameGrid.columns} ${columnLabel} and ${request.asset.frameGrid.rows} ${rowLabel}.`,
       `The final image must be one ${dimensions.width}x${dimensions.height} spritesheet, not separate images and not a different grid.`,
-      `Use one frame per grid cell, ordered left-to-right then top-to-bottom. If the grid has more cells than ${frameCount}, leave the extra trailing cells fully transparent and empty.`,
+      `Use one frame per grid cell, ordered left-to-right then top-to-bottom.`,
       `Each cell is exactly ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}; do not merge cells, crop cells, add extra frames beyond ${frameCount}, or change the grid layout.`,
       `Cell rectangles are: ${gridCellRectangles(request)}.`,
       `Frame centers must be at these cell centers: ${gridCellCenters(request)}.`,
       "Each grid cell must contain exactly one complete frame of the subject. Do not place a nested spritesheet, turnaround sheet, contact sheet, labels, thumbnails, or multiple mini-poses inside any single cell.",
-      "Keep the character centered at a consistent scale in every cell, leaving transparent padding inside the cell.",
       "The grid layout is mandatory even if the animation would look nicer in another arrangement."
     );
+
+    if (shouldRequestRgbaPng(request, context)) {
+      lines.push(
+        `If the grid has more cells than ${frameCount}, leave the extra trailing cells fully transparent and empty.`,
+        "Keep the character centered at a consistent scale in every cell, leaving transparent padding inside the cell."
+      );
+    } else {
+      lines.push(
+        "Every frame cell must be fully opaque from edge to edge with no alpha padding and no checkerboard pattern.",
+        "Preserve the referenced background, framing, and stationary scenery in every frame; animate only the motion requested by the asset prompt.",
+        `If the grid has more cells than ${frameCount}, fill the extra trailing cells with the same opaque background and no animation subject.`
+      );
+    }
   } else {
     if (shouldRequestRgbaPng(request, context)) {
       lines.push(
@@ -470,7 +496,7 @@ function gameAssetPrompt(
 
   if (context.variation) {
     lines.push(
-      `Variation seed: ${context.variation}. Use this seed to make this option visually distinct from sibling options, not a near-duplicate. Vary the animation timing, pose rhythm, secondary motion, and effect shape while preserving the asset brief, frame grid, transparency instructions, and same exact character identity.`,
+      `Variation seed: ${context.variation}. Use this seed to make this option visually distinct from sibling options, not a near-duplicate. Vary the animation timing, pose rhythm, secondary motion, and effect shape while preserving the asset brief, frame grid, background instructions, and same exact character identity.`,
       variationDirectionPromptLine(context.variationIndex ?? 0)
     );
   }

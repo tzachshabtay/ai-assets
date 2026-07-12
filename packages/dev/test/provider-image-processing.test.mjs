@@ -3,7 +3,11 @@ import test from "node:test";
 
 import { PNG } from "pngjs";
 
-import { alignSpriteSheetFrames } from "../dist/provider-image-processing.js";
+import {
+  alignSpriteSheetFrames,
+  shouldRequestRgbaPng
+} from "../dist/provider-image-processing.js";
+import { gameAssetPrompt } from "../dist/provider.js";
 
 test("alignSpriteSheetFrames aligns generated rows and columns without removing pixels", () => {
   const frameWidth = 10;
@@ -55,6 +59,56 @@ test("alignSpriteSheetFrames aligns generated rows and columns without removing 
   assert.equal(alignedCenters[2].x - alignedCenters[0].x, centers[2].x - centers[0].x);
   assert.equal(visiblePixelCount(aligned), visiblePixelCount(png));
 });
+
+test("explicit opaque background overrides transparency wording", () => {
+  const request = animationRequest({
+    prompt: "Animate the subject without changing the transparent-looking checker pattern."
+  });
+
+  assert.equal(shouldRequestRgbaPng(request, {
+    prompt: request.asset.prompt,
+    model: "gpt-image-2",
+    outputFormat: "png",
+    requestedBackground: "opaque"
+  }), false);
+});
+
+test("opaque spritesheet prompts preserve the background without transparency instructions", () => {
+  const request = animationRequest();
+  const prompt = gameAssetPrompt(request, {
+    prompt: request.asset.prompt,
+    model: "gpt-image-2",
+    outputFormat: "png",
+    requestedBackground: "opaque",
+    chromaKey: { red: 255, green: 0, blue: 255 }
+  });
+
+  assert.match(prompt, /fully opaque from edge to edge/);
+  assert.match(prompt, /Preserve the referenced background/);
+  assert.doesNotMatch(prompt, /leaving transparent padding/);
+  assert.doesNotMatch(prompt, /trailing cells fully transparent/);
+});
+
+function animationRequest({ prompt = "Animate only the parrot." } = {}) {
+  return {
+    asset: {
+      id: "background.parrot.idle",
+      kind: "animation",
+      prompt,
+      dimensions: { width: 288, height: 288 },
+      frameGrid: {
+        frameCount: 4,
+        frameWidth: 144,
+        frameHeight: 144,
+        columns: 2,
+        rows: 2
+      },
+      settings: { background: "opaque", format: "png", model: "gpt-image-2" },
+      activeVersion: "default",
+      versions: {}
+    }
+  };
+}
 
 function frameVisibleCenter(png, originX, originY, width, height) {
   let minX = width;

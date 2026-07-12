@@ -562,11 +562,7 @@ export function renderOptions(options: {
           element: animationStage,
           src: option.dataUrl,
           asset: optionAsset,
-          displaySize: resolvePreviewDisplaySize(
-            options.designerOptions,
-            options.assetId,
-            optionAsset
-          ),
+          displaySize: { width: 68, height: 68 },
           applyFrameTransforms: false
         });
       });
@@ -3908,6 +3904,7 @@ export function ensureDesignerStyles(): void {
   background: transparent;
   display: grid;
   place-items: center;
+  overflow: hidden;
   cursor: pointer;
   color: #dbeafe;
   font: inherit;
@@ -3927,6 +3924,11 @@ export function ensureDesignerStyles(): void {
   height: 68px;
   object-fit: contain;
   image-rendering: pixelated;
+}
+.ai-game-assets-designer__option-animation {
+  width: 68px;
+  height: 68px;
+  max-width: 100%;
 }
 .ai-game-assets-designer__option .ai-game-assets-designer__animate-button {
   width: 100%;

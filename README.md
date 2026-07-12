@@ -95,6 +95,16 @@ Transparent spritesheet generations are aligned to their declared frame grid by 
 normalizes the generated row and column placement without scaling individual frames. Set
 `settings.frameAlignment` to `"none"` when an animation intentionally translates within its frame cells.
 
+Set `settings.background` explicitly when the asset's background is part of the artwork:
+
+```ts
+settings: { model: "gpt-image-2", format: "png", background: "opaque" }
+```
+
+`"opaque"` keeps every image or spritesheet frame filled edge to edge, does not add transparency
+instructions to the generation prompt, and disables chroma-key transparency post-processing. Use
+`"transparent"` for cutout sprites. An explicit setting takes precedence over words in the asset prompt.
+
 ## Phaser Runtime
 
 Load assets in `preload`, create animations after loading, and use `AiAssetRuntime` to resolve active texture keys with target fallback.
