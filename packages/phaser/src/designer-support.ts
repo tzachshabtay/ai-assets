@@ -1899,7 +1899,7 @@ export function renderAudioPlayer(options: {
     state.trimStart = clamp(options.playback?.trimStartSeconds ?? 0, 0, state.duration);
     state.trimEnd = clamp(options.playback?.trimEndSeconds ?? state.duration, state.trimStart, state.duration);
     trimLabel.hidden = state.trimStart === 0 && state.trimEnd === state.duration;
-    trimLabel.textContent = `Trim ${formatAudioTime(state.trimStart)} – ${formatAudioTime(state.trimEnd)}`;
+    trimLabel.textContent = `Trim ${formatAudioTime(state.trimStart, true)} – ${formatAudioTime(state.trimEnd, true)}`;
     audio.currentTime = state.trimStart;
     sync();
   });
@@ -2069,14 +2069,18 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export function formatAudioTime(value: number): string {
+export function formatAudioTime(value: number, fractional = false): string {
   if (!Number.isFinite(value) || value < 0) {
     return "0:00";
   }
 
-  const minutes = Math.floor(value / 60);
-  const seconds = Math.floor(value % 60);
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  const precision = fractional ? 2 : 0;
+  const multiplier = 10 ** precision;
+  const roundedValue = Math.round(value * multiplier) / multiplier;
+  const minutes = Math.floor(roundedValue / 60);
+  const seconds = roundedValue % 60;
+  const formattedSeconds = seconds.toFixed(precision).padStart(fractional ? 5 : 2, "0");
+  return `${minutes}:${formattedSeconds}`;
 }
 
 export function startSpritesheetPreview(options: {

@@ -75,7 +75,7 @@ async function routeRequest(
 
   if (
     (request.method === "GET" || request.method === "HEAD") &&
-    await serveGeneratedAsset(options, url, response, request.method === "HEAD")
+    await serveGeneratedAsset(options, url, response, request.headers.range, request.method === "HEAD")
   ) {
     return;
   }
@@ -693,6 +693,7 @@ async function serveGeneratedAsset(
   options: AiAssetDevServerOptions,
   url: URL,
   response: ServerResponse,
+  rangeHeader: string | undefined,
   headOnly: boolean
 ): Promise<boolean> {
   const publicPathPrefix = normalizePublicPathPrefix(options.publicPathPrefix);
@@ -722,14 +723,75 @@ async function serveGeneratedAsset(
     return false;
   }
 
-  response.writeHead(200, {
+  const headers = {
     ...accessControlHeaders(),
     "Content-Type": contentTypeForFile(filePath),
-    "Content-Length": String(file.byteLength),
+    "Accept-Ranges": "bytes",
     "Cache-Control": "no-cache"
+  };
+  const range = parseByteRange(rangeHeader, file.byteLength);
+
+  if (rangeHeader && !range) {
+    response.writeHead(416, {
+      ...headers,
+      "Content-Range": `bytes */${file.byteLength}`,
+      "Content-Length": "0"
+    });
+    response.end();
+    return true;
+  }
+
+  if (range) {
+    const body = file.subarray(range.start, range.end + 1);
+    response.writeHead(206, {
+      ...headers,
+      "Content-Range": `bytes ${range.start}-${range.end}/${file.byteLength}`,
+      "Content-Length": String(body.byteLength)
+    });
+    response.end(headOnly ? undefined : body);
+    return true;
+  }
+
+  response.writeHead(200, {
+    ...headers,
+    "Content-Length": String(file.byteLength)
   });
   response.end(headOnly ? undefined : file);
   return true;
+}
+
+function parseByteRange(
+  value: string | undefined,
+  fileLength: number
+): { start: number; end: number } | undefined {
+  if (!value || fileLength <= 0) return undefined;
+
+  const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim());
+  if (!match || (!match[1] && !match[2])) return undefined;
+
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return undefined;
+
+    return {
+      start: Math.max(0, fileLength - suffixLength),
+      end: fileLength - 1
+    };
+  }
+
+  const start = Number(match[1]);
+  const requestedEnd = match[2] ? Number(match[2]) : fileLength - 1;
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(requestedEnd) ||
+    start < 0 ||
+    start >= fileLength ||
+    requestedEnd < start
+  ) {
+    return undefined;
+  }
+
+  return { start, end: Math.min(requestedEnd, fileLength - 1) };
 }
 
 function normalizePublicPathPrefix(publicPathPrefix: string | undefined): string | undefined {
@@ -766,7 +828,8 @@ function contentTypeForFile(filePath: string): string {
 function accessControlHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Range",
+    "Access-Control-Expose-Headers": "Accept-Ranges, Content-Length, Content-Range",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS"
   };
 }
