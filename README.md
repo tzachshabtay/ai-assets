@@ -207,7 +207,7 @@ The designer supports:
 - version history, revert, promote, and delete
 - style guide prompt and reference image management
 - animation editor with per-frame delay, offset, scale, rotation, and tags
-- frame touch-up editor for raster images
+- frame touch-up editor for raster images with session-persistent tool settings, keyboard undo/redo, and guarded pointer drawing
 - audio editor with waveform preview, trim markers, volume, loop, and playback settings
 
 Production builds should not bundle or install the designer.

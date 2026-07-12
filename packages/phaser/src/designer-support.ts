@@ -843,6 +843,22 @@ type FrameTouchUpSelection = {
   height: number;
 };
 
+type FrameTouchUpPreferences = {
+  alpha: number;
+  antiAlias: boolean;
+  brushSize: number;
+  color: string;
+  tool: FrameTouchUpTool;
+};
+
+const frameTouchUpPreferences: FrameTouchUpPreferences = {
+  alpha: 255,
+  antiAlias: true,
+  brushSize: 4,
+  color: "#f8fafc",
+  tool: "brush"
+};
+
 export async function openFrameTouchUpEditor(options: {
   root: HTMLElement;
   asset: AiAssetDefinition;
@@ -897,7 +913,7 @@ export async function openFrameTouchUpEditor(options: {
   brushSizeInput.min = "1";
   brushSizeInput.max = "32";
   brushSizeInput.step = "1";
-  brushSizeInput.value = "4";
+  brushSizeInput.value = String(frameTouchUpPreferences.brushSize);
   const brushSizeValue = document.createElement("span");
   brushSizeValue.textContent = brushSizeInput.value;
   const brushSizeField = document.createElement("label");
@@ -905,7 +921,7 @@ export async function openFrameTouchUpEditor(options: {
   brushSizeField.append("Size", brushSizeInput, brushSizeValue);
   const antiAliasInput = document.createElement("input");
   antiAliasInput.type = "checkbox";
-  antiAliasInput.checked = true;
+  antiAliasInput.checked = frameTouchUpPreferences.antiAlias;
   const antiAliasField = document.createElement("label");
   antiAliasField.className = "ai-game-assets-designer__inline-checkbox";
   antiAliasField.append(antiAliasInput, "Anti-aliased round tip");
@@ -922,14 +938,14 @@ export async function openFrameTouchUpEditor(options: {
 
   const colorInput = document.createElement("input");
   colorInput.type = "color";
-  colorInput.value = "#f8fafc";
+  colorInput.value = frameTouchUpPreferences.color;
   colorInput.setAttribute("aria-label", "Brush color");
   const alphaInput = document.createElement("input");
   alphaInput.type = "number";
   alphaInput.min = "0";
   alphaInput.max = "255";
   alphaInput.step = "1";
-  alphaInput.value = "255";
+  alphaInput.value = String(frameTouchUpPreferences.alpha);
   alphaInput.setAttribute("aria-label", "Alpha");
   const rgbaLabel = document.createElement("label");
   rgbaLabel.className = "ai-game-assets-designer__touchup-color";
@@ -1001,9 +1017,10 @@ export async function openFrameTouchUpEditor(options: {
   context.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
 
   let zoom = Math.max(1, Math.floor(Math.min(8, 480 / Math.max(canvas.width, canvas.height))));
-  let tool: FrameTouchUpTool = "brush";
+  let tool: FrameTouchUpTool = frameTouchUpPreferences.tool;
   let dirty = false;
   let drawing = false;
+  let drawingPointerId: number | undefined;
   let selectionStart: { x: number; y: number } | undefined;
   let selection: FrameTouchUpSelection | undefined;
   let animationTimeout: number | undefined;
@@ -1061,6 +1078,12 @@ export async function openFrameTouchUpEditor(options: {
     activeButton.classList.add("is-active");
   };
 
+  const selectTool = (nextTool: FrameTouchUpTool) => {
+    tool = nextTool;
+    frameTouchUpPreferences.tool = nextTool;
+    updateToolButtons();
+  };
+
   const updateUndoRedo = () => {
     undoButton.disabled = undoStack.length === 0;
     redoButton.disabled = redoStack.length === 0;
@@ -1078,6 +1101,24 @@ export async function openFrameTouchUpEditor(options: {
     selection = undefined;
     redrawEditor();
     setDirty(true);
+  };
+
+  const undo = () => {
+    const previous = undoStack.pop();
+    if (!previous) return;
+
+    redoStack.push(snapshot());
+    restore(previous);
+    updateUndoRedo();
+  };
+
+  const redo = () => {
+    const next = redoStack.pop();
+    if (!next) return;
+
+    undoStack.push(snapshot());
+    restore(next);
+    updateUndoRedo();
   };
 
   const syncSelectionBox = () => {
@@ -1259,6 +1300,8 @@ export async function openFrameTouchUpEditor(options: {
     const data = context.getImageData(point.x, point.y, 1, 1).data;
     colorInput.value = `#${hexByte(data[0])}${hexByte(data[1])}${hexByte(data[2])}`;
     alphaInput.value = String(data[3]);
+    frameTouchUpPreferences.color = colorInput.value;
+    frameTouchUpPreferences.alpha = data[3];
   };
 
   const fillAt = (point: { x: number; y: number }) => {
@@ -1404,7 +1447,10 @@ export async function openFrameTouchUpEditor(options: {
   const close = () => {
     disposed = true;
     if (animationTimeout !== undefined) window.clearTimeout(animationTimeout);
-    window.removeEventListener("keydown", keyHandler);
+    window.removeEventListener("keydown", keyHandler, true);
+    window.removeEventListener("pointerup", finishPointer, true);
+    window.removeEventListener("pointercancel", finishPointer, true);
+    window.removeEventListener("blur", cancelDrawing);
     document.removeEventListener("pointerdown", closeBrushMenuOnOutsidePointer);
     dialog.remove();
   };
@@ -1416,31 +1462,54 @@ export async function openFrameTouchUpEditor(options: {
 
   const keyHandler = (event: KeyboardEvent) => {
     if (!dialog.isConnected) return;
+    const key = event.key.toLowerCase();
+    const commandModifier = event.metaKey || event.ctrlKey;
+
+    if (commandModifier && !event.altKey && (key === "z" || key === "y")) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (key === "y" || event.shiftKey) {
+        redo();
+      } else {
+        undo();
+      }
+      return;
+    }
+
     if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
       requestClose();
       return;
     }
     if (event.key === "Backspace" || event.key === "Delete") {
       event.preventDefault();
+      event.stopPropagation();
       deleteSelection();
       return;
     }
     if (event.key === "ArrowLeft") {
       event.preventDefault();
+      event.stopPropagation();
       moveSelection(-1, 0);
     } else if (event.key === "ArrowRight") {
       event.preventDefault();
+      event.stopPropagation();
       moveSelection(1, 0);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
+      event.stopPropagation();
       moveSelection(0, -1);
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
+      event.stopPropagation();
       moveSelection(0, 1);
     }
   };
 
   canvas.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "touch" && event.button !== 0) return;
+
     if (event.pointerType === "touch") {
       activeTouchPointers.set(event.pointerId, {
         x: event.clientX,
@@ -1449,6 +1518,7 @@ export async function openFrameTouchUpEditor(options: {
 
       if (activeTouchPointers.size >= 2) {
         drawing = false;
+        drawingPointerId = undefined;
         selectionStart = undefined;
         pinchStartDistance = touchPointerDistance();
         pinchStartZoom = zoom;
@@ -1465,6 +1535,7 @@ export async function openFrameTouchUpEditor(options: {
 
     pushUndo();
     drawing = true;
+    drawingPointerId = event.pointerId;
     canvas.setPointerCapture(event.pointerId);
 
     if (tool === "select") {
@@ -1477,6 +1548,7 @@ export async function openFrameTouchUpEditor(options: {
     if (tool === "fill") {
       fillAt(point);
       drawing = false;
+      drawingPointerId = undefined;
       setDirty(true);
       redrawEditor();
       return;
@@ -1506,7 +1578,11 @@ export async function openFrameTouchUpEditor(options: {
       }
     }
 
-    if (!drawing) return;
+    if (!drawing || drawingPointerId !== event.pointerId) return;
+    if (event.pointerType !== "touch" && (event.buttons & 1) === 0) {
+      finishPointer(event);
+      return;
+    }
 
     const point = canvasPoint(event);
     if (tool === "select" && selectionStart) {
@@ -1529,7 +1605,7 @@ export async function openFrameTouchUpEditor(options: {
     }
   });
 
-  const finishPointer = (event: PointerEvent) => {
+  function finishPointer(event: PointerEvent) {
     if (event.pointerType === "touch") {
       activeTouchPointers.delete(event.pointerId);
       if (activeTouchPointers.size < 2) {
@@ -1539,15 +1615,31 @@ export async function openFrameTouchUpEditor(options: {
         pinchStartZoom = zoom;
       }
     }
-    drawing = false;
-    selectionStart = undefined;
+    if (drawingPointerId === event.pointerId) {
+      drawing = false;
+      drawingPointerId = undefined;
+      selectionStart = undefined;
+    }
     if (canvas.hasPointerCapture(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId);
     }
     redrawEditor();
-  };
+  }
+
+  function cancelDrawing() {
+    drawing = false;
+    drawingPointerId = undefined;
+    selectionStart = undefined;
+    activeTouchPointers.clear();
+    pinchStartDistance = undefined;
+  }
+
   canvas.addEventListener("pointerup", finishPointer);
   canvas.addEventListener("pointercancel", finishPointer);
+  canvas.addEventListener("lostpointercapture", finishPointer);
+  window.addEventListener("pointerup", finishPointer, true);
+  window.addEventListener("pointercancel", finishPointer, true);
+  window.addEventListener("blur", cancelDrawing);
   canvasWrap.addEventListener("wheel", (event) => {
     if (!event.ctrlKey && !event.metaKey) return;
 
@@ -1567,54 +1659,45 @@ export async function openFrameTouchUpEditor(options: {
     setZoom(zoom + 1);
   });
   brushButton.addEventListener("click", () => {
-    tool = "brush";
-    updateToolButtons();
+    selectTool("brush");
   });
   brushMenuButton.addEventListener("click", () => {
     brushMenu.hidden = !brushMenu.hidden;
   });
   brushSizeInput.addEventListener("input", () => {
     brushSizeValue.textContent = brushSizeInput.value;
+    frameTouchUpPreferences.brushSize = brushSize();
+  });
+  antiAliasInput.addEventListener("change", () => {
+    frameTouchUpPreferences.antiAlias = antiAliasInput.checked;
+  });
+  colorInput.addEventListener("input", () => {
+    frameTouchUpPreferences.color = colorInput.value;
+  });
+  alphaInput.addEventListener("input", () => {
+    frameTouchUpPreferences.alpha = clamp(Math.round(Number(alphaInput.value)), 0, 255);
   });
   document.addEventListener("pointerdown", closeBrushMenuOnOutsidePointer);
   eraserButton.addEventListener("click", () => {
-    tool = "eraser";
-    updateToolButtons();
+    selectTool("eraser");
   });
   pickerButton.addEventListener("click", () => {
-    tool = "picker";
-    updateToolButtons();
+    selectTool("picker");
   });
   selectButton.addEventListener("click", () => {
-    tool = "select";
-    updateToolButtons();
+    selectTool("select");
   });
   fillButton.addEventListener("click", () => {
-    tool = "fill";
-    updateToolButtons();
+    selectTool("fill");
   });
-  undoButton.addEventListener("click", () => {
-    const previous = undoStack.pop();
-    if (!previous) return;
-
-    redoStack.push(snapshot());
-    restore(previous);
-    updateUndoRedo();
-  });
-  redoButton.addEventListener("click", () => {
-    const next = redoStack.pop();
-    if (!next) return;
-
-    undoStack.push(snapshot());
-    restore(next);
-    updateUndoRedo();
-  });
+  undoButton.addEventListener("click", undo);
+  redoButton.addEventListener("click", redo);
   saveButton.addEventListener("click", async () => {
     await options.onSave(canvas.toDataURL("image/png"));
     setDirty(false);
     close();
   });
-  window.addEventListener("keydown", keyHandler);
+  window.addEventListener("keydown", keyHandler, true);
 
   updateZoom();
   updateToolButtons();
@@ -4078,13 +4161,22 @@ export function ensureDesignerStyles(): void {
   border: 0;
   border-radius: 6px;
   background-color: #0f1218;
-  box-shadow: inset 0 0 0 2px #384251;
   position: relative;
   overflow: hidden;
   cursor: pointer;
 }
-.ai-game-assets-designer__frame-thumb.is-selected {
-  box-shadow: inset 0 0 0 2px #6ed3ff;
+.ai-game-assets-designer__frame-thumb::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border: 2px solid #384251;
+  border-radius: inherit;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.ai-game-assets-designer__frame-thumb.is-selected::after {
+  border-color: #6ed3ff;
 }
 .ai-game-assets-designer__frame-fields {
   display: grid;
