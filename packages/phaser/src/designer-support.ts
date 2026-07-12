@@ -51,6 +51,7 @@ export type DesignerElements = {
   currentAudio: HTMLDivElement;
   currentAnimation: HTMLDivElement;
   currentAnimationButton: HTMLButtonElement;
+  currentRevertButton: HTMLButtonElement;
   currentTouchUpButton: HTMLButtonElement;
   currentPreview: HTMLDivElement;
   uploadButton: HTMLButtonElement;
@@ -218,12 +219,18 @@ export function createDesignerElements(
   currentTouchUpButton.className = "ai-game-assets-designer__animate-button";
   currentTouchUpButton.textContent = "Touch up...";
   currentTouchUpButton.hidden = true;
+  const currentRevertButton = document.createElement("button");
+  currentRevertButton.type = "button";
+  currentRevertButton.className = "ai-game-assets-designer__animate-button";
+  currentRevertButton.textContent = "Revert preview";
+  currentRevertButton.hidden = true;
   currentPreview.append(
     currentImage,
     currentAudio,
     currentAnimation,
     currentAnimationButton,
-    currentTouchUpButton
+    currentTouchUpButton,
+    currentRevertButton
   );
 
   const regenerateButton = document.createElement("button");
@@ -319,6 +326,7 @@ export function createDesignerElements(
     currentAudio,
     currentAnimation,
     currentAnimationButton,
+    currentRevertButton,
     currentTouchUpButton,
     currentPreview,
     uploadButton,

@@ -201,6 +201,7 @@ The designer supports:
 - prompt, dimensions, format, frame-grid, audio length, and voice settings
 - streaming generation options as they complete
 - generated animation candidates contain no inherited animation metadata; temporary sheet playback is derived from the candidate frame grid, while timing, tags, and transforms are authored only after choosing a sheet
+- selecting a generated or saved option updates the Current preview without promoting it, so it can be edited in place; Revert preview restores the active promoted version
 - cancelable generations
 - upload for images, spritesheets, animation frames, sound effects, music, and voice lines
 - version history, revert, promote, and delete

@@ -287,6 +287,7 @@ export function installAiAssetDesigner(
     elements.currentAudio.hidden = !isAudio;
     elements.currentImage.hidden = isAudio;
     elements.currentAnimationButton.textContent = "Edit...";
+    elements.currentRevertButton.hidden = true;
     elements.currentPreview.classList.add("is-selected");
     elements.currentAnimationButton.hidden = !activeVersion?.file || (!asset.frameGrid && !isAudio);
     elements.currentTouchUpButton.hidden = !activeVersion?.file ||
@@ -303,6 +304,108 @@ export function installAiAssetDesigner(
     selectedOption = undefined;
     editedCurrentOption = undefined;
     previewedVersionName = undefined;
+  };
+
+  const showOptionInCurrentPreview = (
+    option: GeneratedDebugOption,
+    label = "selected option"
+  ) => {
+    const asset = manifest.assets[selectedTargetAssetId];
+    const optionAsset = assetWithGeneratedGeometry(asset, option);
+    const isAudio = isAudioAsset(asset);
+
+    stopCurrentAnimationPreview?.();
+    stopCurrentAnimationPreview = undefined;
+    editedCurrentOption = option;
+    previewedVersionName = undefined;
+    elements.currentPreview.hidden = false;
+    elements.currentPreview.setAttribute(
+      "aria-label",
+      `Preview ${label} for ${readableAssetName(selectedTargetAssetId)}`
+    );
+    elements.currentAnimation.hidden = true;
+    elements.currentAnimationButton.textContent = "Edit...";
+    elements.currentAnimationButton.hidden = !optionAsset.frameGrid && !isAudio;
+    elements.currentTouchUpButton.hidden =
+      isAudio ||
+      Boolean(optionAsset.frameGrid) ||
+      option.mimeType === "image/svg+xml";
+    elements.currentRevertButton.hidden = false;
+    elements.currentAudio.hidden = !isAudio;
+    elements.currentImage.hidden = isAudio;
+
+    if (isAudio) {
+      renderAudioPlayer({
+        container: elements.currentAudio,
+        src: option.dataUrl,
+        label: readableAssetName(selectedTargetAssetId),
+        playback: option.audioPlayback
+      });
+    } else {
+      elements.currentAudio.innerHTML = "";
+      elements.currentImage.src = option.dataUrl;
+      elements.currentImage.alt = `${readableAssetName(selectedTargetAssetId)} ${label}`;
+    }
+  };
+
+  const restoreActivePreview = () => {
+    const asset = manifest.assets[selectedTargetAssetId];
+    const activeVersion = asset.versions[asset.activeVersion];
+
+    if (!activeVersion?.file) return;
+
+    stopCurrentAnimationPreview?.();
+    stopCurrentAnimationPreview = undefined;
+    editedCurrentOption = undefined;
+    previewedVersionName = undefined;
+    selectedOption = undefined;
+
+    for (const item of elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
+      item.classList.remove("is-selected");
+    }
+
+    const activeVersionSource = resolveAssetUrl(activeVersion.file);
+    const isAudio = isAudioAsset(asset);
+    elements.currentPreview.classList.add("is-selected");
+    elements.currentPreview.setAttribute(
+      "aria-label",
+      `Preview active ${readableAssetName(selectedTargetAssetId)} version`
+    );
+    elements.currentAnimation.hidden = true;
+    elements.currentAnimationButton.textContent = "Edit...";
+    elements.currentAnimationButton.hidden = !asset.frameGrid && !isAudio;
+    elements.currentTouchUpButton.hidden =
+      isAudio ||
+      Boolean(asset.frameGrid) ||
+      normalizeAssetFormat(asset.settings?.format) === "svg" ||
+      isSvgSource(activeVersion.file);
+    elements.currentRevertButton.hidden = true;
+    elements.currentAudio.hidden = !isAudio;
+    elements.currentImage.hidden = isAudio;
+    elements.promoteButton.disabled = true;
+
+    if (isAudio) {
+      renderAudioPlayer({
+        container: elements.currentAudio,
+        src: activeVersionSource,
+        label: readableAssetName(selectedTargetAssetId),
+        playback: activeVersion.audioPlayback
+      });
+      options.onPreview(selectedTargetAssetId, activeVersionSource, asset);
+    } else {
+      elements.currentAudio.innerHTML = "";
+      elements.currentImage.src = activeVersionSource;
+      elements.currentImage.alt = `${readableAssetName(selectedTargetAssetId)} active version`;
+      previewCurrentAsset({
+        scene: options.scene,
+        manifest,
+        assetId: selectedTargetAssetId,
+        src: activeVersionSource,
+        onPreview: options.onPreview
+      });
+    }
+
+    setStatus(elements, "Reverted preview to the active version.", "info");
   };
 
   const syncAsset = (assetId: string) => {
@@ -508,19 +611,44 @@ export function installAiAssetDesigner(
     const asset = manifest.assets[selectedTargetAssetId];
     const activeVersion = asset.versions[asset.activeVersion];
 
-    if (!activeVersion?.file) return;
+    if (!editedCurrentOption && !activeVersion?.file) return;
 
     for (const item of elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
       item.classList.remove("is-selected");
     }
 
     elements.currentPreview.classList.add("is-selected");
-    if (previewedVersionName) {
-      editedCurrentOption = undefined;
-      previewedVersionName = undefined;
-    }
     selectedOption = editedCurrentOption;
     elements.promoteButton.disabled = !selectedOption;
+    if (editedCurrentOption) {
+      const optionAsset = assetWithGeneratedGeometry(asset, editedCurrentOption, {
+        inheritAnimations: Boolean(previewedVersionName)
+      });
+
+      if (isAudioAsset(asset)) {
+        renderAudioPlayer({
+          container: elements.currentAudio,
+          src: editedCurrentOption.dataUrl,
+          label: readableAssetName(selectedTargetAssetId),
+          playback: editedCurrentOption.audioPlayback
+        });
+        options.onPreview(selectedTargetAssetId, editedCurrentOption.dataUrl, optionAsset);
+      } else {
+        previewImageSource({
+          scene: options.scene,
+          manifest,
+          assetId: selectedTargetAssetId,
+          src: editedCurrentOption.dataUrl,
+          textureKey: `ai-current-option:${selectedTargetAssetId}:${Date.now()}`,
+          assetOverride: optionAsset,
+          onPreview: options.onPreview
+        });
+      }
+
+      setStatus(elements, "Previewing the selected option. Promote to save it to code.", "info");
+      return;
+    }
+
     if (isAudioAsset(asset)) {
       const activeVersionSource = resolveAssetUrl(activeVersion.file);
       renderAudioPlayer({
@@ -544,7 +672,13 @@ export function installAiAssetDesigner(
     setStatus(elements, "Previewing active version.", "info");
   });
 
+  elements.currentRevertButton.addEventListener("click", (event: MouseEvent) => {
+    event.stopPropagation();
+    restoreActivePreview();
+  });
+
   elements.currentPreview.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.target !== elements.currentPreview) return;
     if (event.key !== "Enter" && event.key !== " ") return;
 
     event.preventDefault();
@@ -579,8 +713,6 @@ export function installAiAssetDesigner(
     elements.regenerateButton.textContent = "Cancel";
     elements.options.innerHTML = "";
     selectedOption = undefined;
-    editedCurrentOption = undefined;
-    previewedVersionName = undefined;
     const streamedOptions: GeneratedDebugOption[] = [];
 
     try {
@@ -612,7 +744,7 @@ export function installAiAssetDesigner(
           onPreview: options.onPreview,
           onSelected(selected) {
             selectedOption = selected;
-            previewedVersionName = undefined;
+            showOptionInCurrentPreview(selected);
             elements.promoteButton.disabled = false;
           }
         });
@@ -669,12 +801,12 @@ export function installAiAssetDesigner(
         onPreview: options.onPreview,
         onSelected(option) {
           selectedOption = option;
-          previewedVersionName = undefined;
+          showOptionInCurrentPreview(option);
           elements.promoteButton.disabled = false;
         }
       });
       selectedOption = uploadedOption;
-      previewedVersionName = undefined;
+      showOptionInCurrentPreview(uploadedOption);
       elements.promoteButton.disabled = false;
 
       if (isAudioAsset(asset)) {
@@ -717,8 +849,6 @@ export function installAiAssetDesigner(
         elements.options.innerHTML = "";
         elements.promoteButton.disabled = true;
         selectedOption = undefined;
-        editedCurrentOption = undefined;
-        previewedVersionName = undefined;
 
         if (deriveRequest.strategy === "scale" ||
           deriveRequest.strategy === "tile" ||
@@ -748,11 +878,12 @@ export function installAiAssetDesigner(
             onPreview: options.onPreview,
             onSelected(selected) {
               selectedOption = selected;
-              previewedVersionName = undefined;
+              showOptionInCurrentPreview(selected);
               elements.promoteButton.disabled = false;
             }
           });
           selectedOption = option;
+          showOptionInCurrentPreview(option);
           elements.promoteButton.disabled = false;
           previewOption({
             scene: options.scene,
@@ -804,7 +935,7 @@ export function installAiAssetDesigner(
               onPreview: options.onPreview,
               onSelected(selected) {
                 selectedOption = selected;
-                previewedVersionName = undefined;
+                showOptionInCurrentPreview(selected);
                 elements.promoteButton.disabled = false;
               }
             });
@@ -849,7 +980,8 @@ export function installAiAssetDesigner(
         frameGrid: selectedOption.frameGrid,
         animations: assetWithGeneratedGeometry(
           manifest.assets[selectedTargetAssetId],
-          selectedOption
+          selectedOption,
+          { inheritAnimations: Boolean(previewedVersionName) }
         ).animations,
         settings: selectedOption.settings,
         audioSettings: selectedOption.audioSettings,
@@ -906,7 +1038,7 @@ export function installAiAssetDesigner(
         }
 
         selectedOption = option;
-        editedCurrentOption = option;
+        showOptionInCurrentPreview(option, versionName);
         previewedVersionName = versionName;
         elements.currentPreview.classList.add("is-selected");
         elements.promoteButton.disabled = false;
@@ -991,48 +1123,42 @@ export function installAiAssetDesigner(
     event.stopPropagation();
     const asset = manifest.assets[selectedTargetAssetId];
     const activeVersion = asset.versions[asset.activeVersion];
+    const sourceOption = editedCurrentOption;
 
-    if (!activeVersion?.file) return;
+    if (!sourceOption && !activeVersion?.file) return;
 
     if (isAudioAsset(asset)) {
       void openAudioEditor({
         root: elements.root,
         asset,
         assetId: selectedTargetAssetId,
-        src: editedCurrentOption?.dataUrl ?? resolveAssetUrl(activeVersion.file),
-        initialPlayback: editedCurrentOption?.audioPlayback ?? activeVersion.audioPlayback,
+        src: sourceOption?.dataUrl ?? resolveAssetUrl(activeVersion!.file),
+        initialPlayback: sourceOption?.audioPlayback ?? activeVersion?.audioPlayback,
         onConfirm: async (audioPlayback) => {
-          const dataUrl = editedCurrentOption?.dataUrl ??
-            await imageSourceToDataUrl(resolveAssetUrl(activeVersion.file));
+          const previousOption = editedCurrentOption;
+          const dataUrl = previousOption?.dataUrl ??
+            await imageSourceToDataUrl(resolveAssetUrl(activeVersion!.file));
           const optionAsset = {
             ...asset,
             audioPlayback
           };
 
           editedCurrentOption = {
-            index: -1,
+            ...previousOption,
+            index: previousOption?.index ?? -1,
             dataUrl,
             mimeType: mimeTypeFromDataUrl(dataUrl),
-            prompt: activeVersion.prompt ?? asset.prompt,
-            model: activeVersion.model,
-            revisedPrompt: activeVersion.revisedPrompt,
-            audioSettings: activeVersion.audioSettings ?? asset.audioSettings,
+            prompt: previousOption?.prompt ?? activeVersion?.prompt ?? asset.prompt,
+            model: previousOption?.model ?? activeVersion?.model,
+            revisedPrompt: previousOption?.revisedPrompt ?? activeVersion?.revisedPrompt,
+            audioSettings: previousOption?.audioSettings ?? activeVersion?.audioSettings ?? asset.audioSettings,
             audioPlayback,
-            voiceSettings: activeVersion.voiceSettings ?? asset.voiceSettings,
-            durationSeconds: activeVersion.durationSeconds
+            voiceSettings: previousOption?.voiceSettings ?? activeVersion?.voiceSettings ?? asset.voiceSettings,
+            durationSeconds: previousOption?.durationSeconds ?? activeVersion?.durationSeconds
           };
           selectedOption = editedCurrentOption;
           elements.promoteButton.disabled = false;
-          manifest.assets[selectedTargetAssetId] = {
-            ...optionAsset,
-            versions: {
-              ...asset.versions,
-              [asset.activeVersion]: {
-                ...activeVersion,
-                audioPlayback
-              }
-            }
-          };
+          elements.currentRevertButton.hidden = false;
           options.onPreview(selectedTargetAssetId, dataUrl, optionAsset);
           renderAudioPlayer({
             container: elements.currentAudio,
@@ -1046,37 +1172,47 @@ export function installAiAssetDesigner(
       return;
     }
 
-    if (!asset.frameGrid) return;
+    const editorAsset = sourceOption
+      ? assetWithGeneratedGeometry(asset, sourceOption, {
+          inheritAnimations: Boolean(previewedVersionName)
+        })
+      : asset;
+
+    if (!editorAsset.frameGrid) return;
 
     void openAnimationEditor({
       root: elements.root,
-      asset,
+      asset: editorAsset,
       assetId: selectedTargetAssetId,
-      src: editedCurrentOption?.dataUrl ?? resolveAssetUrl(activeVersion.file),
-      displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset),
-      initialAnimations: editedCurrentOption?.animations ?? asset.animations,
+      src: sourceOption?.dataUrl ?? resolveAssetUrl(activeVersion!.file),
+      displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, editorAsset),
+      initialAnimations: sourceOption?.animations ?? editorAsset.animations,
       onConfirm: async ({ animations, dataUrl: editedDataUrl }) => {
+        const previousOption = editedCurrentOption;
         const dataUrl = editedDataUrl ??
-          editedCurrentOption?.dataUrl ??
-          await imageSourceToDataUrl(resolveAssetUrl(activeVersion.file));
+          previousOption?.dataUrl ??
+          await imageSourceToDataUrl(resolveAssetUrl(activeVersion!.file));
         const optionAsset = {
-          ...asset,
+          ...editorAsset,
           animations
         };
 
         editedCurrentOption = {
-          index: -1,
+          ...previousOption,
+          index: previousOption?.index ?? -1,
           dataUrl,
           mimeType: mimeTypeFromDataUrl(dataUrl),
-          prompt: activeVersion.prompt ?? asset.prompt,
-          model: activeVersion.model,
-          revisedPrompt: activeVersion.revisedPrompt,
-          dimensions: asset.dimensions,
-          frameGrid: asset.frameGrid,
+          prompt: previousOption?.prompt ?? activeVersion?.prompt ?? asset.prompt,
+          model: previousOption?.model ?? activeVersion?.model,
+          revisedPrompt: previousOption?.revisedPrompt ?? activeVersion?.revisedPrompt,
+          dimensions: previousOption?.dimensions ?? editorAsset.dimensions,
+          frameGrid: previousOption?.frameGrid ?? editorAsset.frameGrid,
+          settings: previousOption?.settings ?? activeVersion?.settings ?? asset.settings,
           animations
         };
         selectedOption = editedCurrentOption;
         elements.promoteButton.disabled = false;
+        elements.currentRevertButton.hidden = false;
         previewImageSource({
           scene: options.scene,
           manifest,
@@ -1096,12 +1232,17 @@ export function installAiAssetDesigner(
     const asset = manifest.assets[selectedTargetAssetId];
     const activeVersion = asset.versions[asset.activeVersion];
 
+    const sourceOption = editedCurrentOption;
+
     if (
-      !activeVersion?.file ||
+      (!sourceOption && !activeVersion?.file) ||
       isAudioAsset(asset) ||
       asset.frameGrid ||
-      normalizeAssetFormat(asset.settings?.format) === "svg" ||
-      isSvgSource(activeVersion.file)
+      sourceOption?.mimeType === "image/svg+xml" ||
+      (!sourceOption && (
+        normalizeAssetFormat(asset.settings?.format) === "svg" ||
+        isSvgSource(activeVersion!.file)
+      ))
     ) {
       return;
     }
@@ -1110,26 +1251,30 @@ export function installAiAssetDesigner(
       root: elements.root,
       asset,
       title: readableAssetName(selectedTargetAssetId),
-      frameSrc: editedCurrentOption?.dataUrl ?? resolveAssetUrl(activeVersion.file),
+      frameSrc: sourceOption?.dataUrl ?? resolveAssetUrl(activeVersion!.file),
       displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset),
       onSave: async (dataUrl) => {
+        const previousOption = editedCurrentOption;
         const optionAsset = {
           ...asset,
-          dimensions: asset.dimensions
+          dimensions: previousOption?.dimensions ?? asset.dimensions
         };
 
         editedCurrentOption = {
-          index: -1,
+          ...previousOption,
+          index: previousOption?.index ?? -1,
           dataUrl,
           mimeType: mimeTypeFromDataUrl(dataUrl),
-          prompt: activeVersion.prompt ?? asset.prompt,
-          model: activeVersion.model,
-          revisedPrompt: activeVersion.revisedPrompt,
-          dimensions: asset.dimensions
+          prompt: previousOption?.prompt ?? activeVersion?.prompt ?? asset.prompt,
+          model: previousOption?.model ?? activeVersion?.model,
+          revisedPrompt: previousOption?.revisedPrompt ?? activeVersion?.revisedPrompt,
+          dimensions: previousOption?.dimensions ?? asset.dimensions,
+          settings: previousOption?.settings ?? activeVersion?.settings ?? asset.settings
         };
         selectedOption = editedCurrentOption;
         elements.currentImage.src = dataUrl;
         elements.currentPreview.classList.add("is-selected");
+        elements.currentRevertButton.hidden = false;
         elements.promoteButton.disabled = false;
         previewImageSource({
           scene: options.scene,
