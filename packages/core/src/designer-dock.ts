@@ -2,6 +2,7 @@ export type InGameDesignerPanelOptions = {
   id: string;
   label: string;
   panel: HTMLElement;
+  dragHandle?: HTMLElement;
   button?: HTMLButtonElement;
   order?: number;
   ariaLabel?: string;
@@ -23,14 +24,22 @@ type DockItem = {
   sequence: number;
   button: HTMLButtonElement;
   panel: HTMLElement;
+  dragHandle?: HTMLElement;
+  resizeHandles: HTMLElement[];
+  geometry?: PanelGeometry;
   open: boolean;
   createdButton: boolean;
   initialPanelHidden: boolean;
+  initialPanelStyle: string | null;
   buttonParent: Node | null;
   buttonNextSibling: Node | null;
   onOpenChange?: (isOpen: boolean) => void;
   onButtonClick: () => void;
+  onDragPointerDown?: (event: PointerEvent) => void;
 };
+
+type PanelGeometry = { left: number; top: number; width: number; height: number };
+type ResizeEdge = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
 
 type DockState = {
   document: Document;
@@ -69,9 +78,12 @@ export function registerInGameDesignerPanel(
     sequence,
     button,
     panel: options.panel,
+    dragHandle: options.dragHandle,
+    resizeHandles: [],
     open: false,
     createdButton: !options.button,
     initialPanelHidden: options.panel.hidden,
+    initialPanelStyle: options.panel.getAttribute("style"),
     buttonParent: button.parentNode,
     buttonNextSibling: button.nextSibling,
     onOpenChange: options.onOpenChange,
@@ -91,6 +103,20 @@ export function registerInGameDesignerPanel(
 
   options.panel.classList.add("ai-game-assets-in-game-designer-dock__panel");
   options.panel.hidden = true;
+  if (item.dragHandle) {
+    item.dragHandle.classList.add("ai-game-assets-in-game-designer-dock__drag-handle");
+    item.onDragPointerDown = (event) => beginPanelDrag(state, item, event);
+    item.dragHandle.addEventListener("pointerdown", item.onDragPointerDown);
+  }
+  for (const edge of ["n", "ne", "e", "se", "s", "sw", "w", "nw"] as ResizeEdge[]) {
+    const handle = document.createElement("div");
+    handle.className = `ai-game-assets-in-game-designer-dock__resize-handle is-${edge}`;
+    handle.dataset.edge = edge;
+    handle.setAttribute("aria-hidden", "true");
+    handle.addEventListener("pointerdown", (event) => beginPanelResize(state, item, edge, event));
+    options.panel.append(handle);
+    item.resizeHandles.push(handle);
+  }
   state.items.set(id, item);
   renderDockButtons(state);
 
@@ -170,6 +196,7 @@ function activateDockItem(state: DockState, activeId: string | undefined): void 
   for (const item of changed) {
     item.onOpenChange?.(item.open);
   }
+  positionDockForActivePanel(state);
 }
 
 function renderDockButtons(state: DockState): void {
@@ -187,6 +214,11 @@ function removeDockItem(state: DockState, item: DockItem): void {
   setDockPanelOpenState(state, state.activeId !== undefined);
 
   item.button.removeEventListener("click", item.onButtonClick);
+  if (item.dragHandle && item.onDragPointerDown) {
+    item.dragHandle.removeEventListener("pointerdown", item.onDragPointerDown);
+    item.dragHandle.classList.remove("ai-game-assets-in-game-designer-dock__drag-handle");
+  }
+  item.resizeHandles.forEach((handle) => handle.remove());
   state.layoutAnimations.get(item.button)?.cancel();
   state.layoutAnimations.delete(item.button);
   item.button.classList.remove("ai-game-assets-in-game-designer-dock__button", "is-open");
@@ -194,6 +226,8 @@ function removeDockItem(state: DockState, item: DockItem): void {
   item.button.setAttribute("aria-expanded", "false");
   item.panel.classList.remove("ai-game-assets-in-game-designer-dock__panel");
   item.panel.hidden = item.initialPanelHidden;
+  if (item.initialPanelStyle === null) item.panel.removeAttribute("style");
+  else item.panel.setAttribute("style", item.initialPanelStyle);
 
   if (item.createdButton) {
     item.button.remove();
@@ -214,6 +248,106 @@ function removeDockItem(state: DockState, item: DockItem): void {
   } else {
     renderDockButtons(state);
   }
+}
+
+function beginPanelDrag(state: DockState, item: DockItem, event: PointerEvent): void {
+  if (event.button !== 0 || !item.open) return;
+  event.preventDefault();
+  const startRect = item.panel.getBoundingClientRect();
+  const startX = event.clientX;
+  const startY = event.clientY;
+
+  const move = (moveEvent: PointerEvent) => {
+    const margin = 8;
+    const toolbarOffset = 50;
+    const view = state.document.defaultView;
+    if (!view) return;
+    const left = clamp(startRect.left + moveEvent.clientX - startX, margin, view.innerWidth - startRect.width - margin);
+    const top = clamp(startRect.top + moveEvent.clientY - startY, margin + toolbarOffset, view.innerHeight - 60);
+    item.geometry = { left, top, width: startRect.width, height: startRect.height };
+    applyPanelGeometry(item);
+    positionDockForActivePanel(state);
+  };
+  const end = () => {
+    state.document.defaultView?.removeEventListener("pointermove", move);
+    state.document.defaultView?.removeEventListener("pointerup", end);
+    state.document.defaultView?.removeEventListener("pointercancel", end);
+  };
+  state.document.defaultView?.addEventListener("pointermove", move);
+  state.document.defaultView?.addEventListener("pointerup", end, { once: true });
+  state.document.defaultView?.addEventListener("pointercancel", end, { once: true });
+}
+
+function beginPanelResize(
+  state: DockState,
+  item: DockItem,
+  edge: ResizeEdge,
+  event: PointerEvent
+): void {
+  if (event.button !== 0 || !item.open) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const startRect = item.panel.getBoundingClientRect();
+  const startX = event.clientX;
+  const startY = event.clientY;
+
+  const move = (moveEvent: PointerEvent) => {
+    const view = state.document.defaultView;
+    if (!view) return;
+    const margin = 8;
+    const minWidth = Math.min(280, view.innerWidth - margin * 2);
+    const minHeight = Math.min(180, view.innerHeight - 66);
+    const dx = moveEvent.clientX - startX;
+    const dy = moveEvent.clientY - startY;
+    let left = startRect.left;
+    let top = startRect.top;
+    let right = startRect.right;
+    let bottom = startRect.bottom;
+
+    if (edge.includes("w")) left = clamp(startRect.left + dx, margin, right - minWidth);
+    if (edge.includes("e")) right = clamp(startRect.right + dx, left + minWidth, view.innerWidth - margin);
+    if (edge.includes("n")) top = clamp(startRect.top + dy, 58, bottom - minHeight);
+    if (edge.includes("s")) bottom = clamp(startRect.bottom + dy, top + minHeight, view.innerHeight - margin);
+
+    item.geometry = { left, top, width: right - left, height: bottom - top };
+    applyPanelGeometry(item);
+    positionDockForActivePanel(state);
+  };
+  const end = () => {
+    state.document.defaultView?.removeEventListener("pointermove", move);
+    state.document.defaultView?.removeEventListener("pointerup", end);
+    state.document.defaultView?.removeEventListener("pointercancel", end);
+  };
+  state.document.defaultView?.addEventListener("pointermove", move);
+  state.document.defaultView?.addEventListener("pointerup", end, { once: true });
+  state.document.defaultView?.addEventListener("pointercancel", end, { once: true });
+}
+
+function applyPanelGeometry(item: DockItem): void {
+  if (!item.geometry) return;
+  item.panel.style.setProperty("left", `${item.geometry.left}px`, "important");
+  item.panel.style.setProperty("top", `${item.geometry.top}px`, "important");
+  item.panel.style.setProperty("right", "auto", "important");
+  item.panel.style.setProperty("width", `${item.geometry.width}px`, "important");
+  item.panel.style.setProperty("height", `${item.geometry.height}px`, "important");
+}
+
+function positionDockForActivePanel(state: DockState): void {
+  const activeItem = state.activeId ? state.items.get(state.activeId) : undefined;
+  if (!activeItem?.open) {
+    state.root.style.removeProperty("left");
+    state.root.style.removeProperty("top");
+    state.root.style.removeProperty("right");
+    return;
+  }
+
+  if (activeItem.geometry) applyPanelGeometry(activeItem);
+  const panelRect = activeItem.panel.getBoundingClientRect();
+  const dockRect = state.root.getBoundingClientRect();
+  const left = Math.max(8, panelRect.right - dockRect.width);
+  state.root.style.left = `${left}px`;
+  state.root.style.top = `${Math.max(8, panelRect.top - 50)}px`;
+  state.root.style.right = "auto";
 }
 
 function ensureDockStyles(document: Document): void {
@@ -285,10 +419,50 @@ function ensureDockStyles(document: Document): void {
   max-width: calc(100vw - 28px) !important;
   max-height: calc(100vh - 78px) !important;
   margin: 0 !important;
+  box-sizing: border-box !important;
 }
 .ai-game-assets-in-game-designer-dock__panel[hidden] {
   display: none !important;
 }
+.ai-game-assets-in-game-designer-dock__drag-handle {
+  cursor: move !important;
+  touch-action: none;
+  user-select: none;
+}
+.ai-game-assets-in-game-designer-dock__resize-handle {
+  position: absolute;
+  z-index: 20;
+  touch-action: none;
+}
+.ai-game-assets-in-game-designer-dock__resize-handle.is-n,
+.ai-game-assets-in-game-designer-dock__resize-handle.is-s {
+  left: 10px;
+  right: 10px;
+  height: 8px;
+  cursor: ns-resize;
+}
+.ai-game-assets-in-game-designer-dock__resize-handle.is-n { top: -4px; }
+.ai-game-assets-in-game-designer-dock__resize-handle.is-s { bottom: -4px; }
+.ai-game-assets-in-game-designer-dock__resize-handle.is-e,
+.ai-game-assets-in-game-designer-dock__resize-handle.is-w {
+  top: 10px;
+  bottom: 10px;
+  width: 8px;
+  cursor: ew-resize;
+}
+.ai-game-assets-in-game-designer-dock__resize-handle.is-e { right: -4px; }
+.ai-game-assets-in-game-designer-dock__resize-handle.is-w { left: -4px; }
+.ai-game-assets-in-game-designer-dock__resize-handle.is-ne,
+.ai-game-assets-in-game-designer-dock__resize-handle.is-se,
+.ai-game-assets-in-game-designer-dock__resize-handle.is-sw,
+.ai-game-assets-in-game-designer-dock__resize-handle.is-nw {
+  width: 14px;
+  height: 14px;
+}
+.ai-game-assets-in-game-designer-dock__resize-handle.is-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+.ai-game-assets-in-game-designer-dock__resize-handle.is-se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+.ai-game-assets-in-game-designer-dock__resize-handle.is-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.ai-game-assets-in-game-designer-dock__resize-handle.is-nw { top: -5px; left: -5px; cursor: nwse-resize; }
 `;
   document.head.append(style);
 }
@@ -324,4 +498,8 @@ function setDockPanelOpenState(state: DockState, isOpen: boolean): void {
 
 function safeDomId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "panel";
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), Math.max(minimum, maximum));
 }

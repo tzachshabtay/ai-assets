@@ -22,6 +22,7 @@ export type DesignerElements = {
   root: HTMLDivElement;
   toggle: HTMLButtonElement;
   panel: HTMLDivElement;
+  title: HTMLDivElement;
   styleButton: HTMLButtonElement;
   assetSelect: HTMLSelectElement;
   assetBrowser: HTMLDivElement;
@@ -289,6 +290,7 @@ export function createDesignerElements(
     root,
     toggle,
     panel,
+    title,
     styleButton,
     assetSelect,
     assetBrowser,

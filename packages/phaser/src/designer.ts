@@ -182,6 +182,7 @@ export function installAiAssetDesigner(
     id: "ai-game-assets.assets",
     label: "Assets",
     panel: elements.panel,
+    dragHandle: elements.title,
     button: elements.toggle,
     order: 10,
     ariaLabel: "Toggle AI asset designer",
