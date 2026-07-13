@@ -359,7 +359,7 @@ export function renderAssetFolderBrowser(options: {
   const storedPathValue = options.container.getAttribute("data-path");
   const storedPath = storedPathValue !== null
     ? storedPathValue.split("/").filter(Boolean)
-    : selectedPath;
+    : [];
   const currentPath = pathHasAnyAsset(storedPath, assetPathEntries)
     ? storedPath
     : selectedPath;
