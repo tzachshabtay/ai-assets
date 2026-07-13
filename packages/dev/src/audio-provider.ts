@@ -33,11 +33,14 @@ export type ElevenLabsAudioProviderOptions = {
   musicModel?: string;
   outputFormat?: string;
   promptInfluence?: number;
+  maxConcurrentRequests?: number;
 };
 
 export function createElevenLabsAudioProvider(
   options: ElevenLabsAudioProviderOptions = {}
 ): AiAudioProvider {
+  const runRequest = createConcurrencyLimiter(options.maxConcurrentRequests ?? 2);
+
   return {
     async generate(request, onOption) {
       const apiKey = options.apiKey ?? process.env.ELEVENLABS_API_KEY;
@@ -52,16 +55,16 @@ export function createElevenLabsAudioProvider(
       const generated: GeneratedAssetOption[] = [];
 
       if (request.asset.kind === "voice") {
-        return generateElevenLabsVoicePreviews(apiKey, request, options, count, onOption);
+        return generateElevenLabsVoicePreviews(apiKey, request, options, count, runRequest, onOption);
       }
 
       if (request.asset.kind === "voice-line") {
-        return generateElevenLabsVoiceLine(apiKey, request, options, count, onOption);
+        return generateElevenLabsVoiceLine(apiKey, request, options, count, runRequest, onOption);
       }
 
       const generatedByIndex = await Promise.all(
         Array.from({ length: count }, async (_, index) => {
-          const option = await generateElevenLabsAudio(apiKey, request, options);
+          const option = await runRequest(() => generateElevenLabsAudio(apiKey, request, options));
           await onOption?.(option, index);
           return option;
         })
@@ -86,7 +89,7 @@ export function createElevenLabsAudioProvider(
       }
 
       const voiceDescription = request.option.prompt || request.asset.prompt;
-      const response = await fetch("https://api.elevenlabs.io/v1/text-to-voice", {
+      const response = await runRequest(() => fetch("https://api.elevenlabs.io/v1/text-to-voice", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -100,7 +103,7 @@ export function createElevenLabsAudioProvider(
             source: "ai-game-assets"
           }
         })
-      });
+      }));
 
       if (!response.ok) {
         throw new Error(
@@ -129,6 +132,7 @@ async function generateElevenLabsVoicePreviews(
   request: GenerateAudioAssetRequest,
   options: ElevenLabsAudioProviderOptions,
   count: number,
+  runRequest: ElevenLabsRequestRunner,
   onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
   const voiceSettings = {
@@ -148,7 +152,7 @@ async function generateElevenLabsVoicePreviews(
   while (generated.length < count) {
     const url = new URL("https://api.elevenlabs.io/v1/text-to-voice/design");
     url.searchParams.set("output_format", outputFormat);
-    const response = await fetch(url, {
+    const response = await runRequest(() => fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -162,7 +166,7 @@ async function generateElevenLabsVoicePreviews(
         loudness: voiceSettings.loudness,
         seed
       })
-    });
+    }));
 
     if (!response.ok) {
       throw new Error(
@@ -220,6 +224,7 @@ async function generateElevenLabsVoiceLine(
   request: GenerateAudioAssetRequest,
   options: ElevenLabsAudioProviderOptions,
   count: number,
+  runRequest: ElevenLabsRequestRunner,
   onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
   const voiceSettings = {
@@ -252,7 +257,7 @@ async function generateElevenLabsVoiceLine(
     const text = direction ? `[${sanitizeElevenLabsAudioTag(direction)}]\n${line}` : line;
     const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`);
     url.searchParams.set("output_format", options.outputFormat ?? elevenLabsOutputFormat(format));
-    const response = await fetch(url, {
+    const response = await runRequest(() => fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -262,7 +267,7 @@ async function generateElevenLabsVoiceLine(
         text,
         model_id: model
       })
-    });
+    }));
 
     if (!response.ok) {
       throw new Error(
@@ -305,6 +310,28 @@ function sanitizeElevenLabsAudioTag(direction: string): string {
     .replace(/[\[\]]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+type ElevenLabsRequestRunner = <T>(operation: () => Promise<T>) => Promise<T>;
+
+function createConcurrencyLimiter(maxConcurrentRequests: number): ElevenLabsRequestRunner {
+  const limit = Math.max(1, Math.floor(maxConcurrentRequests));
+  const waiting: Array<() => void> = [];
+  let active = 0;
+
+  return async <T>(operation: () => Promise<T>): Promise<T> => {
+    if (active >= limit) {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+
+    active += 1;
+    try {
+      return await operation();
+    } finally {
+      active -= 1;
+      waiting.shift()?.();
+    }
+  };
 }
 
 async function generateElevenLabsAudio(
