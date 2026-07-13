@@ -4031,6 +4031,7 @@ export function ensureDesignerStyles(): void {
 .ai-game-assets-designer__modal {
   position: fixed;
   inset: 0;
+  z-index: 2147483647;
   display: grid;
   place-items: center;
   padding: 18px;
