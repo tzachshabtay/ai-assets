@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { createElevenLabsAudioProvider } from "../dist/audio-provider.js";
 
-test("ElevenLabs generation respects the provider-wide concurrency limit", async () => {
+test("ElevenLabs limits music generation without throttling sound effects", async () => {
   const originalFetch = globalThis.fetch;
   let activeRequests = 0;
   let maximumActiveRequests = 0;
@@ -21,29 +21,41 @@ test("ElevenLabs generation respects the provider-wide concurrency limit", async
   try {
     const provider = createElevenLabsAudioProvider({
       apiKey: "test-key",
-      maxConcurrentRequests: 2
+      maxConcurrentMusicRequests: 2
     });
-    const asset = {
-      id: "audio.music.game",
-      kind: "music",
-      prompt: "Test music",
-      audioSettings: {
-        format: "mp3",
-        durationSeconds: 1
-      },
-      activeVersion: "",
-      versions: {},
-      tags: []
-    };
+    const music = audioAsset("audio.music.game", "music");
 
     await Promise.all([
-      provider.generate({ asset, count: 3 }),
-      provider.generate({ asset, count: 3 })
+      provider.generate({ asset: music, count: 3 }),
+      provider.generate({ asset: music, count: 3 })
     ]);
 
     assert.equal(requestCount, 6);
     assert.equal(maximumActiveRequests, 2);
+
+    activeRequests = 0;
+    maximumActiveRequests = 0;
+    requestCount = 0;
+    await provider.generate({ asset: audioAsset("audio.sfx.hit", "sound"), count: 3 });
+
+    assert.equal(requestCount, 3);
+    assert.equal(maximumActiveRequests, 3);
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
+
+function audioAsset(id, kind) {
+  return {
+    id,
+    kind,
+    prompt: `Test ${kind}`,
+    audioSettings: {
+      format: "mp3",
+      durationSeconds: 1
+    },
+    activeVersion: "",
+    versions: {},
+    tags: []
+  };
+}

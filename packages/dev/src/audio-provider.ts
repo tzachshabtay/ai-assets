@@ -33,13 +33,13 @@ export type ElevenLabsAudioProviderOptions = {
   musicModel?: string;
   outputFormat?: string;
   promptInfluence?: number;
-  maxConcurrentRequests?: number;
+  maxConcurrentMusicRequests?: number;
 };
 
 export function createElevenLabsAudioProvider(
   options: ElevenLabsAudioProviderOptions = {}
 ): AiAudioProvider {
-  const runRequest = createConcurrencyLimiter(options.maxConcurrentRequests ?? 2);
+  const runMusicRequest = createConcurrencyLimiter(options.maxConcurrentMusicRequests ?? 2);
 
   return {
     async generate(request, onOption) {
@@ -55,16 +55,19 @@ export function createElevenLabsAudioProvider(
       const generated: GeneratedAssetOption[] = [];
 
       if (request.asset.kind === "voice") {
-        return generateElevenLabsVoicePreviews(apiKey, request, options, count, runRequest, onOption);
+        return generateElevenLabsVoicePreviews(apiKey, request, options, count, onOption);
       }
 
       if (request.asset.kind === "voice-line") {
-        return generateElevenLabsVoiceLine(apiKey, request, options, count, runRequest, onOption);
+        return generateElevenLabsVoiceLine(apiKey, request, options, count, onOption);
       }
 
       const generatedByIndex = await Promise.all(
         Array.from({ length: count }, async (_, index) => {
-          const option = await runRequest(() => generateElevenLabsAudio(apiKey, request, options));
+          const generate = () => generateElevenLabsAudio(apiKey, request, options);
+          const option = request.asset.kind === "music"
+            ? await runMusicRequest(generate)
+            : await generate();
           await onOption?.(option, index);
           return option;
         })
@@ -89,7 +92,7 @@ export function createElevenLabsAudioProvider(
       }
 
       const voiceDescription = request.option.prompt || request.asset.prompt;
-      const response = await runRequest(() => fetch("https://api.elevenlabs.io/v1/text-to-voice", {
+      const response = await fetch("https://api.elevenlabs.io/v1/text-to-voice", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -103,7 +106,7 @@ export function createElevenLabsAudioProvider(
             source: "ai-game-assets"
           }
         })
-      }));
+      });
 
       if (!response.ok) {
         throw new Error(
@@ -132,7 +135,6 @@ async function generateElevenLabsVoicePreviews(
   request: GenerateAudioAssetRequest,
   options: ElevenLabsAudioProviderOptions,
   count: number,
-  runRequest: ElevenLabsRequestRunner,
   onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
   const voiceSettings = {
@@ -152,7 +154,7 @@ async function generateElevenLabsVoicePreviews(
   while (generated.length < count) {
     const url = new URL("https://api.elevenlabs.io/v1/text-to-voice/design");
     url.searchParams.set("output_format", outputFormat);
-    const response = await runRequest(() => fetch(url, {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -166,7 +168,7 @@ async function generateElevenLabsVoicePreviews(
         loudness: voiceSettings.loudness,
         seed
       })
-    }));
+    });
 
     if (!response.ok) {
       throw new Error(
@@ -224,7 +226,6 @@ async function generateElevenLabsVoiceLine(
   request: GenerateAudioAssetRequest,
   options: ElevenLabsAudioProviderOptions,
   count: number,
-  runRequest: ElevenLabsRequestRunner,
   onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
   const voiceSettings = {
@@ -257,7 +258,7 @@ async function generateElevenLabsVoiceLine(
     const text = direction ? `[${sanitizeElevenLabsAudioTag(direction)}]\n${line}` : line;
     const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`);
     url.searchParams.set("output_format", options.outputFormat ?? elevenLabsOutputFormat(format));
-    const response = await runRequest(() => fetch(url, {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -267,7 +268,7 @@ async function generateElevenLabsVoiceLine(
         text,
         model_id: model
       })
-    }));
+    });
 
     if (!response.ok) {
       throw new Error(
