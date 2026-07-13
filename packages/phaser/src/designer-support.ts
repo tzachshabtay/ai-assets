@@ -1863,6 +1863,16 @@ export function renderAudioPlayer(options: {
     }
   };
 
+  const handleEnded = () => {
+    if (!options.playback?.loop || state.disposed) {
+      sync();
+      return;
+    }
+
+    audio.currentTime = state.trimStart;
+    void audio.play().then(() => tick()).catch(() => sync());
+  };
+
   playButton.addEventListener("click", async () => {
     if (audio.paused) {
       pauseSiblingAudioPlayers(options.container);
@@ -1900,11 +1910,14 @@ export function renderAudioPlayer(options: {
     state.trimEnd = clamp(options.playback?.trimEndSeconds ?? state.duration, state.trimStart, state.duration);
     trimLabel.hidden = state.trimStart === 0 && state.trimEnd === state.duration;
     trimLabel.textContent = `Trim ${formatAudioTime(state.trimStart, true)} – ${formatAudioTime(state.trimEnd, true)}`;
+    audio.loop = Boolean(options.playback?.loop) &&
+      state.trimStart === 0 &&
+      state.trimEnd >= state.duration - 0.05;
     audio.currentTime = state.trimStart;
     sync();
   });
   audio.addEventListener("timeupdate", sync);
-  audio.addEventListener("ended", sync);
+  audio.addEventListener("ended", handleEnded);
   draw();
   void audioWaveformPeaks(options.src).then((peaks) => {
     if (state.disposed) return;
