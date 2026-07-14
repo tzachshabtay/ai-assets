@@ -3,15 +3,15 @@ name: Release npm packages
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: Package version to publish, for example 0.5.0 or v0.5.0
+      version_bump:
+        description: Version increment to publish from the latest npm version
         required: true
-        type: string
-      dry_run:
-        description: Validate and pack only; do not publish, tag, or create a release.
-        required: true
-        default: true
-        type: boolean
+        default: patch
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
 
 permissions:
   contents: write
@@ -47,28 +47,94 @@ jobs:
         run: |
           set -euo pipefail
 
-          version="${{ inputs.version }}"
-          version="${version#v}"
-          tag="$version"
+          node - "${{ inputs.version_bump }}" <<'NODE'
+          const { execFileSync } = require('node:child_process');
+          const fs = require('node:fs');
 
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid package version: $version" >&2
-            exit 1
-          fi
+          const bump = process.argv[2];
+          const packages = [
+            '@ai-game-assets/core',
+            '@ai-game-assets/dev',
+            '@ai-game-assets/phaser'
+          ];
 
-          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
-            dry_run=true
-          else
-            dry_run=false
-          fi
+          if (!['major', 'minor', 'patch'].includes(bump)) {
+            throw new Error(`Invalid version bump: ${bump}`);
+          }
 
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "dry_run=$dry_run" >> "$GITHUB_OUTPUT"
+          const parseVersion = (version) => {
+            const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version);
 
-          echo "Release version: $version"
-          echo "Release tag: $tag"
-          echo "Dry run: $dry_run"
+            if (!match) {
+              throw new Error(`Invalid package version: ${version}`);
+            }
+
+            return {
+              raw: version,
+              major: Number(match[1]),
+              minor: Number(match[2]),
+              patch: Number(match[3])
+            };
+          };
+
+          const compareVersions = (a, b) =>
+            a.major - b.major || a.minor - b.minor || a.patch - b.patch;
+
+          const publishedVersions = packages.flatMap((packageName) => {
+            try {
+              const version = execFileSync('npm', ['view', `${packageName}@latest`, 'version'], {
+                encoding: 'utf8',
+                stdio: ['ignore', 'pipe', 'ignore']
+              }).trim();
+
+              console.log(`${packageName} latest: ${version}`);
+              return [parseVersion(version)];
+            } catch {
+              console.log(`${packageName} latest: not published`);
+              return [];
+            }
+          });
+
+          const localVersions = packages.map((packageName) => {
+            const slug = packageName.split('/').pop();
+            const packageJson = JSON.parse(fs.readFileSync(`packages/${slug}/package.json`, 'utf8'));
+
+            return parseVersion(packageJson.version);
+          });
+
+          const candidates = publishedVersions.length > 0 ? publishedVersions : localVersions;
+          const latest = candidates.sort(compareVersions).at(-1);
+
+          let major = latest.major;
+          let minor = latest.minor;
+          let patch = latest.patch;
+
+          if (bump === 'major') {
+            major += 1;
+            minor = 0;
+            patch = 0;
+          } else if (bump === 'minor') {
+            minor += 1;
+            patch = 0;
+          } else {
+            patch += 1;
+          }
+
+          const version = `${major}.${minor}.${patch}`;
+          const tag = version;
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+            `bump=${bump}`,
+            `latest_version=${latest.raw}`,
+            `version=${version}`,
+            `tag=${tag}`
+          ].join('\n') + '\n');
+
+          console.log(`Version bump: ${bump}`);
+          console.log(`Latest version: ${latest.raw}`);
+          console.log(`Release version: ${version}`);
+          console.log(`Release tag: ${tag}`);
+          NODE
 
       - name: Preflight release availability
         shell: bash
@@ -181,7 +247,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "dry_run=${{ steps.release.outputs.dry_run }}"
+          echo "bump=${{ steps.release.outputs.bump }}"
+          echo "latest_version=${{ steps.release.outputs.latest_version }}"
           echo "version=${{ steps.release.outputs.version }}"
           echo "tag=${{ steps.release.outputs.tag }}"
           echo "event=${GITHUB_EVENT_NAME}"
@@ -199,19 +266,15 @@ jobs:
           fi
 
       - name: Publish core
-        if: steps.release.outputs.dry_run == 'false'
         run: npm publish --workspace @ai-game-assets/core --access public
 
       - name: Publish dev
-        if: steps.release.outputs.dry_run == 'false'
         run: npm publish --workspace @ai-game-assets/dev --access public
 
       - name: Publish phaser
-        if: steps.release.outputs.dry_run == 'false'
         run: npm publish --workspace @ai-game-assets/phaser --access public
 
       - name: Create GitHub release
-        if: steps.release.outputs.dry_run == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
