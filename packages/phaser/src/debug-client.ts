@@ -1,6 +1,9 @@
 import type {
+  AiAssetDefinition,
   AiAssetGenerationSettings,
   AiAssetManifest,
+  AiAssetTileset,
+  AiAssetVersion,
   AiAudioPlaybackSettings,
   AiAudioGenerationSettings,
   AiVoiceGenerationSettings
@@ -19,6 +22,7 @@ export type GenerateDebugOptionsRequest = {
     height: number;
   };
   frameCount?: number;
+  tileset?: Pick<AiAssetTileset, "tileWidth" | "tileHeight" | "tileCount" | "tiles">;
   format?: AiAssetGenerationSettings["format"];
   audioSettings?: AiAudioGenerationSettings;
   voiceSettings?: AiVoiceGenerationSettings;
@@ -53,6 +57,7 @@ export type GeneratedDebugOption = {
     margin?: number;
     spacing?: number;
   };
+  tileset?: AiAssetTileset;
   animations?: Array<{
     key: string;
     frames: number[];
@@ -76,6 +81,36 @@ export type GeneratedDebugOption = {
   durationSeconds?: number;
 };
 
+export type GenerateTilesetAnimationRequest = {
+  assetId: string;
+  animationKey: string;
+  prompt?: string;
+  count?: number;
+};
+
+export type GeneratedTilesetAnimationCandidate = {
+  index: number;
+  animationKey: string;
+  frames: GeneratedDebugOption[];
+};
+
+export type SaveTilesetAnimationRequest = {
+  assetId: string;
+  animationKey: string;
+  frames: string[];
+  versionName?: string;
+  notes?: string;
+};
+
+export type SaveTilesetAnimationResult = {
+  manifest: AiAssetManifest;
+  asset: AiAssetDefinition;
+  versionName: string;
+  version: AiAssetVersion;
+  file: string;
+  filePath: string;
+};
+
 export type SaveDebugOptionRequest = {
   assetId: string;
   versionName: string;
@@ -88,6 +123,7 @@ export type SaveDebugOptionRequest = {
     height: number;
   };
   frameGrid?: GeneratedDebugOption["frameGrid"];
+  tileset?: GeneratedDebugOption["tileset"];
   animations?: GeneratedDebugOption["animations"];
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
@@ -96,6 +132,15 @@ export type SaveDebugOptionRequest = {
   durationSeconds?: number;
   activate?: boolean;
   notes?: string;
+};
+
+export type SaveDebugOptionResult = {
+  manifest: AiAssetManifest;
+  asset: AiAssetDefinition;
+  versionName: string;
+  version: AiAssetVersion;
+  file: string;
+  filePath: string;
 };
 
 export type DeleteDebugVersionRequest = {
@@ -251,6 +296,93 @@ export class AiAssetDebugClient {
     return response.json() as Promise<AiAssetManifest>;
   }
 
+  async generateTilesetAnimationStream(
+    request: GenerateTilesetAnimationRequest,
+    onCandidate: (candidate: GeneratedTilesetAnimationCandidate) => void,
+    options: AiAssetDebugClientRequestOptions = {}
+  ): Promise<GeneratedTilesetAnimationCandidate[]> {
+    const url = `${this.endpoint}/__ai-assets/generate-tileset-animation-stream`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request),
+      signal: options.signal
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+
+    if (!response.body) {
+      throw new Error("Tileset animation generation did not return a response stream.");
+    }
+
+    const generated: GeneratedTilesetAnimationCandidate[] = [];
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    const consumeLine = (line: string) => {
+      if (!line.trim()) return;
+
+      const event = JSON.parse(line) as
+        | { type: "option"; option: GeneratedTilesetAnimationCandidate }
+        | { type: "error"; error: string }
+        | { type: "done" };
+
+      if (event.type === "option") {
+        const candidate = {
+          ...event.option,
+          frames: [...event.option.frames].sort((left, right) => left.index - right.index)
+        };
+        generated.push(candidate);
+        onCandidate(candidate);
+        return;
+      }
+
+      if (event.type === "error") {
+        throw new Error(event.error);
+      }
+    };
+
+    while (true) {
+      const chunk = await reader.read();
+      buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        consumeLine(line);
+      }
+
+      if (chunk.done) break;
+    }
+
+    consumeLine(buffer);
+    return generated.sort((left, right) => left.index - right.index);
+  }
+
+  async saveTilesetAnimation(
+    request: SaveTilesetAnimationRequest
+  ): Promise<SaveTilesetAnimationResult> {
+    const url = `${this.endpoint}/__ai-assets/save-tileset-animation`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(request)
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+
+    return response.json() as Promise<SaveTilesetAnimationResult>;
+  }
+
   async ensureFirstDrafts(
     request: EnsureFirstDraftsRequest = {}
   ): Promise<EnsureFirstDraftsResult> {
@@ -270,7 +402,7 @@ export class AiAssetDebugClient {
     return response.json() as Promise<EnsureFirstDraftsResult>;
   }
 
-  async save(request: SaveDebugOptionRequest): Promise<void> {
+  async save(request: SaveDebugOptionRequest): Promise<SaveDebugOptionResult> {
     const url = `${this.endpoint}/__ai-assets/save`;
     const response = await fetchDebugEndpoint(url, {
       method: "POST",
@@ -283,6 +415,8 @@ export class AiAssetDebugClient {
     if (!response.ok) {
       throw new Error(await responseErrorMessage(response));
     }
+
+    return response.json() as Promise<SaveDebugOptionResult>;
   }
 
   async deleteVersion(request: DeleteDebugVersionRequest): Promise<AiAssetManifest> {

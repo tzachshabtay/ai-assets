@@ -1,12 +1,20 @@
 export type {
   AiImageProvider,
   GenerateAssetReference,
+  GeneratedTilesetAnimationOption,
+  GeneratedTilesetAnimationOptionCallback,
   GeneratedAssetOption,
+  GenerateTilesetAnimationRequest,
   GenerateAssetRequest,
   OpenAiImageProviderOptions
 } from "./provider.js";
 
-export { createOpenAiImageProvider } from "./provider.js";
+export {
+  createOpenAiImageProvider,
+  generateTilesetAnimationBranches,
+  tilesetBasePrompt,
+  tilesetAnimationFramePrompt
+} from "./provider.js";
 
 export type {
   AiAudioProvider,
@@ -20,20 +28,37 @@ export type {
   AssetStoreOptions,
   SaveGeneratedOptionInput,
   SaveGeneratedOptionResult,
+  SaveTilesetAnimationInput,
+  SaveTilesetAnimationResult,
+  TilesetAnimationFrameInput,
   SaveStyleGuideInput
 } from "./asset-store.js";
 
 export {
   readManifest,
   saveGeneratedOption,
+  saveTilesetAnimation,
   saveStyleGuide,
   writeManifestModule,
   writeManifest
 } from "./asset-store.js";
 
-export type { AiAssetDevServerOptions } from "./server.js";
+export type {
+  AiAssetDevServerOptions,
+  GeneratedTilesetAnimationStreamOption,
+  GenerateTilesetAnimationStreamEvent,
+  GenerateTilesetAnimationStreamRequest,
+  SaveDebugOptionResponse,
+  SaveTilesetAnimationRequest,
+  SaveTilesetAnimationResponse,
+  SerializedGeneratedAssetOption,
+  TilesetGenerationOverride
+} from "./server.js";
 
-export { createAiAssetDevServer } from "./server.js";
+export {
+  createAiAssetDevServer,
+  serializeGeneratedTilesetAnimationOption
+} from "./server.js";
 
 export type { BuildManifestOptions } from "./build-manifest.js";
 

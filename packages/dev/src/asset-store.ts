@@ -9,8 +9,10 @@ import {
   type AiAssetVersion,
   type GeneratedAssetOption
 } from "./internal.js";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { PNG } from "pngjs";
 
 export type AssetStoreOptions = {
   manifestPath: string;
@@ -31,6 +33,28 @@ export type SaveGeneratedOptionResult = {
   manifest: AiAssetManifest;
   version: AiAssetVersion;
   filePath: string;
+};
+
+export type TilesetAnimationFrameInput = {
+  image: Uint8Array;
+  mimeType: string;
+};
+
+export type SaveTilesetAnimationInput = {
+  assetId: string;
+  animationKey: string;
+  frames: TilesetAnimationFrameInput[];
+  versionName?: string;
+  notes?: string;
+};
+
+export type SaveTilesetAnimationResult = {
+  manifest: AiAssetManifest;
+  asset: AiAssetDefinition;
+  versionName: string;
+  version: AiAssetVersion;
+  filePath: string;
+  animationFilePaths: string[];
 };
 
 export type SaveStyleGuideInput = {
@@ -117,6 +141,10 @@ export async function saveGeneratedOption(
     notes: input.notes
   });
 
+  // Promoting a newly generated tileset base intentionally starts a clean
+  // bundle. Its animation sheets describe the previous base's exact pixels
+  // and must be regenerated (or explicitly composed via saveTilesetAnimation).
+
   const updatedAsset = addVersion(asset, input.versionName, version, {
     activate: input.activate
   });
@@ -127,6 +155,7 @@ export async function saveGeneratedOption(
         prompt: version.prompt,
         dimensions: input.option.dimensions ?? updatedAsset.dimensions,
         frameGrid: input.option.frameGrid ?? updatedAsset.frameGrid,
+        tileset: input.option.tileset ?? updatedAsset.tileset,
         animations: input.option.animations ?? updatedAsset.animations,
         settings: {
           ...updatedAsset.settings,
@@ -147,6 +176,7 @@ export async function saveGeneratedOption(
       }
     : updatedAsset;
 
+  assertManifest(manifest);
   await writeManifest(options.manifestPath, manifest);
 
   if (options.manifestModulePath) {
@@ -158,6 +188,198 @@ export async function saveGeneratedOption(
     version,
     filePath
   };
+}
+
+export async function saveTilesetAnimation(
+  options: AssetStoreOptions,
+  input: SaveTilesetAnimationInput
+): Promise<SaveTilesetAnimationResult> {
+  const manifest = await readManifest(options.manifestPath);
+  const previousManifest = structuredClone(manifest);
+  const asset = manifest.assets[input.assetId];
+
+  if (!asset) {
+    throw new Error(`Unknown AI asset "${input.assetId}".`);
+  }
+  if (asset.kind !== "tileset" || !asset.tileset) {
+    throw new Error(`AI asset "${input.assetId}" is not a tileset.`);
+  }
+
+  const animation = asset.tileset.animations?.find(
+    (candidate) => candidate.key === input.animationKey
+  );
+  if (!animation) {
+    throw new Error(
+      `Unknown tileset animation "${input.animationKey}" for AI asset "${input.assetId}".`
+    );
+  }
+  if (input.frames.length !== animation.frameCount) {
+    throw new Error(
+      `Tileset animation "${input.animationKey}" requires exactly ${animation.frameCount} frames.`
+    );
+  }
+  const dimensions = asset.dimensions;
+  if (!dimensions) {
+    throw new Error(`AI tileset "${input.assetId}" requires dimensions.`);
+  }
+  for (const [index, frame] of input.frames.entries()) {
+    if (!frame.image.byteLength || frame.mimeType !== "image/png") {
+      throw new Error(`Tileset animation frame ${index + 1} must be a non-empty PNG image.`);
+    }
+
+    let png: PNG;
+    try {
+      png = PNG.sync.read(Buffer.from(frame.image));
+    } catch {
+      throw new Error(`Tileset animation frame ${index + 1} is not a valid PNG image.`);
+    }
+    if (png.width !== dimensions.width || png.height !== dimensions.height) {
+      throw new Error(
+        `Tileset animation frame ${index + 1} must be ${dimensions.width}x${dimensions.height}; received ${png.width}x${png.height}.`
+      );
+    }
+  }
+
+  const sourceVersionName = asset.activeVersion;
+  const sourceVersion = asset.versions[sourceVersionName];
+  if (!sourceVersion) {
+    throw new Error(`AI tileset "${input.assetId}" requires an active base version.`);
+  }
+
+  const versionName = input.versionName?.trim() ||
+    `${sourceVersionName}.${sanitizeFilePart(input.animationKey)}.${Date.now()}`;
+  if (asset.versions[versionName]) {
+    throw new Error(`Version "${versionName}" already exists for AI asset "${input.assetId}".`);
+  }
+
+  const transactionId = randomUUID();
+  const fileStem = [
+    sanitizeFilePart(input.assetId),
+    sanitizeFilePart(versionName),
+    transactionId.slice(0, 8)
+  ].join(".");
+  const pendingFiles: Array<{
+    image: Uint8Array;
+    fileName: string;
+    filePath: string;
+    temporaryPath: string;
+    publicFile: string;
+  }> = [];
+
+  const queueFile = (fileName: string, image: Uint8Array) => {
+    const filePath = path.join(options.assetsDir, fileName);
+    pendingFiles.push({
+      image,
+      fileName,
+      filePath,
+      temporaryPath: `${filePath}.tmp-${transactionId}`,
+      publicFile: publicAssetFile(options, fileName)
+    });
+  };
+
+  const baseExtension = extensionFromFileName(sourceVersion.file);
+  queueFile(
+    `${fileStem}.${baseExtension}`,
+    await readStoredAssetFile(options, sourceVersion.file)
+  );
+
+  const sequenceFiles: Record<string, { files: string[] }> = {};
+  for (const definition of asset.tileset.animations ?? []) {
+    if (definition.key === input.animationKey) {
+      const publicFiles: string[] = [];
+      for (const [index, frame] of input.frames.entries()) {
+        const extension = extensionFromMimeType(frame.mimeType);
+        const fileName = `${fileStem}.tileset.${sanitizeFilePart(definition.key)}.${index + 1}.${extension}`;
+        queueFile(fileName, frame.image);
+        publicFiles.push(publicAssetFile(options, fileName));
+      }
+      sequenceFiles[definition.key] = { files: publicFiles };
+      continue;
+    }
+
+    const sourceSequence = sourceVersion.tilesetAnimations?.[definition.key];
+    if (!sourceSequence) continue;
+
+    const publicFiles: string[] = [];
+    for (const [index, sourceFile] of sourceSequence.files.entries()) {
+      const extension = extensionFromFileName(sourceFile);
+      const fileName = `${fileStem}.tileset.${sanitizeFilePart(definition.key)}.${index + 1}.${extension}`;
+      queueFile(fileName, await readStoredAssetFile(options, sourceFile));
+      publicFiles.push(publicAssetFile(options, fileName));
+    }
+    sequenceFiles[definition.key] = { files: publicFiles };
+  }
+
+  await mkdir(options.assetsDir, { recursive: true });
+  const committedPaths: string[] = [];
+  let manifestWritten = false;
+
+  try {
+    await Promise.all(
+      pendingFiles.map((file) => writeFile(file.temporaryPath, file.image))
+    );
+    for (const file of pendingFiles) {
+      await rename(file.temporaryPath, file.filePath);
+      committedPaths.push(file.filePath);
+    }
+
+    const baseFile = pendingFiles[0];
+    if (!baseFile) {
+      throw new Error(`AI tileset "${input.assetId}" did not produce a base file.`);
+    }
+    const version = createAiAssetVersion(asset, {
+      name: versionName,
+      file: baseFile.publicFile,
+      prompt: sourceVersion.prompt,
+      model: sourceVersion.model,
+      revisedPrompt: sourceVersion.revisedPrompt,
+      settings: sourceVersion.settings,
+      parentVersion: sourceVersionName,
+      notes: input.notes,
+      tilesetAnimations: sequenceFiles
+    });
+    const updatedAsset = addVersion(asset, versionName, version, { activate: true });
+    manifest.assets[input.assetId] = updatedAsset;
+    assertManifest(manifest);
+    await writeManifest(options.manifestPath, manifest);
+    manifestWritten = true;
+
+    if (options.manifestModulePath) {
+      try {
+        await writeManifestModule(options.manifestModulePath, manifest);
+      } catch (error) {
+        try {
+          await writeManifest(options.manifestPath, previousManifest);
+          manifestWritten = false;
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            "Tileset animation was saved, but manifest module generation and manifest rollback both failed."
+          );
+        }
+        throw error;
+      }
+    }
+
+    return {
+      manifest,
+      asset: updatedAsset,
+      versionName,
+      version,
+      filePath: baseFile.filePath,
+      animationFilePaths: pendingFiles
+        .filter((file) => file !== baseFile)
+        .map((file) => file.filePath)
+    };
+  } catch (error) {
+    await Promise.all(
+      pendingFiles.map((file) => unlinkIfPresent(file.temporaryPath))
+    );
+    if (!manifestWritten) {
+      await Promise.all(committedPaths.map((filePath) => unlinkIfPresent(filePath)));
+    }
+    throw error;
+  }
 }
 
 export async function saveStyleGuide(
@@ -215,19 +437,26 @@ export async function deleteAssetVersion(
     throw new Error(`Cannot delete active version "${input.versionName}" for AI asset "${input.assetId}".`);
   }
 
-  await deleteVersionFile(options, asset.versions[input.versionName]);
-
+  const deletedVersion = asset.versions[input.versionName];
   const { [input.versionName]: _deleted, ...remainingVersions } = asset.versions;
   manifest.assets[input.assetId] = {
     ...asset,
     versions: remainingVersions
   };
 
+  assertManifest(manifest);
+
   await writeManifest(options.manifestPath, manifest);
 
   if (options.manifestModulePath) {
     await writeManifestModule(options.manifestModulePath, manifest);
   }
+
+  // Target variants initially share their source asset's immutable version
+  // files. Only clean up paths which no remaining version still references.
+  // The manifest is committed first so a cleanup failure can leave at worst
+  // an orphaned file, never a live version pointing at a deleted one.
+  await deleteUnreferencedVersionFiles(options, manifest, deletedVersion);
 
   return manifest;
 }
@@ -270,7 +499,22 @@ export async function ensureTargetVariant(
   manifest.assets[variantAssetId] = {
     ...sourceAsset,
     id: variantAssetId,
-    versions: { ...sourceAsset.versions },
+    versions: Object.fromEntries(
+      Object.entries(sourceAsset.versions).map(([versionName, version]) => [
+        versionName,
+        {
+          ...version,
+          tilesetAnimations: version.tilesetAnimations
+            ? Object.fromEntries(
+                Object.entries(version.tilesetAnimations).map(([key, sequence]) => [
+                  key,
+                  { files: [...sequence.files] }
+                ])
+              )
+            : undefined
+        }
+      ])
+    ),
     linkedAnimationAssets: sourceAsset.linkedAnimationAssets
       ? { ...sourceAsset.linkedAnimationAssets }
       : undefined,
@@ -278,6 +522,16 @@ export async function ensureTargetVariant(
     audioSettings: sourceAsset.audioSettings ? { ...sourceAsset.audioSettings } : undefined,
     audioPlayback: sourceAsset.audioPlayback ? { ...sourceAsset.audioPlayback } : undefined,
     voiceSettings: sourceAsset.voiceSettings ? { ...sourceAsset.voiceSettings } : undefined,
+    tileset: sourceAsset.tileset
+      ? {
+          ...sourceAsset.tileset,
+          tiles: sourceAsset.tileset.tiles?.map((tile) => ({ ...tile })),
+          animations: sourceAsset.tileset.animations?.map((animation) => ({
+            ...animation,
+            frameTimings: animation.frameTimings?.map((timing) => ({ ...timing }))
+          }))
+        }
+      : undefined,
     tags: sourceAsset.tags ? [...sourceAsset.tags] : undefined
   };
   manifest.assetPaths = {
@@ -326,9 +580,8 @@ export async function writeManifestModule(
     ? [`, ${JSON.stringify(optionsArgument, null, 2)}`]
     : [];
 
-  await writeFile(
-    modulePath,
-    [
+  const temporaryPath = `${modulePath}.tmp-${randomUUID()}`;
+  const source = [
       "import { defineAiAssets } from \"@ai-game-assets/core\";",
       "",
       "export const assets = defineAiAssets(",
@@ -336,8 +589,15 @@ export async function writeManifestModule(
       ...optionsLines,
       ");",
       ""
-    ].join("\n")
-  );
+    ].join("\n");
+
+  try {
+    await writeFile(temporaryPath, source);
+    await rename(temporaryPath, modulePath);
+  } catch (error) {
+    await unlinkIfPresent(temporaryPath);
+    throw error;
+  }
 }
 
 function sanitizeFilePart(value: string): string {
@@ -364,12 +624,55 @@ function uniqueAssetId(manifest: AiAssetManifest, baseAssetId: string): string {
   return candidate;
 }
 
-async function deleteVersionFile(
+async function deleteUnreferencedVersionFiles(
   options: AssetStoreOptions,
+  manifest: AiAssetManifest,
   version: AiAssetVersion
 ): Promise<void> {
-  const filePath = path.join(options.assetsDir, path.basename(version.file));
+  const referencedFiles = new Set(
+    Object.values(manifest.assets).flatMap((asset) =>
+      Object.values(asset.versions).flatMap(versionFiles)
+    )
+  );
+  const files = versionFiles(version).filter((file) => !referencedFiles.has(file));
 
+  for (const file of files) {
+    await unlinkIfPresent(path.join(options.assetsDir, path.basename(file)));
+  }
+}
+
+function versionFiles(version: AiAssetVersion): string[] {
+  return [
+    version.file,
+    ...Object.values(version.tilesetAnimations ?? {}).flatMap((sequence) => sequence.files)
+  ];
+}
+
+async function readStoredAssetFile(
+  options: AssetStoreOptions,
+  publicFile: string
+): Promise<Uint8Array> {
+  if (/^[a-z][a-z\d+.-]*:/i.test(publicFile) || publicFile.startsWith("//")) {
+    throw new Error(`Cannot compose a local tileset version from external file "${publicFile}".`);
+  }
+  return readFile(path.join(options.assetsDir, path.basename(publicFile)));
+}
+
+function publicAssetFile(options: AssetStoreOptions, fileName: string): string {
+  return options.publicPathPrefix
+    ? `${options.publicPathPrefix.replace(/\/$/, "")}/${fileName}`
+    : fileName;
+}
+
+function extensionFromFileName(fileName: string): string {
+  const extension = path.extname(fileName).slice(1).toLowerCase();
+  if (!extension || !/^[a-z0-9]+$/.test(extension)) {
+    throw new Error(`Cannot determine an asset extension from "${fileName}".`);
+  }
+  return extension;
+}
+
+async function unlinkIfPresent(filePath: string): Promise<void> {
   try {
     await unlink(filePath);
   } catch (error) {

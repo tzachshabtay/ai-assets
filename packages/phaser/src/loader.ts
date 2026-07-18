@@ -8,7 +8,7 @@ import {
   type AiAssetSelection,
   type ResolvedAiAsset
 } from "@ai-game-assets/core";
-import { aiTextureKey } from "./keys.js";
+import { aiTextureKey, aiTilesetAnimationTextureKey } from "./keys.js";
 import { aiAssetPlaceholderDataUrl } from "./placeholder.js";
 import type { PhaserSceneLike } from "./phaser-types.js";
 
@@ -48,7 +48,35 @@ export function loadAiAsset(
     const key = options.key ?? aiTextureKey({ assetId });
     const url = aiAssetPlaceholderDataUrl(unresolvedAsset);
 
-    if (unresolvedAsset.kind === "spritesheet" || unresolvedAsset.kind === "animation") {
+    if (
+      unresolvedAsset.kind === "spritesheet"
+      || unresolvedAsset.kind === "animation"
+      || unresolvedAsset.kind === "tileset"
+    ) {
+      if (unresolvedAsset.kind === "tileset") {
+        if (!unresolvedAsset.tileset) {
+          throw new Error(`AI asset "${unresolvedAsset.id}" requires tileset metadata.`);
+        }
+
+        scene.load.spritesheet(key, url, {
+          frameWidth: unresolvedAsset.tileset.tileWidth,
+          frameHeight: unresolvedAsset.tileset.tileHeight,
+          margin: unresolvedAsset.tileset.margin,
+          spacing: unresolvedAsset.tileset.spacing
+        });
+        return {
+          asset: unresolvedAsset,
+          versionName: "",
+          version: {
+            name: "",
+            file: url,
+            prompt: unresolvedAsset.prompt,
+            createdAt: new Date(0).toISOString(),
+            model: "loading-placeholder"
+          }
+        };
+      }
+
       if (!unresolvedAsset.frameGrid) {
         throw new Error(`AI asset "${unresolvedAsset.id}" requires frameGrid for spritesheet loading.`);
       }
@@ -93,7 +121,37 @@ export function loadAiAsset(
   });
   const url = joinUrl(options.baseUrl, resolved.version.file);
 
-  if (resolved.asset.kind === "spritesheet" || resolved.asset.kind === "animation") {
+  if (resolved.asset.kind === "tileset") {
+    if (!resolved.asset.tileset) {
+      throw new Error(`AI asset "${resolved.asset.id}" requires tileset metadata.`);
+    }
+
+    const grid = {
+      frameWidth: resolved.asset.tileset.tileWidth,
+      frameHeight: resolved.asset.tileset.tileHeight,
+      margin: resolved.asset.tileset.margin,
+      spacing: resolved.asset.tileset.spacing
+    };
+    scene.load.spritesheet(key, url, grid);
+
+    const animationSelection: AiAssetSelection = {
+      assetId: resolved.asset.id,
+      versionName: resolved.versionName === resolved.asset.activeVersion
+        ? undefined
+        : resolved.versionName
+    };
+    for (const [animationKey, sequence] of Object.entries(
+      resolved.version.tilesetAnimations ?? {}
+    )) {
+      sequence.files.forEach((file, frameIndex) => {
+        scene.load.spritesheet(
+          aiTilesetAnimationTextureKey(animationSelection, animationKey, frameIndex),
+          joinUrl(options.baseUrl, file),
+          grid
+        );
+      });
+    }
+  } else if (resolved.asset.kind === "spritesheet" || resolved.asset.kind === "animation") {
     if (!resolved.asset.frameGrid) {
       throw new Error(`AI asset "${resolved.asset.id}" requires frameGrid for spritesheet loading.`);
     }

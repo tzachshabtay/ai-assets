@@ -1,9 +1,11 @@
 import type {
   AiAssetDimensions,
   AiAssetFrameGrid,
-  AiAssetGenerationSettings
+  AiAssetGenerationSettings,
+  AiAssetTileset
 } from "@ai-game-assets/core";
 import { PNG } from "pngjs";
+import sharp from "sharp";
 import type {
   GenerateAssetReference,
   GenerateAssetRequest,
@@ -27,7 +29,11 @@ const CHROMA_EDGE_FILL_TOLERANCE = 150;
 export function selectChromaKey(request: GenerateAssetRequest): RgbColor {
   const samples = [...(request.references ?? []), ...(request.styleReferences ?? [])]
     .flatMap((reference) => referenceColorSamples(reference));
-  const prompt = `${request.prompt ?? ""} ${request.asset.prompt}`.toLowerCase();
+  const prompt = [
+    request.prompt,
+    request.asset.prompt,
+    ...(request.asset.tileset?.tiles?.map((tile) => tile.prompt) ?? [])
+  ].filter(Boolean).join(" ").toLowerCase();
 
   if (!samples.length) {
     return CHROMA_KEY_CANDIDATES.find((candidate) => !promptMentionsChromaFamily(prompt, candidate)) ??
@@ -328,7 +334,8 @@ export function shouldRequestRgbaPng(
 
   return (
     /\btransparent\b/i.test(context.prompt) ||
-    /\btransparent\b/i.test(request.asset.prompt)
+    /\btransparent\b/i.test(request.asset.prompt) ||
+    request.asset.tileset?.tiles?.some((tile) => /\btransparent\b/i.test(tile.prompt)) === true
   );
 }
 
@@ -361,17 +368,51 @@ export function shouldPostprocessTransparency(
 
 export function removeChromaBackground(image: Uint8Array, chromaKey: RgbColor): Buffer {
   const png = PNG.sync.read(Buffer.from(image));
+  const backgroundRemoval = detectBackgroundRemoval(png, chromaKey);
+
+  if (!backgroundRemoval) {
+    return Buffer.from(image);
+  }
+
+  removeDetectedBackground(png, backgroundRemoval);
+
+  return PNG.sync.write(png);
+}
+
+export function removeTilesetChromaBackground(
+  image: Uint8Array,
+  tileset: AiAssetTileset,
+  chromaKey: RgbColor
+): Buffer {
+  const png = PNG.sync.read(Buffer.from(image));
+  const tileCapacity = tileset.columns * tileset.rows;
+  const tileCount = Math.min(tileset.tileCount ?? tileCapacity, tileCapacity);
+
+  for (let index = 0; index < tileCapacity; index += 1) {
+    const bounds = scaledTilesetCellBounds(png, tileset, index);
+    if (!bounds) continue;
+
+    if (index >= tileCount) {
+      clearPngRect(png, bounds.x, bounds.y, bounds.width, bounds.height);
+      continue;
+    }
+
+    const cell = copyPngRect(png, bounds.x, bounds.y, bounds.width, bounds.height);
+    if (removeKnownChromaPixels(cell, chromaKey)) {
+      pastePngRect(png, cell, bounds.x, bounds.y);
+    }
+  }
+
+  return PNG.sync.write(png);
+}
+
+function removeDetectedBackground(png: PNG, backgroundRemoval: BackgroundRemoval): void {
   const width = png.width;
   const height = png.height;
   const visited = new Uint8Array(width * height);
   const transparent = new Uint8Array(width * height);
   const queue: number[] = [];
   let queueCursor = 0;
-  const backgroundRemoval = detectBackgroundRemoval(png, chromaKey);
-
-  if (!backgroundRemoval) {
-    return Buffer.from(image);
-  }
 
   const enqueue = (x: number, y: number) => {
     if (x < 0 || y < 0 || x >= width || y >= height) return;
@@ -416,13 +457,76 @@ export function removeChromaBackground(image: Uint8Array, chromaKey: RgbColor): 
   }
 
   featherBackgroundEdges(png, transparent, backgroundRemoval);
-
-  return PNG.sync.write(png);
 }
 
 type BackgroundRemoval =
   | { kind: "chroma"; chromaKey: RgbColor }
   | { kind: "edge-matte"; matteColor: RgbColor };
+
+function removeKnownChromaPixels(png: PNG, chromaKey: RgbColor): boolean {
+  const transparent = new Uint8Array(png.width * png.height);
+  let found = false;
+
+  for (let index = 0; index < transparent.length; index += 1) {
+    if (
+      isChromaPixel(png, index, CHROMA_MATCH_TOLERANCE, chromaKey) ||
+      isKeyTintedPixel(rgbAt(png, index), chromaKey, 0.86)
+    ) {
+      transparent[index] = 1;
+      setAlpha(png, index, 0);
+      found = true;
+    }
+  }
+
+  if (found) {
+    featherBackgroundEdges(png, transparent, { kind: "chroma", chromaKey });
+  }
+
+  return found;
+}
+
+function scaledTilesetCellBounds(
+  png: PNG,
+  tileset: AiAssetTileset,
+  index: number
+): { x: number; y: number; width: number; height: number } | undefined {
+  const margin = tileset.margin ?? 0;
+  const spacing = tileset.spacing ?? 0;
+  const sheetWidth = margin * 2 + tileset.columns * tileset.tileWidth +
+    Math.max(0, tileset.columns - 1) * spacing;
+  const sheetHeight = margin * 2 + tileset.rows * tileset.tileHeight +
+    Math.max(0, tileset.rows - 1) * spacing;
+  if (sheetWidth <= 0 || sheetHeight <= 0 || index < 0 || index >= tileset.columns * tileset.rows) {
+    return undefined;
+  }
+
+  const column = index % tileset.columns;
+  const row = Math.floor(index / tileset.columns);
+  const sourceX = margin + column * (tileset.tileWidth + spacing);
+  const sourceY = margin + row * (tileset.tileHeight + spacing);
+  const x = Math.round((sourceX / sheetWidth) * png.width);
+  const y = Math.round((sourceY / sheetHeight) * png.height);
+  const right = Math.round(((sourceX + tileset.tileWidth) / sheetWidth) * png.width);
+  const bottom = Math.round(((sourceY + tileset.tileHeight) / sheetHeight) * png.height);
+
+  return {
+    x,
+    y,
+    width: Math.max(1, right - x),
+    height: Math.max(1, bottom - y)
+  };
+}
+
+function copyPngRect(png: PNG, x: number, y: number, width: number, height: number): PNG {
+  const target = new PNG({ width, height });
+
+  PNG.bitblt(png, target, x, y, width, height, 0, 0);
+  return target;
+}
+
+function pastePngRect(png: PNG, source: PNG, x: number, y: number): void {
+  PNG.bitblt(source, png, 0, 0, source.width, source.height, x, y);
+}
 
 export function detectBackgroundRemoval(
   png: PNG,
@@ -538,6 +642,42 @@ export function resizePngToDimensions(image: Uint8Array, dimensions: AiAssetDime
   }
 
   return PNG.sync.write(target);
+}
+
+export async function resizeRasterToDimensions(
+  image: Uint8Array,
+  dimensions: AiAssetDimensions,
+  outputFormat: "webp" | "jpeg"
+): Promise<Buffer> {
+  const sourceImage = Buffer.from(image);
+  const metadata = await sharp(sourceImage, {
+    failOn: "error"
+  }).metadata();
+
+  if (
+    metadata.width === dimensions.width &&
+    metadata.height === dimensions.height &&
+    metadata.format === outputFormat
+  ) {
+    return sourceImage;
+  }
+
+  const resized = sharp(sourceImage, {
+    failOn: "error"
+  }).resize(dimensions.width, dimensions.height, {
+    fit: "fill",
+    kernel: sharp.kernel.nearest
+  });
+
+  return outputFormat === "webp"
+    ? resized.webp({ quality: 100 }).toBuffer()
+    : resized.jpeg({ quality: 95 }).toBuffer();
+}
+
+export async function rasterizeSvgToPng(image: Uint8Array): Promise<Buffer> {
+  return sharp(Buffer.from(image), {
+    failOn: "error"
+  }).png().toBuffer();
 }
 
 type SpriteFrameBounds = {

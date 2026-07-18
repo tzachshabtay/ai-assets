@@ -18,8 +18,13 @@ export type {
   AiVoiceGenerationSettings,
   AiAssetStyleGuide,
   AiAssetStyleGuideImage,
+  AiAssetTileset,
   AiAssetTarget,
   AiAssetVersion,
+  AiTilesetAnimation,
+  AiTilesetAnimationFrameTiming,
+  AiTilesetAnimationVersion,
+  AiTilesetTile,
   ResolvedAiAsset
 } from "./types.js";
 

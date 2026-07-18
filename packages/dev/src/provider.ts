@@ -4,9 +4,11 @@ import type {
   AiAssetDimensions,
   AiAssetFormat,
   AiAssetFrameGrid,
+  AiAssetTileset,
   AiAudioGenerationSettings,
   AiVoiceGenerationSettings,
-  AiAssetGenerationSettings
+  AiAssetGenerationSettings,
+  AiTilesetAnimation
 } from "@ai-game-assets/core";
 import { randomUUID } from "node:crypto";
 
@@ -15,7 +17,10 @@ import {
   hexColor,
   referenceLockPromptLines,
   removeChromaBackground,
+  removeTilesetChromaBackground,
   resizePngToDimensions,
+  resizeRasterToDimensions,
+  rasterizeSvgToPng,
   resolveRequestedBackground,
   selectChromaKey,
   shouldPostprocessTransparency,
@@ -31,6 +36,7 @@ export type GenerateAssetRequest = {
   references?: GenerateAssetReference[];
   stylePrompt?: string;
   styleReferences?: GenerateAssetReference[];
+  signal?: AbortSignal;
 };
 
 export type GenerateAssetReference = {
@@ -52,6 +58,7 @@ export type GeneratedAssetOption = {
   durationSeconds?: number;
   dimensions?: AiAssetDimensions;
   frameGrid?: AiAssetFrameGrid;
+  tileset?: AiAssetTileset;
   animations?: AiAssetAnimation[];
 };
 
@@ -66,6 +73,144 @@ export type AiImageProvider = {
     onOption?: GeneratedAssetOptionCallback
   ): Promise<GeneratedAssetOption[]>;
 };
+
+export type GenerateTilesetAnimationRequest = {
+  asset: AiAssetDefinition;
+  animationKey: string;
+  prompt?: string;
+  count?: number;
+  settings?: AiAssetGenerationSettings;
+  baseReference: GenerateAssetReference;
+  stylePrompt?: string;
+  styleReferences?: GenerateAssetReference[];
+  signal?: AbortSignal;
+};
+
+export type GeneratedTilesetAnimationOption = {
+  index: number;
+  animationKey: string;
+  frames: GeneratedAssetOption[];
+};
+
+export type GeneratedTilesetAnimationOptionCallback = (
+  option: GeneratedTilesetAnimationOption
+) => void | Promise<void>;
+
+export async function generateTilesetAnimationBranches(
+  provider: AiImageProvider,
+  request: GenerateTilesetAnimationRequest,
+  onOption?: GeneratedTilesetAnimationOptionCallback
+): Promise<GeneratedTilesetAnimationOption[]> {
+  if (request.asset.kind !== "tileset" || !request.asset.tileset) {
+    throw new Error(`AI asset "${request.asset.id}" is not a tileset.`);
+  }
+
+  const animation = request.asset.tileset.animations?.find(
+    (candidate) => candidate.key === request.animationKey
+  );
+  if (!animation) {
+    throw new Error(
+      `Unknown tileset animation "${request.animationKey}" for AI asset "${request.asset.id}".`
+    );
+  }
+
+  const requestedBranchCount = request.count ?? 3;
+  if (!Number.isInteger(requestedBranchCount) || requestedBranchCount <= 0) {
+    throw new Error("Tileset animation candidate count must be a positive integer.");
+  }
+  const branchCount = Math.min(requestedBranchCount, 3);
+
+  request.signal?.throwIfAborted();
+
+  return Promise.all(
+    Array.from({ length: branchCount }, async (_, index) => {
+      const frames: GeneratedAssetOption[] = [];
+      const previousFrameReferences: GenerateAssetReference[] = [];
+      const branchSeed = createVariationSeed(index);
+
+      for (let frameIndex = 0; frameIndex < animation.frameCount; frameIndex += 1) {
+        request.signal?.throwIfAborted();
+        const generated = await provider.generate({
+          asset: request.asset,
+          prompt: tilesetAnimationFramePrompt(request.asset, animation, {
+            prompt: request.prompt,
+            frameIndex,
+            branchIndex: index,
+            branchCount,
+            branchSeed,
+            priorFrameCount: previousFrameReferences.length
+          }),
+          count: 1,
+          settings: {
+            ...request.settings,
+            format: "png",
+            frameAlignment: "none"
+          },
+          references: [request.baseReference, ...previousFrameReferences],
+          stylePrompt: request.stylePrompt,
+          styleReferences: request.styleReferences,
+          signal: request.signal
+        });
+        const frame = generated[0];
+        if (!frame) {
+          throw new Error(
+            `Tileset animation "${animation.key}" branch ${index + 1} frame ${frameIndex + 1} did not produce an image.`
+          );
+        }
+
+        frames.push(frame);
+        previousFrameReferences.push({
+          image: frame.image,
+          mimeType: frame.mimeType,
+          fileName: `prior-${sanitizeReferenceName(animation.key)}-frame-${frameIndex + 1}.${extensionFromMimeType(frame.mimeType)}`
+        });
+      }
+
+      const option = {
+        index,
+        animationKey: animation.key,
+        frames
+      } satisfies GeneratedTilesetAnimationOption;
+      request.signal?.throwIfAborted();
+      await onOption?.(option);
+      return option;
+    })
+  );
+}
+
+export function tilesetAnimationFramePrompt(
+  asset: AiAssetDefinition,
+  animation: AiTilesetAnimation,
+  context: {
+    prompt?: string;
+    frameIndex: number;
+    branchIndex: number;
+    branchCount: number;
+    branchSeed: string;
+    priorFrameCount: number;
+  }
+): string {
+  const brief = context.prompt?.trim() || animation.prompt?.trim() ||
+    `Animate the tiles described by "${animation.key}".`;
+  const frameNumber = context.frameIndex + 1;
+  const priorReferenceDescription = context.priorFrameCount
+    ? `References 2 through ${context.priorFrameCount + 1} are the already-generated earlier frames for this same candidate branch, in chronological order.`
+    : "There are no prior animation frames yet; derive this first phase directly from the base sheet.";
+
+  return [
+    brief,
+    "",
+    `Generate animation frame ${frameNumber} of ${animation.frameCount} for tileset animation "${animation.key}".`,
+    `This is candidate branch ${context.branchIndex + 1} of ${context.branchCount}; branch identity seed: ${context.branchSeed}.`,
+    "Return one complete full-size tileset sheet, never an individual tile or a contact sheet of animation phases.",
+    "Reference 1 is the immutable base tileset sheet and defines every tile's identity, index, palette, scale, cell boundaries, edge continuity, and pixel alignment.",
+    priorReferenceDescription,
+    "Preserve every tile at exactly the same index and coordinates. Do not add, remove, reorder, resize, crop, relight, restyle, or redesign tiles.",
+    "Only change pixels needed for the requested animated material or object. Every non-animated tile must remain visually identical to the base sheet.",
+    `Depict the ${frameNumber}/${animation.frameCount} temporal phase of a seamless loop; keep motion coherent with all prior references and make the final phase transition cleanly back to the first.`,
+    ...tilesetContractPromptLines(asset)
+  ].join("\n");
+}
 
 export type OpenAiImageProviderOptions = {
   apiKey?: string;
@@ -102,7 +247,8 @@ export function createOpenAiImageProvider(
           model: request.settings?.model ?? options.svgModel ?? process.env.OPENAI_SVG_MODEL ?? "gpt-5",
           prompt,
           count: request.count ?? 1,
-          requestedBackground
+          requestedBackground,
+          signal: request.signal
         }, onOption);
       }
 
@@ -152,9 +298,10 @@ export function createOpenAiImageProvider(
         moderation: request.settings?.moderation ?? request.asset.settings?.moderation
       }));
       const generatedByIndex = await Promise.all(requestBodies.map(async (requestBody, index) => {
+        request.signal?.throwIfAborted();
         const response = allReferences.length
-          ? await createImageEdit(apiKey, requestBody, allReferences)
-          : await createImageGeneration(apiKey, requestBody);
+          ? await createImageEdit(apiKey, requestBody, allReferences, request.signal)
+          : await createImageGeneration(apiKey, requestBody, request.signal);
 
         if (!response.ok) {
           const body = await response.text();
@@ -170,12 +317,18 @@ export function createOpenAiImageProvider(
           if (!item.b64_json) {
             throw new Error("OpenAI image generation response did not include b64_json.");
           }
+          request.signal?.throwIfAborted();
           const image = Buffer.from(item.b64_json, "base64");
-          const resizedImage = resizePngToDimensions(
-            postprocessTransparency ? removeChromaBackground(image, chromaKey) : image,
-            dimensions
-          );
+          const transparencyProcessedImage = postprocessTransparency
+            ? request.asset.kind === "tileset" && request.asset.tileset
+              ? removeTilesetChromaBackground(image, request.asset.tileset, chromaKey)
+              : removeChromaBackground(image, chromaKey)
+            : image;
+          const resizedImage = outputFormat === "png"
+            ? resizePngToDimensions(transparencyProcessedImage, dimensions)
+            : await resizeRasterToDimensions(image, dimensions, outputFormat);
           const processedImage =
+            request.asset.kind !== "tileset" &&
             postprocessTransparency && request.asset.frameGrid && frameAlignment === "center"
               ? alignSpriteSheetFrames(resizedImage, request.asset.frameGrid)
               : resizedImage;
@@ -188,6 +341,7 @@ export function createOpenAiImageProvider(
             revisedPrompt: item.revised_prompt,
             dimensions,
             frameGrid: request.asset.frameGrid,
+            tileset: request.asset.tileset,
             settings: {
               ...request.asset.settings,
               ...request.settings,
@@ -199,6 +353,7 @@ export function createOpenAiImageProvider(
           };
 
           generatedForRequest.push(option);
+          request.signal?.throwIfAborted();
           await onOption?.(option, index);
         }
 
@@ -218,6 +373,7 @@ async function generateSvgAssets(
     prompt: string;
     count: number;
     requestedBackground: AiAssetGenerationSettings["background"];
+    signal?: AbortSignal;
   },
   onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
@@ -231,6 +387,7 @@ async function generateSvgAssets(
   ];
 
   return Promise.all(Array.from({ length: context.count }, async (_, index) => {
+    context.signal?.throwIfAborted();
     const prompt = svgAssetPrompt(request, {
       prompt: context.prompt,
       requestedBackground: context.requestedBackground,
@@ -242,7 +399,7 @@ async function generateSvgAssets(
       model: context.model,
       prompt,
       references
-    });
+    }, context.signal);
 
     if (!response.ok) {
       const body = await response.text();
@@ -252,6 +409,7 @@ async function generateSvgAssets(
     }
 
     const payload = await response.json() as unknown;
+    context.signal?.throwIfAborted();
     const svg = normalizeSvgOutput(extractResponseText(payload), dimensions);
 
     const option: GeneratedAssetOption = {
@@ -261,6 +419,7 @@ async function generateSvgAssets(
       model: context.model,
       dimensions,
       frameGrid: request.asset.frameGrid,
+      tileset: request.asset.tileset,
       settings: {
         ...request.asset.settings,
         ...request.settings,
@@ -270,6 +429,7 @@ async function generateSvgAssets(
       }
     };
 
+    context.signal?.throwIfAborted();
     await onOption?.(option, index);
     return option;
   }));
@@ -286,9 +446,19 @@ function svgAssetPrompt(
   }
 ): string {
   const dimensions = requireAssetDimensions(request.asset);
-  const lines = [
-    context.prompt,
-    "",
+  const lines: string[] = [];
+  const brief = assetBriefForModel(request, context.prompt);
+  if (brief) {
+    lines.push(brief, "");
+  }
+  const structuredTilesetPrompt = structuredTilesetPromptLines(request.asset);
+  if (
+    structuredTilesetPrompt.length &&
+    !brief?.includes(structuredTilesetPrompt.join("\n"))
+  ) {
+    lines.push(...structuredTilesetPrompt, "");
+  }
+  lines.push(
     "Generate a single valid SVG file as XML markup for a 2D game asset.",
     "Return only the <svg>...</svg> document. Do not wrap it in Markdown, do not add commentary, and do not output raster images or base64 data.",
     `The root <svg> must use xmlns="http://www.w3.org/2000/svg", width="${dimensions.width}", height="${dimensions.height}", and viewBox="0 0 ${dimensions.width} ${dimensions.height}".`,
@@ -296,19 +466,26 @@ function svgAssetPrompt(
     `Target canvas: ${dimensions.width}x${dimensions.height}.`,
     "Use vector primitives such as paths, polygons, circles, ellipses, rects, gradients, masks, and groups. Keep IDs unique and descriptive.",
     "Do not include scripts, external URLs, foreignObject, CSS imports, font imports, animation tags, or event handlers."
-  ];
+  );
 
   if (request.stylePrompt?.trim()) {
     lines.push(`Style guide: ${request.stylePrompt.trim()}`);
   }
 
-  if (referencesNeedIdentity(request)) {
+  if (referencesNeedIdentity(request) && request.asset.kind !== "tileset") {
     lines.push(
       "Use the provided non-style reference image as the character identity reference. Preserve its silhouette, palette distribution, proportions, markings, and distinctive details while drawing it as clean SVG."
     );
   }
 
-  if (request.asset.frameGrid) {
+  if (request.asset.kind === "tileset") {
+    lines.push(...tilesetContractPromptLines(request.asset, false));
+    if (request.references?.length) {
+      lines.push(
+        "Treat the first non-style reference as the immutable base tileset and any later non-style references as earlier animation phases. Preserve exact tile identity, indices, cell boundaries, palette, and alignment."
+      );
+    }
+  } else if (request.asset.frameGrid) {
     const frameCount =
       request.asset.frameGrid.frameCount ??
       request.asset.frameGrid.columns * request.asset.frameGrid.rows;
@@ -357,14 +534,16 @@ async function createSvgResponse(
     model: string;
     prompt: string;
     references: GenerateAssetReference[];
-  }
+  },
+  signal?: AbortSignal
 ): Promise<Response> {
   const content: Array<
     | { type: "input_text"; text: string }
     | { type: "input_image"; image_url: string }
   > = [{ type: "input_text", text: body.prompt }];
 
-  for (const reference of body.references) {
+  for (const sourceReference of body.references) {
+    const reference = await normalizeOpenAiImageReference(sourceReference, signal);
     if (!isSupportedResponseImageMimeType(reference.mimeType)) continue;
 
     content.push({
@@ -387,7 +566,8 @@ async function createSvgResponse(
           content
         }
       ]
-    })
+    }),
+    signal
   });
 }
 
@@ -412,15 +592,32 @@ export function gameAssetPrompt(
   }
 ): string {
   const dimensions = requireAssetDimensions(request.asset);
-  const lines = [
-    context.prompt,
-    "",
+  const lines: string[] = [];
+  const brief = assetBriefForModel(request, context.prompt);
+  if (brief) {
+    lines.push(brief, "");
+  }
+  const structuredTilesetPrompt = structuredTilesetPromptLines(request.asset);
+  if (
+    structuredTilesetPrompt.length &&
+    !brief?.includes(structuredTilesetPrompt.join("\n"))
+  ) {
+    lines.push(...structuredTilesetPrompt, "");
+  }
+  lines.push(
     "Create this as a clean 2D game asset sprite.",
     `Asset kind: ${request.asset.kind}.`,
     `Target canvas: ${dimensions.width}x${dimensions.height}.`
-  ];
+  );
 
-  if (shouldRequestRgbaPng(request, context)) {
+  if (request.asset.kind === "tileset" && shouldRequestRgbaPng(request, context)) {
+    lines.push(
+      "Decide independently for each tile whether its artwork should be opaque edge-to-edge or should contain transparent pixels, based on what that tile depicts.",
+      `For any tile that needs transparency, encode every transparent or empty pixel with the exact flat chroma-key color ${hexColor(context.chromaKey)}. This color is the transparency marker and will be removed after generation.`,
+      `Never use any other matte, background, checkerboard, or substitute transparency color. Do not use ${hexColor(context.chromaKey)} in visible tile artwork.`,
+      "For a tile that does not need transparency, fill the cell edge-to-edge and do not use the chroma-key color. Do not add labels, borders, shadows outside tiles, or a centered presentation layout."
+    );
+  } else if (shouldRequestRgbaPng(request, context)) {
     lines.push(
       "Use a transparent background, centered subject, no text, no watermark, no cast shadow, no floor shadow, no ground plane, no reflection. Keep the sprite readable through its shape and pose; do not darken or recolor the character to create contrast.",
       "Clean it into a real RGBA PNG: the final game asset needs actual alpha transparency, not white, black, gray, checkerboard, or any matte color.",
@@ -433,7 +630,9 @@ export function gameAssetPrompt(
     );
   }
 
-  if (request.asset.frameGrid) {
+  if (request.asset.kind === "tileset") {
+    lines.push(...tilesetContractPromptLines(request.asset, false));
+  } else if (request.asset.frameGrid) {
     const frameCount =
       request.asset.frameGrid.frameCount ??
       request.asset.frameGrid.columns * request.asset.frameGrid.rows;
@@ -477,7 +676,12 @@ export function gameAssetPrompt(
     }
   }
 
-  if (request.references?.length) {
+  if (request.references?.length && request.asset.kind === "tileset") {
+    lines.push(
+      "The first non-style reference image is the immutable base tileset. Any additional non-style references are prior frames in this candidate's animation sequence, ordered chronologically by filename.",
+      "Preserve the exact base sheet composition: every tile must keep its index, coordinates, dimensions, palette, shape identity, edge connections, and pixel alignment. Change only the pixels required by the requested animation phase; keep all other tiles identical."
+    );
+  } else if (request.references?.length) {
     lines.push(
       "The generated asset must depict the same exact character as the provided character reference image. Character reference filenames do not begin with style-reference-. Preserve the silhouette, body proportions, face or head shape, colors, materials, markings, costume, and distinctive details. Do not redesign the character, change species, swap materials, alter the palette, or simplify it into a different character.",
       ...referenceLockPromptLines(request.references),
@@ -494,7 +698,12 @@ export function gameAssetPrompt(
     );
   }
 
-  if (context.variation) {
+  if (context.variation && request.asset.kind === "tileset") {
+    lines.push(
+      `Variation seed: ${context.variation}. Use it only to choose a coherent motion treatment for this candidate; never vary tile identity, sheet layout, cell alignment, palette, or indices.`,
+      variationDirectionPromptLine(context.variationIndex ?? 0)
+    );
+  } else if (context.variation) {
     lines.push(
       `Variation seed: ${context.variation}. Use this seed to make this option visually distinct from sibling options, not a near-duplicate. Vary the animation timing, pose rhythm, secondary motion, and effect shape while preserving the asset brief, frame grid, background instructions, and same exact character identity.`,
       variationDirectionPromptLine(context.variationIndex ?? 0)
@@ -502,6 +711,92 @@ export function gameAssetPrompt(
   }
 
   return lines.join("\n");
+}
+
+export function tilesetBasePrompt(asset: AiAssetDefinition): string {
+  const lines = structuredTilesetPromptLines(asset);
+  if (!lines.length) {
+    throw new Error(
+      `AI asset "${asset.id}" must be a tileset with per-tile prompts to build a structured tileset prompt.`
+    );
+  }
+
+  return lines.join("\n");
+}
+
+function assetBriefForModel(
+  request: GenerateAssetRequest,
+  prompt: string
+): string | undefined {
+  if (
+    request.asset.kind === "tileset" &&
+    request.asset.tileset?.tiles !== undefined &&
+    request.prompt === undefined
+  ) {
+    return undefined;
+  }
+
+  return prompt.trim() || undefined;
+}
+
+function structuredTilesetPromptLines(asset: AiAssetDefinition): string[] {
+  const tileset = asset.tileset;
+  const dimensions = asset.dimensions;
+  if (!tileset?.tiles || !dimensions) return [];
+
+  const tileCount = tileset.tileCount ?? tileset.columns * tileset.rows;
+  const margin = tileset.margin ?? 0;
+  const spacing = tileset.spacing ?? 0;
+  const gridSpacing = margin === 0 && spacing === 0
+    ? "with no margin or spacing"
+    : `with ${margin === 0 ? "no outer margin" : `${margin}px outer margin`} and ${spacing === 0 ? "no spacing" : `${spacing}px spacing between tiles`}`;
+
+  return [
+    `Create a deterministic hand-authored ${tileset.tileWidth}×${tileset.tileHeight} pixel tileset.`,
+    `Output one ${dimensions.width}×${dimensions.height} image arranged as a ${tileset.columns}-column × ${tileset.rows}-row grid ${gridSpacing}.`,
+    "Read tiles left-to-right, then top-to-bottom.",
+    "Use one cohesive visual style, palette, scale, lighting, perspective, and pixel treatment across every tile.",
+    `Draw exactly these ${tileCount} tiles in this exact order:`,
+    ...tileset.tiles.map((tile, index) => `Tile ${index + 1} — ${tile.prompt.trim()}`)
+  ];
+}
+
+function tilesetContractPromptLines(
+  asset: AiAssetDefinition,
+  includeStructuredPrompt = true
+): string[] {
+  const tileset = asset.tileset;
+  const dimensions = asset.dimensions;
+  if (!tileset || !dimensions) return [];
+
+  const tileCount = tileset.tileCount ?? tileset.columns * tileset.rows;
+  const margin = tileset.margin ?? 0;
+  const spacing = tileset.spacing ?? 0;
+  const structuredPrompt = structuredTilesetPromptLines(asset);
+  const geometryPrompt = structuredPrompt.length
+    ? includeStructuredPrompt ? structuredPrompt : []
+    : [
+        `Full-sheet tileset contract: output exactly one ${dimensions.width}x${dimensions.height} sheet with ${tileset.columns} columns and ${tileset.rows} rows.`,
+        `Every tile cell is exactly ${tileset.tileWidth}x${tileset.tileHeight}, with ${margin}px outer margin and ${spacing}px spacing. The sheet contains ${tileCount} usable tiles in row-major order.`
+      ];
+
+  return [
+    ...geometryPrompt,
+    "Each cell contains exactly one tile at native scale. Do not create animation panels, nested sheets, thumbnails, labels, tile numbers, visible grid lines, gutters beyond the declared spacing, or presentation padding.",
+    "Tile indices and cell coordinates are immutable. Keep artwork pixel-aligned to cell boundaries and preserve seamless edge connections between compatible terrain tiles.",
+    `If the grid has more than ${tileCount} cells, leave only the trailing unused cells empty while preserving the full declared sheet geometry.`
+  ];
+}
+
+function sanitizeReferenceName(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, "-");
+}
+
+function extensionFromMimeType(mimeType: string): string {
+  if (mimeType === "image/webp") return "webp";
+  if (mimeType === "image/jpeg") return "jpg";
+  if (mimeType === "image/svg+xml") return "svg";
+  return "png";
 }
 
 function createVariationSeed(index: number): string {
@@ -550,7 +845,8 @@ function gridCellRectangles(request: GenerateAssetRequest): string {
 
 async function createImageGeneration(
   apiKey: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<Response> {
   return fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
@@ -558,14 +854,16 @@ async function createImageGeneration(
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal
   });
 }
 
 async function createImageEdit(
   apiKey: string,
   body: Record<string, unknown>,
-  references: GenerateAssetReference[]
+  references: GenerateAssetReference[],
+  signal?: AbortSignal
 ): Promise<Response> {
   const form = new FormData();
 
@@ -575,7 +873,8 @@ async function createImageEdit(
     }
   }
 
-  for (const reference of references) {
+  for (const sourceReference of references) {
+    const reference = await normalizeOpenAiImageReference(sourceReference, signal);
     form.append(
       "image[]",
       new Blob([arrayBufferFromBytes(reference.image)], { type: reference.mimeType }),
@@ -588,8 +887,35 @@ async function createImageEdit(
     headers: {
       Authorization: `Bearer ${apiKey}`
     },
-    body: form
+    body: form,
+    signal
   });
+}
+
+const rasterizedSvgReferenceCache = new WeakMap<Uint8Array, Promise<Buffer>>();
+
+async function normalizeOpenAiImageReference(
+  reference: GenerateAssetReference,
+  signal?: AbortSignal
+): Promise<GenerateAssetReference> {
+  if (reference.mimeType.split(";", 1)[0]?.trim().toLowerCase() !== "image/svg+xml") {
+    return reference;
+  }
+
+  signal?.throwIfAborted();
+  let rasterized = rasterizedSvgReferenceCache.get(reference.image);
+  if (!rasterized) {
+    rasterized = rasterizeSvgToPng(reference.image);
+    rasterizedSvgReferenceCache.set(reference.image, rasterized);
+  }
+  const image = await rasterized;
+  signal?.throwIfAborted();
+
+  return {
+    image,
+    mimeType: "image/png",
+    fileName: `${reference.fileName.replace(/\.[^.]+$/, "") || "reference"}.png`
+  };
 }
 
 async function readImagePayload(response: Response): Promise<{

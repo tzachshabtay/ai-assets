@@ -1,0 +1,457 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  installPromotedImageTexture,
+  previewImageSource,
+  renderOptions
+} from "../dist/designer-support.js";
+import { AiAssetRuntime } from "../dist/runtime.js";
+
+function tilesetAsset() {
+  return {
+    id: "forest",
+    kind: "tileset",
+    prompt: "Forest tiles.",
+    dimensions: { width: 32, height: 16 },
+    tileset: {
+      tileWidth: 16,
+      tileHeight: 16,
+      columns: 2,
+      rows: 1,
+      tileCount: 2
+    },
+    activeVersion: "v1",
+    versions: {
+      v1: {
+        name: "v1",
+        file: "/forest.png",
+        prompt: "Forest tiles.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+      }
+    }
+  };
+}
+
+class FakeClassList {
+  constructor() {
+    this.names = new Set();
+  }
+
+  add(...names) {
+    names.forEach((name) => this.names.add(name));
+  }
+
+  remove(...names) {
+    names.forEach((name) => this.names.delete(name));
+  }
+
+  toggle(name, force) {
+    const enabled = force ?? !this.names.has(name);
+    if (enabled) this.names.add(name);
+    else this.names.delete(name);
+    return enabled;
+  }
+
+  contains(name) {
+    return this.names.has(name);
+  }
+}
+
+class FakeElement {
+  constructor(tagName) {
+    this.tagName = tagName.toUpperCase();
+    this.children = [];
+    this.listeners = new Map();
+    this.classList = new FakeClassList();
+    this.dataset = {};
+  }
+
+  set className(value) {
+    this.classList.names = new Set(value.split(/\s+/).filter(Boolean));
+  }
+
+  get className() {
+    return [...this.classList.names].join(" ");
+  }
+
+  set innerHTML(value) {
+    this.html = value;
+    if (value === "") this.children = [];
+  }
+
+  get innerHTML() {
+    return this.html ?? "";
+  }
+
+  append(...children) {
+    this.children.push(...children);
+  }
+
+  addEventListener(name, listener) {
+    this.listeners.set(name, listener);
+  }
+
+  querySelectorAll(selector) {
+    if (!selector.startsWith(".")) return [];
+    const className = selector.slice(1);
+    return this.children.filter((child) => child.classList?.contains(className));
+  }
+
+  dispatch(name) {
+    this.listeners.get(name)?.({});
+  }
+}
+
+test("a cross-origin active preview supersedes an older generated preview", () => {
+  const previousImage = globalThis.Image;
+  const previousWindow = globalThis.window;
+  const images = [];
+
+  class FakeImage {
+    constructor() {
+      images.push(this);
+    }
+
+    set src(value) {
+      this.currentSrc = value;
+    }
+
+    get src() {
+      return this.currentSrc;
+    }
+
+    load() {
+      this.onload?.();
+    }
+  }
+
+  globalThis.Image = FakeImage;
+  globalThis.window = {
+    location: {
+      href: "http://127.0.0.1:5175/",
+      origin: "http://127.0.0.1:5175"
+    }
+  };
+
+  try {
+    const asset = tilesetAsset();
+    const manifest = { schemaVersion: 1, assets: { forest: asset } };
+    const added = [];
+    const previewed = [];
+    const scene = {
+      textures: {
+        exists: () => false,
+        remove: () => undefined,
+        addImage: () => undefined,
+        addSpriteSheet(key, image, config) {
+          added.push({ key, image, config });
+        }
+      }
+    };
+    const onPreview = (assetId, textureKey) => previewed.push({ assetId, textureKey });
+
+    previewImageSource({
+      scene,
+      manifest,
+      assetId: "forest",
+      src: "data:image/png;base64,generated",
+      textureKey: "generated-preview",
+      assetOverride: { ...asset, prompt: "Temporary generated tiles." },
+      onPreview
+    });
+    previewImageSource({
+      scene,
+      manifest,
+      assetId: "forest",
+      src: "http://127.0.0.1:4087/assets/forest.png",
+      textureKey: "active-preview",
+      onPreview
+    });
+
+    assert.equal(images.length, 2);
+    assert.equal(images[0].crossOrigin, undefined);
+    assert.equal(images[1].crossOrigin, "anonymous");
+
+    images[0].load();
+    images[1].load();
+
+    assert.deepEqual(previewed, [{ assetId: "forest", textureKey: "active-preview" }]);
+    assert.equal(added.length, 1);
+    assert.equal(added[0].key, "active-preview");
+    assert.deepEqual(added[0].config, {
+      frameWidth: 16,
+      frameHeight: 16,
+      margin: undefined,
+      spacing: undefined
+    });
+  } finally {
+    if (previousImage === undefined) delete globalThis.Image;
+    else globalThis.Image = previousImage;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("temporary previews update bound textures without replacing the canonical manifest asset", () => {
+  const asset = tilesetAsset();
+  const manifest = { schemaVersion: 1, assets: { forest: asset } };
+  const scene = {
+    load: {
+      image: () => undefined,
+      spritesheet: () => undefined
+    },
+    textures: {
+      exists: () => true
+    }
+  };
+  const runtime = new AiAssetRuntime(scene, manifest);
+  const textureCalls = [];
+  const target = {
+    setTexture(key, frame) {
+      textureCalls.push({ key, frame });
+    }
+  };
+
+  runtime.bindTexture(target, "forest", { frame: 1, setInitialTexture: false });
+  runtime.designerCallbacks().onPreview(
+    "forest",
+    "temporary-preview",
+    { ...asset, prompt: "Temporary generated tiles." }
+  );
+
+  assert.strictEqual(manifest.assets.forest, asset);
+  assert.equal(manifest.assets.forest.prompt, "Forest tiles.");
+  assert.deepEqual(textureCalls, [{ key: "temporary-preview", frame: 1 }]);
+});
+
+test("a promoted tileset install survives transient previews and replaces the canonical texture", async () => {
+  const previousImage = globalThis.Image;
+  const previousWindow = globalThis.window;
+  const images = [];
+
+  class FakeImage {
+    constructor() {
+      images.push(this);
+    }
+
+    set src(value) {
+      this.currentSrc = value;
+    }
+
+    get src() {
+      return this.currentSrc;
+    }
+
+    load() {
+      this.onload?.();
+    }
+  }
+
+  globalThis.Image = FakeImage;
+  globalThis.window = {
+    location: {
+      href: "http://127.0.0.1:5175/",
+      origin: "http://127.0.0.1:5175"
+    }
+  };
+
+  try {
+    const original = tilesetAsset();
+    const promoted = {
+      ...original,
+      dimensions: { width: 48, height: 20 },
+      tileset: {
+        ...original.tileset,
+        tileWidth: 24,
+        tileHeight: 20
+      },
+      activeVersion: "promoted",
+      versions: {
+        ...original.versions,
+        promoted: {
+          name: "promoted",
+          file: "/forest-promoted.png",
+          prompt: "Mixed forest tiles.",
+          createdAt: "2026-01-02T00:00:00.000Z"
+        }
+      }
+    };
+    const manifest = { schemaVersion: 1, assets: { forest: promoted } };
+    const events = [];
+    const scene = {
+      textures: {
+        exists(key) {
+          assert.equal(key, "forest");
+          return true;
+        },
+        remove(key) {
+          events.push(`remove:${key}`);
+        },
+        addImage: () => undefined,
+        addSpriteSheet(key, image, config) {
+          events.push(`install:${key}`);
+          assert.strictEqual(image, images[0]);
+          assert.deepEqual(config, {
+            frameWidth: 24,
+            frameHeight: 20,
+            margin: undefined,
+            spacing: undefined
+          });
+        }
+      }
+    };
+
+    let resolved = false;
+    const loaded = installPromotedImageTexture({
+      scene,
+      manifest,
+      assetId: "forest",
+      src: "http://127.0.0.1:4087/assets/forest-promoted.png",
+      assetOverride: promoted
+    });
+    void loaded.then(() => {
+      resolved = true;
+    });
+
+    assert.deepEqual(events, []);
+    assert.equal(images[0].crossOrigin, "anonymous");
+    await Promise.resolve();
+    assert.equal(resolved, false);
+
+    previewImageSource({
+      scene,
+      manifest,
+      assetId: "forest",
+      src: "data:image/png;base64,transient-preview",
+      textureKey: "ai-preview:forest:0",
+      onPreview() {}
+    });
+    assert.equal(images.length, 2);
+
+    images[0].load();
+    const installed = await loaded;
+
+    assert.deepEqual(events, [
+      "remove:forest",
+      "install:forest"
+    ]);
+    assert.equal(resolved, true);
+    assert.deepEqual(installed, {
+      assetId: "forest",
+      textureKey: "forest",
+      asset: promoted
+    });
+  } finally {
+    if (previousImage === undefined) delete globalThis.Image;
+    else globalThis.Image = previousImage;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
+test("retained generation candidates rerender against the refreshed promoted manifest", () => {
+  const previousDocument = globalThis.document;
+  const previousImage = globalThis.Image;
+  const images = [];
+
+  class FakeImage {
+    constructor() {
+      images.push(this);
+    }
+
+    set src(value) {
+      this.currentSrc = value;
+    }
+
+    load() {
+      this.onload?.();
+    }
+  }
+
+  globalThis.document = {
+    createElement(tagName) {
+      return new FakeElement(tagName);
+    }
+  };
+  globalThis.Image = FakeImage;
+
+  try {
+    const initialAsset = tilesetAsset();
+    const promotedAsset = {
+      ...initialAsset,
+      prompt: "Promoted forest tiles.",
+      tileset: {
+        ...initialAsset.tileset,
+        tileWidth: 24,
+        tileHeight: 20
+      },
+      activeVersion: "promoted",
+      versions: {
+        ...initialAsset.versions,
+        promoted: {
+          name: "promoted",
+          file: "/forest-promoted.png",
+          prompt: "Promoted forest tiles.",
+          createdAt: "2026-01-02T00:00:00.000Z"
+        }
+      }
+    };
+    const generated = [0, 1, 2].map((index) => ({
+      index,
+      dataUrl: `data:image/png;base64,option-${index}`,
+      mimeType: "image/png",
+      prompt: `Forest option ${index + 1}.`
+    }));
+    const elements = {
+      options: new FakeElement("div"),
+      currentPreview: new FakeElement("div"),
+      status: new FakeElement("div")
+    };
+    const scene = {
+      textures: {
+        exists: () => false,
+        remove: () => undefined,
+        addImage: () => undefined,
+        addSpriteSheet: () => undefined
+      }
+    };
+    const selected = [];
+    const previewed = [];
+
+    const render = (asset) => renderOptions({
+      elements,
+      generated,
+      scene,
+      manifest: { schemaVersion: 1, assets: { forest: asset } },
+      assetId: "forest",
+      designerOptions: { scene },
+      onPreview(assetId, textureKey, previewAsset) {
+        previewed.push({ assetId, textureKey, previewAsset });
+      },
+      onSelected(option) {
+        selected.push(option.index);
+      }
+    });
+
+    render(initialAsset);
+    assert.equal(elements.options.children.length, 3);
+
+    render(promotedAsset);
+    assert.equal(elements.options.children.length, 3);
+
+    elements.options.children[0].children[0].dispatch("click");
+    assert.deepEqual(selected, [0]);
+    images[0].load();
+
+    assert.equal(previewed.length, 1);
+    assert.equal(previewed[0].assetId, "forest");
+    assert.equal(previewed[0].previewAsset.prompt, "Promoted forest tiles.");
+    assert.deepEqual(previewed[0].previewAsset.tileset, promotedAsset.tileset);
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+    if (previousImage === undefined) delete globalThis.Image;
+    else globalThis.Image = previousImage;
+  }
+});

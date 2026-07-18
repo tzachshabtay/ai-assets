@@ -38,6 +38,7 @@ An asset is a manifest entry. Its `kind` controls how it is generated, edited, l
 Supported kinds:
 
 - `image`, `spritesheet`, `animation`: graphical assets, including frame grids and per-frame metadata
+- `tileset`: a fixed tile atlas whose optional animations are sequences of complete, identically aligned sheets
 - `sound`, `music`: generated or uploaded audio with trim, volume, loop, and optional effects metadata
 - `voice`: a reusable generated voice identity
 - `voice-line`: spoken text that can use a `voice` asset and direction notes
@@ -90,6 +91,62 @@ export const assets = defineAiAssets({
 ```
 
 For larger projects, keep assets as JSON files in folders and generate the TypeScript module during development or build.
+
+### Tilesets and animated tiles
+
+A tileset is a first-class asset because its grid, generation rules, version bundle, and editor are different from an ordinary animation spritesheet. The version's `file` is the static base atlas. Each tileset animation stores one complete atlas file per temporal frame, so a logical tile keeps the same index while playback swaps aligned sheets:
+
+```ts
+"world.forest": {
+  id: "world.forest",
+  kind: "tileset",
+  prompt: "Top-down forest terrain atlas with seamless tile edges.",
+  dimensions: { width: 128, height: 64 },
+  tileset: {
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 4,
+    rows: 2,
+    tileCount: 8,
+    tiles: [
+      { prompt: "Seamless meadow grass; walkable." },
+      { prompt: "Packed dirt path; walkable." },
+      { prompt: "Blue river surface with horizontal ripples." },
+      { prompt: "River water with clustered green reeds." },
+      { prompt: "Dense tree canopy and short trunk; blocked." },
+      { prompt: "Grass with small wildflowers; walkable." },
+      { prompt: "Centered gray boulder on grass; blocked." },
+      { prompt: "Horizontal wooden bridge over water; walkable." }
+    ],
+    animations: [{
+      key: "water",
+      prompt: "A subtle seamless water shimmer; preserve every other tile exactly.",
+      frameCount: 2,
+      frameRate: 3,
+      repeat: -1
+    }]
+  },
+  activeVersion: "default",
+  versions: {
+    default: {
+      name: "default",
+      file: "/assets/world.forest.default.png",
+      prompt: "Top-down forest terrain atlas with seamless tile edges.",
+      createdAt: "2026-07-15T00:00:00.000Z",
+      tilesetAnimations: {
+        water: {
+          files: [
+            "/assets/world.forest.water.0.png",
+            "/assets/world.forest.water.1.png"
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+The grid dimensions must exactly cover `dimensions`, including optional `margin` and `spacing`. When `tiles` is present, it must contain one non-empty prompt per usable tile in row-major order. The image provider programmatically adds the exact tile size, sheet dimensions, grid, and ordering contract, then appends these tile prompts to form the model request; authors do not repeat that boilerplate. Animation files must match the declared `frameCount` and contain complete sheets at the same dimensions. During generation, each of the three candidate branches is produced sequentially: the base sheet and all earlier frames in that branch are supplied as references for the next frame. The designer then lets you choose one complete candidate sequence independently for every tile and saves the composed sheets as one atomic version bundle.
 
 Transparent spritesheet generations are aligned to their declared frame grid by default. The provider
 normalizes the generated row and column placement without scaling individual frames. Set
@@ -190,6 +247,20 @@ playback.destroy();
 
 `createAiAnimations` only registers Phaser animation frames and frame durations. If an animation contains offset, scale, or rotation metadata, `createAiAnimations` warns in development-style usage unless you pass `{ onFrameTransforms: "ignore" }`. Use that option only when you intentionally bind transforms yourself or intentionally ignore them.
 
+`loadAiAssetSet` also loads a tileset's base atlas and every full-sheet animation frame. Play a declared animation while keeping a logical tile frame fixed with `playTilesetAnimation`:
+
+```ts
+const waterTile = this.add.sprite(x, y, aiRuntime.key("world.forest"), 2);
+const playback = aiRuntime.playTilesetAnimation(
+  waterTile,
+  "world.forest",
+  2,
+  "water"
+);
+
+playback.destroy();
+```
+
 ## In-Game Designer
 
 `@ai-game-assets/phaser` includes a debug-only designer overlay. It is installed by the game, but the UI and behavior are library-provided.
@@ -207,6 +278,9 @@ The designer supports:
 - version history, revert, promote, and delete
 - style guide prompt and reference image management
 - animation editor with per-frame delay, offset, scale, rotation, and tags
+- base tileset controls for tile width, tile height, usable tile count, and one ordered prompt per tile, with exact-grid upload validation
+- an explicit Mix tileset action after three base candidates finish, with a current/three-candidate choice and the intended prompt shown for every tile before promotion
+- tileset animation mixer with synchronized base/three-candidate previews and a separate sequence choice for every tile
 - frame touch-up editor for raster images with session-persistent tool settings, keyboard undo/redo, and guarded pointer drawing
 - audio editor with waveform preview, trim markers, volume, loop, and playback settings
 

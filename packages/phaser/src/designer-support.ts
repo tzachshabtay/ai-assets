@@ -2,6 +2,7 @@ import type {
   AiAssetAnimation,
   AiAssetAnimationFrameTiming,
   AiAssetDefinition,
+  AiAssetTileset,
   AiAudioFormat,
   AiAudioGenerationSettings,
   AiAudioPlaybackSettings,
@@ -17,6 +18,7 @@ import type {
   AiAssetDesignerSceneLike,
   AiAssetPreviewDisplaySize
 } from "./designer.js";
+import { aiTextureKey } from "./keys.js";
 
 export type DesignerElements = {
   root: HTMLDivElement;
@@ -32,7 +34,9 @@ export type DesignerElements = {
   animationSelect: HTMLSelectElement;
   animationField: HTMLLabelElement;
   widthInput: HTMLInputElement;
+  widthField: HTMLLabelElement;
   heightInput: HTMLInputElement;
+  heightField: HTMLLabelElement;
   dimensionGrid: HTMLDivElement;
   frameCountInput: HTMLInputElement;
   frameCountField: HTMLLabelElement;
@@ -47,6 +51,9 @@ export type DesignerElements = {
   voiceTextInput: HTMLTextAreaElement;
   voiceTextField: HTMLLabelElement;
   promptInput: HTMLTextAreaElement;
+  promptField: HTMLLabelElement;
+  tilesetPromptsField: HTMLElement;
+  tilesetPromptsList: HTMLDivElement;
   currentImage: HTMLImageElement;
   currentAudio: HTMLDivElement;
   currentAnimation: HTMLDivElement;
@@ -57,6 +64,7 @@ export type DesignerElements = {
   uploadButton: HTMLButtonElement;
   deriveButton: HTMLButtonElement;
   regenerateButton: HTMLButtonElement;
+  mixTilesetButton: HTMLButtonElement;
   versionsButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
   restartButton: HTMLButtonElement;
@@ -157,6 +165,20 @@ export function createDesignerElements(
   const promptInput = document.createElement("textarea");
   promptInput.className = "ai-game-assets-designer__prompt";
   promptInput.rows = 6;
+  const promptField = labelWrap("Prompt", promptInput);
+
+  const tilesetPromptsField = document.createElement("section");
+  tilesetPromptsField.className = "ai-game-assets-designer__tile-prompts";
+  tilesetPromptsField.hidden = true;
+  const tilesetPromptsTitle = document.createElement("div");
+  tilesetPromptsTitle.className = "ai-game-assets-designer__tile-prompts-title";
+  tilesetPromptsTitle.textContent = "Tile prompts";
+  const tilesetPromptsHint = document.createElement("div");
+  tilesetPromptsHint.className = "ai-game-assets-designer__tile-prompts-hint";
+  tilesetPromptsHint.textContent = "Describe each tile in exact sheet order.";
+  const tilesetPromptsList = document.createElement("div");
+  tilesetPromptsList.className = "ai-game-assets-designer__tile-prompts-list";
+  tilesetPromptsField.append(tilesetPromptsTitle, tilesetPromptsHint, tilesetPromptsList);
 
   const widthInput = numericInput();
   const heightInput = numericInput();
@@ -187,10 +209,9 @@ export function createDesignerElements(
   }
   const dimensionGrid = document.createElement("div");
   dimensionGrid.className = "ai-game-assets-designer__dimensions";
-  dimensionGrid.append(
-    labelWrap("Width", widthInput),
-    labelWrap("Height", heightInput)
-  );
+  const widthField = labelWrap("Width", widthInput);
+  const heightField = labelWrap("Height", heightInput);
+  dimensionGrid.append(widthField, heightField);
   const frameCountField = labelWrap("Frames", frameCountInput);
   const formatField = labelWrap("Format", formatSelect);
   const audioFormatField = labelWrap("Audio format", audioFormatSelect);
@@ -237,6 +258,11 @@ export function createDesignerElements(
   regenerateButton.type = "button";
   regenerateButton.textContent = "Regenerate";
 
+  const mixTilesetButton = document.createElement("button");
+  mixTilesetButton.type = "button";
+  mixTilesetButton.textContent = "Mix tileset";
+  mixTilesetButton.hidden = true;
+
   const uploadButton = document.createElement("button");
   uploadButton.type = "button";
   uploadButton.textContent = "Upload...";
@@ -260,7 +286,15 @@ export function createDesignerElements(
 
   const actions = document.createElement("div");
   actions.className = "ai-game-assets-designer__actions";
-  actions.append(regenerateButton, uploadButton, deriveButton, versionsButton, promoteButton, restartButton);
+  actions.append(
+    regenerateButton,
+    mixTilesetButton,
+    uploadButton,
+    deriveButton,
+    versionsButton,
+    promoteButton,
+    restartButton
+  );
 
   const versionLabel = document.createElement("div");
   versionLabel.className = "ai-game-assets-designer__meta";
@@ -285,7 +319,8 @@ export function createDesignerElements(
     audioLoopField,
     voiceTextField,
     labelWrap("Current", currentPreview),
-    labelWrap("Prompt", promptInput),
+    promptField,
+    tilesetPromptsField,
     actions,
     versionLabel,
     optionsGrid,
@@ -307,7 +342,9 @@ export function createDesignerElements(
     animationSelect,
     animationField,
     widthInput,
+    widthField,
     heightInput,
+    heightField,
     dimensionGrid,
     frameCountInput,
     frameCountField,
@@ -322,6 +359,9 @@ export function createDesignerElements(
     voiceTextInput,
     voiceTextField,
     promptInput,
+    promptField,
+    tilesetPromptsField,
+    tilesetPromptsList,
     currentImage,
     currentAudio,
     currentAnimation,
@@ -332,6 +372,7 @@ export function createDesignerElements(
     uploadButton,
     deriveButton,
     regenerateButton,
+    mixTilesetButton,
     versionsButton,
     promoteButton,
     restartButton,
@@ -582,6 +623,12 @@ export function renderOptions(options: {
   }
 }
 
+const pendingImagePreviews = new WeakMap<
+  AiAssetDesignerSceneLike,
+  Map<string, HTMLImageElement>
+>();
+let promotedTextureInstallId = 0;
+
 export function previewOption(options: {
   scene: AiAssetDesignerSceneLike;
   manifest: AiAssetManifest;
@@ -610,11 +657,40 @@ export function previewCurrentAsset(options: {
   assetId: string;
   src: string;
   onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
+  onError?(error: Error): void;
 }): void {
   const textureKey = `ai-current-preview:${options.assetId}:${Date.now()}`;
   previewImageSource({
     ...options,
     textureKey
+  });
+}
+
+export function installPromotedImageTexture(options: {
+  scene: AiAssetDesignerSceneLike;
+  manifest: AiAssetManifest;
+  assetId: string;
+  src: string;
+  assetOverride?: AiAssetDefinition;
+}): Promise<{
+  assetId: string;
+  textureKey: string;
+  asset: AiAssetDefinition;
+}> {
+  const textureKey = aiTextureKey({ assetId: options.assetId });
+  promotedTextureInstallId += 1;
+  const requestKey = `promote:${options.assetId}:${promotedTextureInstallId}`;
+
+  return new Promise((resolve, reject) => {
+    previewImageSource({
+      ...options,
+      textureKey,
+      requestKey,
+      onPreview(assetId, installedTextureKey, asset) {
+        resolve({ assetId, textureKey: installedTextureKey, asset });
+      },
+      onError: reject
+    });
   });
 }
 
@@ -624,29 +700,69 @@ export function previewImageSource(options: {
   assetId: string;
   src: string;
   textureKey: string;
+  requestKey?: string;
   assetOverride?: AiAssetDefinition;
   onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
+  onError?(error: Error): void;
 }): void {
   const image = new Image();
+  const pendingForScene = pendingImagePreviews.get(options.scene) ?? new Map<string, HTMLImageElement>();
+  const requestKey = options.requestKey ?? options.assetId;
+  const previousImage = pendingForScene.get(requestKey);
+
+  if (previousImage) {
+    previousImage.onload = null;
+    previousImage.onerror = null;
+  }
+
+  pendingForScene.set(requestKey, image);
+  pendingImagePreviews.set(options.scene, pendingForScene);
+
+  if (shouldUseAnonymousCrossOrigin(options.src)) {
+    image.crossOrigin = "anonymous";
+  }
 
   image.onload = () => {
-    if (options.scene.textures.exists(options.textureKey)) {
-      options.scene.textures.remove(options.textureKey);
-    }
+    if (pendingForScene.get(requestKey) !== image) return;
+    pendingForScene.delete(requestKey);
 
-    const asset = options.assetOverride ?? options.manifest.assets[options.assetId];
-    if (asset.frameGrid && options.scene.textures.addSpriteSheet) {
-      options.scene.textures.addSpriteSheet(options.textureKey, image, {
-        frameWidth: asset.frameGrid.frameWidth,
-        frameHeight: asset.frameGrid.frameHeight,
-        margin: asset.frameGrid.margin,
-        spacing: asset.frameGrid.spacing
-      });
-    } else {
-      options.scene.textures.addImage(options.textureKey, image);
-    }
+    try {
+      if (options.scene.textures.exists(options.textureKey)) {
+        options.scene.textures.remove(options.textureKey);
+      }
 
-    options.onPreview(options.assetId, options.textureKey, asset);
+      const asset = options.assetOverride ?? options.manifest.assets[options.assetId];
+      const tileset = designerTilesetMetadata(asset);
+      if (tileset && options.scene.textures.addSpriteSheet) {
+        options.scene.textures.addSpriteSheet(options.textureKey, image, {
+          frameWidth: tileset.tileWidth,
+          frameHeight: tileset.tileHeight,
+          margin: tileset.margin,
+          spacing: tileset.spacing
+        });
+      } else if (asset.frameGrid && options.scene.textures.addSpriteSheet) {
+        options.scene.textures.addSpriteSheet(options.textureKey, image, {
+          frameWidth: asset.frameGrid.frameWidth,
+          frameHeight: asset.frameGrid.frameHeight,
+          margin: asset.frameGrid.margin,
+          spacing: asset.frameGrid.spacing
+        });
+      } else {
+        options.scene.textures.addImage(options.textureKey, image);
+      }
+
+      options.onPreview(options.assetId, options.textureKey, asset);
+    } catch (error) {
+      const previewError = error instanceof Error ? error : new Error(String(error));
+      if (options.onError) options.onError(previewError);
+      else console.error("Could not preview AI asset image.", previewError);
+    }
+  };
+  image.onerror = () => {
+    if (pendingForScene.get(requestKey) === image) {
+      pendingForScene.delete(requestKey);
+    }
+    options.onError?.(new Error(`Could not load preview image for "${options.assetId}".`));
   };
   image.src = options.src;
 }
@@ -682,7 +798,17 @@ export async function uploadedOptionFromFile(options: {
   }
 
   const imageSize = await imageSizeFromSource(dataUrl);
-  const geometry = uploadedImageGeometry(options.asset, imageSize);
+  const format = normalizeAssetFormatFromMimeType(mimeType, options.file.name);
+  const generationGeometry = generationOverridesFromInputs(
+    options.elements,
+    options.asset,
+    format
+  );
+  const geometry = uploadedImageGeometry(
+    options.asset,
+    imageSize,
+    generationGeometry.tileset
+  );
 
   return {
     index: 0,
@@ -692,20 +818,51 @@ export async function uploadedOptionFromFile(options: {
     model: "uploaded",
     dimensions: geometry.dimensions,
     frameGrid: geometry.frameGrid,
+    tileset: geometry.tileset,
     settings: {
       ...options.asset.settings,
-      format: normalizeAssetFormatFromMimeType(mimeType, options.file.name)
+      format
     }
   };
 }
 
 export function uploadedImageGeometry(
   asset: AiAssetDefinition,
-  imageSize: AiAssetPreviewDisplaySize
+  imageSize: AiAssetPreviewDisplaySize,
+  tilesetOverride?: Pick<AiAssetTileset, "tileWidth" | "tileHeight" | "tileCount">
 ): {
   dimensions: NonNullable<GeneratedDebugOption["dimensions"]>;
   frameGrid?: GeneratedDebugOption["frameGrid"];
+  tileset?: GeneratedDebugOption["tileset"];
 } {
+  const baseTileset = designerTilesetMetadata(asset);
+  if (baseTileset) {
+    const tileset = {
+      ...baseTileset,
+      ...tilesetOverride
+    };
+    const capacity = tileset.columns * tileset.rows;
+    const tileCount = tileset.tileCount ?? capacity;
+    if (tileCount > capacity) {
+      throw new Error(`Tile count must not exceed this tileset's ${capacity}-tile capacity.`);
+    }
+    const margin = tileset.margin ?? 0;
+    const spacing = tileset.spacing ?? 0;
+    const dimensions = {
+      width: margin * 2 + tileset.columns * tileset.tileWidth +
+        Math.max(0, tileset.columns - 1) * spacing,
+      height: margin * 2 + tileset.rows * tileset.tileHeight +
+        Math.max(0, tileset.rows - 1) * spacing
+    };
+    if (imageSize.width !== dimensions.width || imageSize.height !== dimensions.height) {
+      throw new Error(
+        `Tileset upload must be exactly ${dimensions.width}x${dimensions.height}px for the selected tile geometry; received ${imageSize.width}x${imageSize.height}px.`
+      );
+    }
+
+    return { dimensions, tileset };
+  }
+
   if (!asset.frameGrid) {
     return {
       dimensions: imageSize
@@ -3177,20 +3334,36 @@ export function generationOverridesFromInputs(
   asset: AiAssetDefinition,
   format: AiAssetFormat
 ): {
-  dimensions: { width: number; height: number };
+  dimensions?: { width: number; height: number };
   frameCount?: number;
+  tileset?: Pick<AiAssetTileset, "tileWidth" | "tileHeight" | "tileCount" | "tiles">;
   settings: AiAssetGenerationSettings;
 } {
+  const tileset = designerTilesetMetadata(asset);
   const dimensions = {
     width: positiveIntegerInput(
       elements.widthInput,
-      asset.frameGrid?.frameWidth ?? asset.dimensions?.width ?? 1
+      asset.frameGrid?.frameWidth ?? tileset?.tileWidth ?? asset.dimensions?.width ?? 1
     ),
     height: positiveIntegerInput(
       elements.heightInput,
-      asset.frameGrid?.frameHeight ?? asset.dimensions?.height ?? 1
+      asset.frameGrid?.frameHeight ?? tileset?.tileHeight ?? asset.dimensions?.height ?? 1
     )
   };
+
+  if (tileset) {
+    return {
+      tileset: {
+        tileWidth: dimensions.width,
+        tileHeight: dimensions.height,
+        tileCount: positiveIntegerInput(
+          elements.frameCountInput,
+          tileset.tileCount ?? tileset.columns * tileset.rows
+        )
+      },
+      settings: { format }
+    };
+  }
 
   if (!asset.frameGrid) {
     return {
@@ -3296,6 +3469,12 @@ export function isAudioAsset(asset: AiAssetDefinition | undefined): boolean {
     asset?.kind === "voice-line";
 }
 
+function designerTilesetMetadata(
+  asset: AiAssetDefinition | undefined
+): AiAssetTileset | undefined {
+  return asset?.tileset;
+}
+
 export function isVoiceAsset(asset: AiAssetDefinition | undefined): boolean {
   return asset?.kind === "voice" || asset?.kind === "voice-line";
 }
@@ -3309,6 +3488,7 @@ export function assetWithGeneratedGeometry(
     ...asset,
     dimensions: option.dimensions ?? asset.dimensions,
     frameGrid: option.frameGrid ?? asset.frameGrid,
+    tileset: option.tileset ?? asset.tileset,
     animations: option.animations ??
       (options.inheritAnimations
         ? asset.animations
@@ -3337,7 +3517,11 @@ export function positiveIntegerInput(input: HTMLInputElement, fallback: number):
 
   if (!Number.isFinite(value)) return fallback;
 
-  return Math.max(1, Math.floor(value));
+  const normalized = Math.max(1, Math.floor(value));
+  const maximum = Number(input.max);
+  return input.max && Number.isFinite(maximum)
+    ? Math.min(normalized, Math.max(1, Math.floor(maximum)))
+    : normalized;
 }
 
 export function positiveNumberInput(input: HTMLInputElement, fallback: number): number {
@@ -3508,7 +3692,7 @@ export async function imageSourceToDataUrl(src: string): Promise<string> {
   const response = await fetch(src);
 
   if (!response.ok) {
-    throw new Error(`Could not load current animation image (${response.status}).`);
+    throw new Error(`Could not load current asset image (${response.status}).`);
   }
 
   const responseBlob = await response.blob();
@@ -3522,11 +3706,11 @@ export async function imageSourceToDataUrl(src: string): Promise<string> {
       if (typeof reader.result === "string") {
         resolve(reader.result);
       } else {
-        reject(new Error("Could not convert current animation image to a data URL."));
+        reject(new Error("Could not convert current asset image to a data URL."));
       }
     });
     reader.addEventListener("error", () => {
-      reject(reader.error ?? new Error("Could not read current animation image."));
+      reject(reader.error ?? new Error("Could not read current asset image."));
     });
     reader.readAsDataURL(blob);
   });
@@ -3762,6 +3946,36 @@ export function ensureDesignerStyles(): void {
   font: inherit;
 }
 .ai-game-assets-designer__field textarea { resize: vertical; }
+.ai-game-assets-designer__tile-prompts {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid #303949;
+  border-radius: 8px;
+  background: rgba(11, 15, 22, 0.58);
+}
+.ai-game-assets-designer__tile-prompts[hidden] { display: none; }
+.ai-game-assets-designer__tile-prompts-title {
+  color: #e5edf9;
+  font-size: 13px;
+  font-weight: 700;
+}
+.ai-game-assets-designer__tile-prompts-hint {
+  color: #8f9cb5;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.ai-game-assets-designer__tile-prompts-list {
+  display: grid;
+  gap: 8px;
+}
+.ai-game-assets-designer__tile-prompts-list .ai-game-assets-designer__field {
+  margin-bottom: 0;
+}
+.ai-game-assets-designer__tile-prompts-list textarea {
+  min-height: 62px;
+}
 .ai-game-assets-designer__target-variant {
   margin: -4px 0 12px;
   padding: 7px 9px;
@@ -3986,6 +4200,17 @@ export function ensureDesignerStyles(): void {
   gap: 8px;
   margin-top: 10px;
 }
+.ai-game-assets-designer__tileset-tile-prompt {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border: 1px solid #354058;
+  border-radius: 6px;
+  background: rgba(37, 49, 73, 0.48);
+  color: #d8e4f7;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
 .ai-game-assets-designer__options.is-audio {
   grid-template-columns: 1fr;
 }
@@ -4059,6 +4284,116 @@ export function ensureDesignerStyles(): void {
   background: #141820;
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
   padding: 14px;
+}
+.ai-game-assets-designer__tileset-mixer-card {
+  width: min(980px, calc(100vw - 36px));
+}
+.ai-game-assets-designer__tileset-mixer-hint {
+  margin: -5px 0 12px;
+  color: #aeb8c8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ai-game-assets-designer__tileset-mixer-body {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 300px;
+}
+.ai-game-assets-designer__tileset-navigator-panel,
+.ai-game-assets-designer__tileset-preview-panel {
+  min-width: 0;
+  border: 1px solid #303a49;
+  border-radius: 8px;
+  background: #0f1218;
+  padding: 10px;
+}
+.ai-game-assets-designer__tileset-section-title {
+  min-height: 20px;
+  margin-bottom: 8px;
+  color: #dbeafe;
+  font-size: 12px;
+  font-weight: 700;
+}
+.ai-game-assets-designer__tileset-navigator {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 7px;
+  max-height: min(58vh, 540px);
+  overflow: auto;
+  padding: 2px;
+}
+.ai-game-assets-designer__tileset-tile {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid #384251;
+  border-radius: 6px;
+  background: #111827;
+  cursor: pointer;
+}
+.ai-game-assets-designer__tileset-tile::after {
+  content: attr(data-source);
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 3;
+  border-radius: 999px;
+  background: rgba(8, 12, 20, 0.88);
+  color: #9ca8ba;
+  padding: 1px 4px;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.ai-game-assets-designer__tileset-tile.is-selected {
+  border-color: #6ed3ff;
+  box-shadow: 0 0 0 1px rgba(110, 211, 255, 0.35);
+}
+.ai-game-assets-designer__tileset-tile.is-mixed::after {
+  background: #155e75;
+  color: #ecfeff;
+}
+.ai-game-assets-designer__tileset-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  min-width: 0;
+}
+.ai-game-assets-designer__tileset-choice {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border: 2px solid #384251;
+  border-radius: 8px;
+  background: #151b25;
+  color: #dbeafe;
+  padding: 9px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ai-game-assets-designer__tileset-choice.is-selected {
+  border-color: #6ed3ff;
+  background: #16283a;
+}
+.ai-game-assets-designer__tileset-choice-preview {
+  position: relative;
+  overflow: hidden;
+  max-width: 100%;
+  border-radius: 6px;
+  background: #0a0d12;
+}
+@media (max-width: 760px) {
+  .ai-game-assets-designer__tileset-mixer-body {
+    grid-template-columns: 1fr;
+  }
+  .ai-game-assets-designer__tileset-navigator {
+    max-height: 180px;
+  }
 }
 .ai-game-assets-designer__modal-title {
   margin-bottom: 12px;
@@ -4345,7 +4680,7 @@ export function ensureDesignerStyles(): void {
 .ai-game-assets-designer__touchup {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: 2147483647;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;

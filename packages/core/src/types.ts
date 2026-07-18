@@ -1,4 +1,4 @@
-export type AiAssetKind = "image" | "spritesheet" | "animation" | "collection" | "sound" | "music" | "voice" | "voice-line";
+export type AiAssetKind = "image" | "spritesheet" | "animation" | "tileset" | "collection" | "sound" | "music" | "voice" | "voice-line";
 
 export type AiAssetBackground = "transparent" | "opaque" | "auto";
 
@@ -42,6 +42,39 @@ export type AiAssetAnimationFrameTiming = {
   scaleY?: number;
   rotation?: number;
   tag?: string;
+};
+
+export type AiTilesetAnimationFrameTiming = {
+  delayMs?: number;
+};
+
+export type AiTilesetAnimation = {
+  key: string;
+  prompt?: string;
+  frameCount: number;
+  frameRate: number;
+  repeat?: number;
+  frameTimings?: AiTilesetAnimationFrameTiming[];
+};
+
+export type AiTilesetTile = {
+  prompt: string;
+};
+
+export type AiAssetTileset = {
+  tileWidth: number;
+  tileHeight: number;
+  columns: number;
+  rows: number;
+  tileCount?: number;
+  margin?: number;
+  spacing?: number;
+  tiles?: AiTilesetTile[];
+  animations?: AiTilesetAnimation[];
+};
+
+export type AiTilesetAnimationVersion = {
+  files: string[];
 };
 
 export type AiAssetLinkedAnimation = {
@@ -131,6 +164,7 @@ export type AiAssetVersion = {
   durationSeconds?: number;
   parentVersion?: string;
   notes?: string;
+  tilesetAnimations?: Record<string, AiTilesetAnimationVersion>;
 };
 
 export type AiAssetTarget = {
@@ -148,6 +182,7 @@ export type AiAssetDefinition = {
   dimensions?: AiAssetDimensions;
   frameGrid?: AiAssetFrameGrid;
   animations?: AiAssetAnimation[];
+  tileset?: AiAssetTileset;
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
   audioPlayback?: AiAudioPlaybackSettings;

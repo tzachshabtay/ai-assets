@@ -46,6 +46,7 @@ type DockState = {
   root: HTMLDivElement;
   items: Map<string, DockItem>;
   layoutAnimations: Map<HTMLButtonElement, Animation>;
+  onWindowResize: () => void;
   activeId?: string;
   nextSequence: number;
 };
@@ -171,8 +172,11 @@ function ensureDockState(document: Document): DockState {
     root,
     items: new Map(),
     layoutAnimations: new Map(),
+    onWindowResize: () => undefined,
     nextSequence: 0
   };
+  state.onWindowResize = () => positionDockForActivePanel(state);
+  document.defaultView?.addEventListener("resize", state.onWindowResize);
   states.set(document, state);
   return state;
 }
@@ -241,6 +245,7 @@ function removeDockItem(state: DockState, item: DockItem): void {
   if (wasOpen) item.onOpenChange?.(false);
 
   if (state.items.size === 0) {
+    state.document.defaultView?.removeEventListener("resize", state.onWindowResize);
     state.root.remove();
     const host = globalThis as typeof globalThis & Record<string, unknown>;
     const states = host[dockStatesKey] as WeakMap<Document, DockState> | undefined;
@@ -344,7 +349,11 @@ function positionDockForActivePanel(state: DockState): void {
   if (activeItem.geometry) applyPanelGeometry(activeItem);
   const panelRect = activeItem.panel.getBoundingClientRect();
   const dockRect = state.root.getBoundingClientRect();
-  const left = Math.max(8, panelRect.right - dockRect.width);
+  const view = state.document.defaultView;
+  const maximumLeft = view
+    ? Math.max(8, view.innerWidth - dockRect.width - 8)
+    : panelRect.right - dockRect.width;
+  const left = clamp(panelRect.right - dockRect.width, 8, maximumLeft);
   state.root.style.left = `${left}px`;
   state.root.style.top = `${Math.max(8, panelRect.top - 50)}px`;
   state.root.style.right = "auto";

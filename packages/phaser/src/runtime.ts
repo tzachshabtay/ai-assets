@@ -4,7 +4,8 @@ import {
   type AiAssetAnimation,
   type AiAssetDefinition,
   type AiAssetManifest,
-  type AiAssetSelection
+  type AiAssetSelection,
+  type AiTilesetAnimation
 } from "@ai-game-assets/core";
 import {
   aiAssetAnimationSize,
@@ -22,6 +23,7 @@ import {
 import { aiTextureKey } from "./keys.js";
 import { aiAssetPlaceholderDataUrl } from "./placeholder.js";
 import type { PhaserImageLike, PhaserSceneLike } from "./phaser-types.js";
+import { createAiTilesetAnimation } from "./tilesets.js";
 
 export type AiAssetRuntimeOptions = {
   baseUrl?: string;
@@ -31,15 +33,19 @@ export type AiAssetRuntimeOptions = {
 export type AiAssetTextureBinding = {
   readonly target: PhaserImageLike;
   readonly selection: AiAssetSelection | string;
+  readonly frame?: string | number;
   destroy(): void;
 };
 
 export type AiAssetBindTextureOptions = {
   setInitialTexture?: boolean;
+  /** Frame to preserve when previewing or promoting a spritesheet/tileset. */
+  frame?: string | number;
 };
 
 export type AiAssetAnimationPlaybackTarget = PhaserImageLike & {
   play(key: string | { key: string; randomFrame?: boolean }, ignoreIfPlaying?: boolean): unknown;
+  stop?(): unknown;
   setDisplaySize?(width: number, height: number): unknown;
   setOrigin?(x: number, y: number): unknown;
   setRotation?(radians: number): unknown;
@@ -62,6 +68,20 @@ export type AiAssetAnimationPlayback = {
   readonly animationKey?: string;
   readonly durationMs: number;
   readonly frameTransforms?: AiAssetFrameTransformBinding;
+  destroy(): void;
+};
+
+export type AiAssetPlayTilesetAnimationOptions = Pick<
+  AiAssetPlayAnimationOptions,
+  "forceRestart" | "randomFrame"
+>;
+
+export type AiAssetTilesetAnimationPlayback = {
+  readonly assetId: string;
+  readonly animation?: AiTilesetAnimation;
+  readonly animationKey?: string;
+  readonly tileFrame: number;
+  readonly durationMs: number;
   destroy(): void;
 };
 
@@ -112,10 +132,14 @@ export class AiAssetRuntime {
     });
   }
 
-  setTexture(target: PhaserImageLike, selection: AiAssetSelection | string): void {
+  setTexture(
+    target: PhaserImageLike,
+    selection: AiAssetSelection | string,
+    frame?: string | number
+  ): void {
     const key = this.key(selection);
     this.warnIfMissingTexture(selection, key);
-    target.setTexture(key);
+    target.setTexture(key, frame);
   }
 
   bindTexture(
@@ -126,6 +150,7 @@ export class AiAssetRuntime {
     const binding: StoredTextureBinding = {
       target,
       selection,
+      frame: options.frame,
       targetAssetId: this.resolveAssetId(selection),
       destroy: () => {
         this.textureBindings.delete(binding);
@@ -135,7 +160,7 @@ export class AiAssetRuntime {
     this.textureBindings.add(binding);
 
     if (options.setInitialTexture !== false) {
-      this.setTexture(target, selection);
+      this.setTexture(target, selection, options.frame);
     }
 
     return binding;
@@ -188,14 +213,61 @@ export class AiAssetRuntime {
     };
   }
 
-  applyAssetTexture(assetId: string, textureKey: string, asset: AiAssetDefinition): void {
-    this.manifest.assets[assetId] = asset;
+  playTilesetAnimation(
+    target: AiAssetAnimationPlaybackTarget,
+    selection: AiAssetSelection | string,
+    tileFrame: number,
+    animationKey: string,
+    options: AiAssetPlayTilesetAnimationOptions = {}
+  ): AiAssetTilesetAnimationPlayback {
+    const resolvedSelection = this.withTarget(selection);
+    const assetId = this.resolveAssetId(resolvedSelection);
+    const resolved = resolveAiAsset(this.manifest, resolvedSelection);
+    const created = createAiTilesetAnimation(
+      this.scene,
+      this.manifest,
+      resolvedSelection,
+      tileFrame,
+      animationKey
+    );
 
+    if (!created) {
+      target.stop?.();
+      target.setTexture(this.key(resolvedSelection), tileFrame);
+      return {
+        assetId,
+        tileFrame,
+        durationMs: 0,
+        destroy() {}
+      };
+    }
+
+    target.play(
+      options.randomFrame
+        ? { key: created.animationKey, randomFrame: true }
+        : created.animationKey,
+      options.forceRestart ? false : true
+    );
+
+    return {
+      assetId: resolved.asset.id,
+      animation: created.animation,
+      animationKey: created.animationKey,
+      tileFrame,
+      durationMs: created.durationMs,
+      destroy() {}
+    };
+  }
+
+  applyAssetTexture(assetId: string, textureKey: string, asset: AiAssetDefinition): void {
     if (!isTextureAsset(asset)) return;
 
     for (const binding of this.textureBindings) {
       if (this.bindingMatchesAsset(binding, assetId)) {
-        binding.target.setTexture(textureKey);
+        // A tileset binding without an explicit frame may represent any tile.
+        // Avoid silently collapsing it to frame zero during preview/promotion.
+        if (asset.kind === "tileset" && binding.frame === undefined) continue;
+        binding.target.setTexture(textureKey, binding.frame);
       }
     }
   }
@@ -351,7 +423,10 @@ export class AiAssetRuntime {
 }
 
 function isTextureAsset(asset: AiAssetDefinition): boolean {
-  return asset.kind === "image" || asset.kind === "spritesheet" || asset.kind === "animation";
+  return asset.kind === "image"
+    || asset.kind === "spritesheet"
+    || asset.kind === "animation"
+    || asset.kind === "tileset";
 }
 
 function isFrameTransformTarget(

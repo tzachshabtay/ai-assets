@@ -4,6 +4,7 @@ import type {
   AiAudioGenerationSettings,
   AiVoiceGenerationSettings,
   AiAssetGenerationSettings,
+  AiTilesetAnimationVersion,
   AiAssetVersion
 } from "./types.js";
 
@@ -21,6 +22,7 @@ export type CreateVersionInput = {
   parentVersion?: string;
   notes?: string;
   createdAt?: string;
+  tilesetAnimations?: Record<string, AiTilesetAnimationVersion>;
 };
 
 export function createAiAssetVersion(
@@ -52,7 +54,15 @@ export function createAiAssetVersion(
     },
     durationSeconds: input.durationSeconds ?? input.audioSettings?.durationSeconds,
     parentVersion: input.parentVersion,
-    notes: input.notes
+    notes: input.notes,
+    tilesetAnimations: input.tilesetAnimations
+      ? Object.fromEntries(
+          Object.entries(input.tilesetAnimations).map(([key, animation]) => [
+            key,
+            { files: [...animation.files] }
+          ])
+        )
+      : undefined
   };
 }
 

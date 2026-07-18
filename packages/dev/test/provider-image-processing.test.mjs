@@ -5,6 +5,8 @@ import { PNG } from "pngjs";
 
 import {
   alignSpriteSheetFrames,
+  removeTilesetChromaBackground,
+  selectChromaKey,
   shouldRequestRgbaPng
 } from "../dist/provider-image-processing.js";
 import { gameAssetPrompt } from "../dist/provider.js";
@@ -89,6 +91,93 @@ test("opaque spritesheet prompts preserve the background without transparency in
   assert.doesNotMatch(prompt, /trailing cells fully transparent/);
 });
 
+test("structured tileset tile prompts participate in chroma-key selection", () => {
+  const chromaKey = selectChromaKey({
+    asset: {
+      id: "tileset",
+      kind: "tileset",
+      prompt: "Legacy prompt.",
+      dimensions: { width: 16, height: 16 },
+      tileset: {
+        tileWidth: 16,
+        tileHeight: 16,
+        columns: 1,
+        rows: 1,
+        tiles: [{ prompt: "A vivid magenta crystal tile." }]
+      },
+      activeVersion: "",
+      versions: {}
+    }
+  });
+
+  assert.notDeepEqual(chromaKey, { red: 255, green: 0, blue: 255 });
+});
+
+test("tileset cleanup removes the declared chroma from any tile that uses it", () => {
+  const png = new PNG({ width: 12, height: 4 });
+
+  fillRect(png, 0, 0, 12, 4, [30, 80, 180, 255]);
+  fillRect(png, 4, 0, 4, 4, [0, 255, 0, 255]);
+  fillRect(png, 5, 1, 2, 2, [210, 40, 30, 255]);
+
+  const cleaned = PNG.sync.read(removeTilesetChromaBackground(
+    PNG.sync.write(png),
+    {
+      tileWidth: 4,
+      tileHeight: 4,
+      columns: 3,
+      rows: 1,
+      tiles: [
+        { prompt: "Opaque blue stone floor." },
+        { prompt: "L-shaped wall corner with exposed space around its arms." },
+        { prompt: "Opaque blue stone wall." }
+      ]
+    },
+    { red: 0, green: 255, blue: 0 }
+  ));
+
+  assert.equal(alphaAt(cleaned, 0, 0), 255);
+  assert.equal(alphaAt(cleaned, 4, 0), 0);
+  assert.equal(alphaAt(cleaned, 5, 1), 255);
+  assert.equal(alphaAt(cleaned, 11, 3), 255);
+});
+
+test("tileset prompt lets the model choose transparency using one declared chroma", () => {
+  const asset = {
+    id: "mixed.tileset",
+    kind: "tileset",
+    prompt: "Legacy prompt.",
+    dimensions: { width: 12, height: 4 },
+    tileset: {
+      tileWidth: 4,
+      tileHeight: 4,
+      columns: 3,
+      rows: 1,
+      tiles: [
+        { prompt: "Opaque grass." },
+        { prompt: "A centered flower pickup." },
+        { prompt: "An L-shaped wall corner." }
+      ]
+    },
+    activeVersion: "",
+    versions: {}
+  };
+  const request = { asset };
+  const prompt = gameAssetPrompt(request, {
+    prompt: asset.prompt,
+    model: "gpt-image-2",
+    outputFormat: "png",
+    requestedBackground: "transparent",
+    chromaKey: { red: 0, green: 255, blue: 0 }
+  });
+
+  assert.match(prompt, /Decide independently for each tile/i);
+  assert.match(prompt, /For any tile that needs transparency/i);
+  assert.match(prompt, /exact flat chroma-key color #00ff00/i);
+  assert.match(prompt, /tile that does not need transparency/i);
+  assert.doesNotMatch(prompt, /tiles 2, 3 require transparent backgrounds/i);
+});
+
 function animationRequest({ prompt = "Animate only the parrot." } = {}) {
   return {
     asset: {
@@ -140,4 +229,20 @@ function visiblePixelCount(png) {
   }
 
   return count;
+}
+
+function fillRect(png, x, y, width, height, rgba) {
+  for (let localY = 0; localY < height; localY += 1) {
+    for (let localX = 0; localX < width; localX += 1) {
+      const offset = ((y + localY) * png.width + x + localX) * 4;
+      png.data[offset] = rgba[0];
+      png.data[offset + 1] = rgba[1];
+      png.data[offset + 2] = rgba[2];
+      png.data[offset + 3] = rgba[3];
+    }
+  }
+}
+
+function alphaAt(png, x, y) {
+  return png.data[(y * png.width + x) * 4 + 3];
 }

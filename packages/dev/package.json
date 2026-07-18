@@ -32,7 +32,8 @@
   "dependencies": {
     "@ai-game-assets/core": "0.1.0",
     "@types/pngjs": "^6.0.5",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "sharp": "^0.35.3"
   },
   "peerDependencies": {
     "openai": ">=5"

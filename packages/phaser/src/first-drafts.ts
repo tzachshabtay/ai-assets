@@ -213,10 +213,10 @@ function loadGeneratedTexture(
 
   return new Promise((resolve, reject) => {
     const image = new Image();
-    const textureKey = aiTextureKey({
-      assetId: asset.id,
-      versionName: asset.activeVersion
-    });
+    // Active versions always use the stable, unversioned runtime key. This is
+    // the same key used by preloadAiAssets and AiAssetRuntime.key(), so a first
+    // draft can be displayed immediately without requiring a scene reload.
+    const textureKey = aiTextureKey({ assetId: asset.id });
     const timeout = globalThis.setTimeout(() => {
       image.onload = null;
       image.onerror = null;
@@ -230,12 +230,25 @@ function loadGeneratedTexture(
         scene.textures.remove(textureKey);
       }
 
-      if (asset.frameGrid) {
+      const spriteSheetConfig = asset.kind === "tileset" && asset.tileset
+        ? {
+            frameWidth: asset.tileset.tileWidth,
+            frameHeight: asset.tileset.tileHeight,
+            margin: asset.tileset.margin,
+            spacing: asset.tileset.spacing
+          }
+        : asset.frameGrid
+          ? {
+              frameWidth: asset.frameGrid.frameWidth,
+              frameHeight: asset.frameGrid.frameHeight,
+              margin: asset.frameGrid.margin,
+              spacing: asset.frameGrid.spacing
+            }
+          : undefined;
+
+      if (spriteSheetConfig) {
         scene.textures?.addSpriteSheet?.(textureKey, image, {
-          frameWidth: asset.frameGrid.frameWidth,
-          frameHeight: asset.frameGrid.frameHeight,
-          margin: asset.frameGrid.margin,
-          spacing: asset.frameGrid.spacing
+          ...spriteSheetConfig
         });
       } else {
         scene.textures?.addImage?.(textureKey, image);

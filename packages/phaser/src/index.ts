@@ -48,23 +48,61 @@ export type {
   AiAssetAnimationPlaybackTarget,
   AiAssetBindTextureOptions,
   AiAssetPlayAnimationOptions,
+  AiAssetPlayTilesetAnimationOptions,
   AiAssetRuntimeDesignerCallbacks,
   AiAssetRuntimeOptions,
+  AiAssetTilesetAnimationPlayback,
   AiAssetTextureBinding
 } from "./runtime.js";
 
 export { AiAssetRuntime } from "./runtime.js";
 
-export { aiTextureKey } from "./keys.js";
+export {
+  aiTextureKey,
+  aiTilesetAnimationKey,
+  aiTilesetAnimationTextureKey
+} from "./keys.js";
+
+export type { CreatedAiTilesetAnimation } from "./tilesets.js";
+
+export {
+  createAiTilesetAnimation,
+  tilesetAnimationDurationMs,
+  tilesetBaseTextureKey
+} from "./tilesets.js";
 
 export type {
   GenerateDebugOptionsRequest,
+  GenerateTilesetAnimationRequest,
   DebugStyleGuideDraft,
   GeneratedDebugOption,
-  SaveDebugOptionRequest
+  GeneratedTilesetAnimationCandidate,
+  SaveDebugOptionRequest,
+  SaveDebugOptionResult,
+  SaveTilesetAnimationRequest,
+  SaveTilesetAnimationResult
 } from "./debug-client.js";
 
 export { AiAssetDebugClient } from "./debug-client.js";
+
+export type {
+  DesignerTilesetAnimation,
+  DesignerTilesetMetadata,
+  TilesetBaseMixPlan,
+  TilesetBaseMixResult,
+  TilesetMixSelection,
+  TilesetAnimationMixResult
+} from "./tileset-dialog.js";
+
+export {
+  createMixedTilesetOption,
+  isDesignerTilesetAsset,
+  openTilesetBaseMixerDialog,
+  openTilesetAnimationMixerDialog,
+  planTilesetBaseMix,
+  tilesetAnimationForKey,
+  tilesetMetadataForAsset
+} from "./tileset-dialog.js";
 
 export type {
   AiAssetDesigner,

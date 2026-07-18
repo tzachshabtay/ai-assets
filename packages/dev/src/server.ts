@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
+  assertAsset,
   resolveAiAsset,
   type AiAssetDefinition,
   type AiAudioGenerationSettings,
@@ -8,10 +9,17 @@ import {
   type AiAssetFrameGrid,
   type AiAssetManifest,
   type AiAssetStyleGuide,
+  type AiAssetTileset,
+  type AiAssetVersion,
   type AiVoiceGenerationSettings
 } from "@ai-game-assets/core";
-import type { AiImageProvider } from "./provider.js";
-import type { GeneratedAssetOption, GeneratedAssetOptionCallback } from "./provider.js";
+import {
+  generateTilesetAnimationBranches,
+  type AiImageProvider,
+  type GeneratedAssetOption,
+  type GeneratedAssetOptionCallback,
+  type GeneratedTilesetAnimationOption
+} from "./provider.js";
 import type { AiAudioProvider } from "./audio-provider.js";
 import {
   type AssetStoreOptions,
@@ -19,6 +27,7 @@ import {
   ensureTargetVariant,
   readManifest,
   saveGeneratedOption,
+  saveTilesetAnimation,
   saveStyleGuide
 } from "./asset-store.js";
 import { readFile } from "node:fs/promises";
@@ -29,6 +38,73 @@ export type AiAssetDevServerOptions = AssetStoreOptions & {
   audioProvider?: AiAudioProvider;
   host?: string;
   port?: number;
+};
+
+export type SerializedGeneratedAssetOption = {
+  index: number;
+  mimeType: string;
+  prompt: string;
+  model?: string;
+  revisedPrompt?: string;
+  dimensions?: AiAssetDimensions;
+  frameGrid?: AiAssetFrameGrid;
+  tileset?: AiAssetTileset;
+  animations?: AiAssetDefinition["animations"];
+  settings?: AiAssetDefinition["settings"];
+  audioSettings?: AiAssetDefinition["audioSettings"];
+  audioPlayback?: AiAssetDefinition["audioPlayback"];
+  voiceSettings?: AiAssetDefinition["voiceSettings"];
+  durationSeconds?: number;
+  dataUrl: string;
+};
+
+export type TilesetGenerationOverride = Pick<
+  AiAssetTileset,
+  "tileWidth" | "tileHeight" | "tileCount" | "tiles"
+>;
+
+export type GenerateTilesetAnimationStreamRequest = {
+  assetId: string;
+  animationKey: string;
+  prompt?: string;
+  count?: number;
+};
+
+export type GeneratedTilesetAnimationStreamOption = {
+  index: number;
+  animationKey: string;
+  frames: SerializedGeneratedAssetOption[];
+};
+
+export type GenerateTilesetAnimationStreamEvent =
+  | { type: "option"; option: GeneratedTilesetAnimationStreamOption }
+  | { type: "done" }
+  | { type: "error"; error: string };
+
+export type SaveTilesetAnimationRequest = {
+  assetId: string;
+  animationKey: string;
+  frames: string[];
+  versionName?: string;
+  notes?: string;
+};
+
+export type SaveTilesetAnimationResponse = {
+  manifest: AiAssetManifest;
+  asset: AiAssetDefinition;
+  versionName: string;
+  version: AiAssetVersion;
+  file: string;
+  filePath: string;
+};
+
+export type SaveDebugOptionResponse = {
+  manifest: AiAssetManifest;
+  asset: AiAssetDefinition;
+  versionName: string;
+  version: AiAssetVersion;
+  file: string;
+  filePath: string;
 };
 
 export function createAiAssetDevServer(options: AiAssetDevServerOptions) {
@@ -90,7 +166,8 @@ async function routeRequest(
     const manifest = await readManifest(options.manifestPath);
     const asset = applyGenerationOverrides(getAsset(manifest, body.assetId), {
       dimensions: body.dimensions,
-      frameCount: body.frameCount
+      frameCount: body.frameCount,
+      tileset: body.tileset
     });
     const generated = isAudioAsset(asset)
       ? await generateAudio(options, manifest, asset, body)
@@ -107,7 +184,8 @@ async function routeRequest(
     const manifest = await readManifest(options.manifestPath);
     const asset = applyGenerationOverrides(getAsset(manifest, body.assetId), {
       dimensions: body.dimensions,
-      frameCount: body.frameCount
+      frameCount: body.frameCount,
+      tileset: body.tileset
     });
 
     response.writeHead(200, {
@@ -115,9 +193,11 @@ async function routeRequest(
       "Content-Type": "application/x-ndjson; charset=utf-8",
       "Cache-Control": "no-store"
     });
+    const generation = abortOnClientDisconnect(request, response);
 
     let sentOptions = 0;
     const onOption: GeneratedAssetOptionCallback = (option, index) => {
+      generation.signal.throwIfAborted();
       sentOptions += 1;
       response.write(`${JSON.stringify({
         type: "option",
@@ -128,9 +208,9 @@ async function routeRequest(
     try {
       const generated = isAudioAsset(asset)
         ? await generateAudio(options, manifest, asset, body, onOption)
-        : await generateImage(options, manifest, asset, body, onOption);
+        : await generateImage(options, manifest, asset, body, onOption, generation.signal);
 
-      if (sentOptions === 0) {
+      if (sentOptions === 0 && !generation.signal.aborted) {
         generated.forEach((option, index) => {
           response.write(`${JSON.stringify({
             type: "option",
@@ -139,15 +219,88 @@ async function routeRequest(
         });
       }
 
-      response.write(`${JSON.stringify({ type: "done" })}\n`);
+      if (!generation.signal.aborted && !response.destroyed) {
+        response.write(`${JSON.stringify({ type: "done" })}\n`);
+      }
     } catch (error) {
-      response.write(`${JSON.stringify({
-        type: "error",
-        error: error instanceof Error ? error.message : String(error)
-      })}\n`);
+      if (!response.destroyed) {
+        response.write(`${JSON.stringify({
+          type: "error",
+          error: error instanceof Error ? error.message : String(error)
+        })}\n`);
+      }
+    } finally {
+      generation.dispose();
     }
 
-    response.end();
+    if (!response.destroyed) response.end();
+    return;
+  }
+
+  if (
+    request.method === "POST" &&
+    url.pathname === "/__ai-assets/generate-tileset-animation-stream"
+  ) {
+    const body = await readJson<GenerateTilesetAnimationStreamRequest>(request);
+    const manifest = await readManifest(options.manifestPath);
+    const asset = getAsset(manifest, body.assetId);
+    if (!options.provider) {
+      throw new Error("OPENAI_API_KEY is required to generate tileset animations.");
+    }
+    if (asset.kind !== "tileset" || !asset.tileset) {
+      throw new Error(`AI asset "${asset.id}" is not a tileset.`);
+    }
+
+    const resolved = resolveAiAsset(manifest, asset.id);
+    const baseFileName = path.basename(resolved.version.file);
+    const baseReference = {
+      image: await readFile(path.join(options.assetsDir, baseFileName)),
+      mimeType: mimeTypeFromFile(baseFileName),
+      fileName: `base-${baseFileName}`
+    };
+
+    response.writeHead(200, {
+      ...corsHeaders(),
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store"
+    });
+    const generation = abortOnClientDisconnect(request, response);
+
+    try {
+      await generateTilesetAnimationBranches(options.provider, {
+        asset,
+        animationKey: body.animationKey,
+        prompt: body.prompt,
+        count: body.count,
+        baseReference,
+        stylePrompt: manifest.styleGuide?.prompt,
+        styleReferences: await getStyleReferenceImages(options, manifest.styleGuide),
+        signal: generation.signal
+      }, (option) => {
+        generation.signal.throwIfAborted();
+        const event: GenerateTilesetAnimationStreamEvent = {
+          type: "option",
+          option: serializeGeneratedTilesetAnimationOption(option)
+        };
+        response.write(`${JSON.stringify(event)}\n`);
+      });
+      const event: GenerateTilesetAnimationStreamEvent = { type: "done" };
+      if (!generation.signal.aborted && !response.destroyed) {
+        response.write(`${JSON.stringify(event)}\n`);
+      }
+    } catch (error) {
+      if (!response.destroyed) {
+        const event: GenerateTilesetAnimationStreamEvent = {
+          type: "error",
+          error: error instanceof Error ? error.message : String(error)
+        };
+        response.write(`${JSON.stringify(event)}\n`);
+      }
+    } finally {
+      generation.dispose();
+    }
+
+    if (!response.destroyed) response.end();
     return;
   }
 
@@ -228,6 +381,7 @@ async function routeRequest(
       revisedPrompt?: string;
       dimensions?: AiAssetDimensions;
       frameGrid?: AiAssetFrameGrid;
+      tileset?: AiAssetTileset;
       animations?: AiAssetDefinition["animations"];
       settings?: AiAssetDefinition["settings"];
       audioSettings?: AiAssetDefinition["audioSettings"];
@@ -243,6 +397,7 @@ async function routeRequest(
       revisedPrompt: body.revisedPrompt,
       dimensions: body.dimensions,
       frameGrid: body.frameGrid,
+      tileset: body.tileset,
       animations: body.animations,
       settings: body.settings
         ? body.settings
@@ -275,10 +430,44 @@ async function routeRequest(
       notes: body.notes
     });
 
-    sendJson(response, 200, {
+    const responseBody: SaveDebugOptionResponse = {
+      manifest: result.manifest,
+      asset: getAsset(result.manifest, body.assetId),
+      versionName: body.versionName,
       version: result.version,
+      file: result.version.file,
       filePath: result.filePath
+    };
+    sendJson(response, 200, responseBody);
+    return;
+  }
+
+  if (
+    request.method === "POST" &&
+    url.pathname === "/__ai-assets/save-tileset-animation"
+  ) {
+    const body = await readJson<SaveTilesetAnimationRequest>(request);
+    if (!Array.isArray(body.frames)) {
+      throw new Error("save-tileset-animation frames must be an array of data URLs.");
+    }
+    const result = await saveTilesetAnimation(options, {
+      assetId: body.assetId,
+      animationKey: body.animationKey,
+      frames: body.frames.map((dataUrl, index) =>
+        imageFromDataUrl(dataUrl, `tileset animation frame ${index + 1}`)
+      ),
+      versionName: body.versionName,
+      notes: body.notes
     });
+    const responseBody: SaveTilesetAnimationResponse = {
+      manifest: result.manifest,
+      asset: result.asset,
+      versionName: result.versionName,
+      version: result.version,
+      file: result.version.file,
+      filePath: result.filePath
+    };
+    sendJson(response, 200, responseBody);
     return;
   }
 
@@ -331,6 +520,7 @@ type GenerateRequestBody = {
   }>;
   dimensions?: AiAssetDimensions;
   frameCount?: number;
+  tileset?: TilesetGenerationOverride;
   format?: AiAssetFormat;
   audioSettings?: AiAudioGenerationSettings;
   voiceSettings?: AiVoiceGenerationSettings;
@@ -351,7 +541,8 @@ async function generateImage(
     format?: AiAssetFormat;
     styleGuide?: DebugStyleGuide;
   },
-  onOption?: GeneratedAssetOptionCallback
+  onOption?: GeneratedAssetOptionCallback,
+  signal?: AbortSignal
 ) {
   if (!options.provider) {
     throw new Error(
@@ -359,7 +550,16 @@ async function generateImage(
     );
   }
 
-  return options.provider.generate({
+  const withAssetGeometry = (option: GeneratedAssetOption): GeneratedAssetOption => ({
+    ...option,
+    dimensions: option.dimensions ?? asset.dimensions,
+    frameGrid: option.frameGrid ?? asset.frameGrid,
+    tileset: option.tileset ?? asset.tileset
+  });
+  const onGeneratedOption = onOption
+    ? (option: GeneratedAssetOption, index: number) => onOption(withAssetGeometry(option), index)
+    : undefined;
+  const generated = await options.provider.generate({
     asset,
     prompt: body.prompt,
     count: body.count,
@@ -373,8 +573,11 @@ async function generateImage(
       : manifest.styleGuide?.prompt,
     styleReferences: body.styleGuide
       ? referencesFromDataUrls(body.styleGuide.images)
-      : await getStyleReferenceImages(options, manifest.styleGuide)
-  }, onOption);
+      : await getStyleReferenceImages(options, manifest.styleGuide),
+    signal
+  }, onGeneratedOption);
+
+  return generated.map(withAssetGeometry);
 }
 
 async function generateAudio(
@@ -409,7 +612,10 @@ async function generateAudio(
   }, onOption);
 }
 
-function serializeGeneratedOption(option: GeneratedAssetOption, index: number) {
+function serializeGeneratedOption(
+  option: GeneratedAssetOption,
+  index: number
+): SerializedGeneratedAssetOption {
   return {
     index,
     mimeType: option.mimeType,
@@ -418,12 +624,24 @@ function serializeGeneratedOption(option: GeneratedAssetOption, index: number) {
     revisedPrompt: option.revisedPrompt,
     dimensions: option.dimensions,
     frameGrid: option.frameGrid,
+    tileset: option.tileset,
+    animations: option.animations,
     settings: option.settings,
     audioSettings: option.audioSettings,
     audioPlayback: option.audioPlayback,
     voiceSettings: option.voiceSettings,
     durationSeconds: option.durationSeconds,
     dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
+  };
+}
+
+export function serializeGeneratedTilesetAnimationOption(
+  option: GeneratedTilesetAnimationOption
+): GeneratedTilesetAnimationStreamOption {
+  return {
+    index: option.index,
+    animationKey: option.animationKey,
+    frames: option.frames.map((frame, index) => serializeGeneratedOption(frame, index))
   };
 }
 
@@ -553,8 +771,61 @@ function applyGenerationOverrides(
   overrides: {
     dimensions?: AiAssetDimensions;
     frameCount?: number;
+    tileset?: TilesetGenerationOverride;
   }
 ): AiAssetDefinition {
+  if (asset.kind === "tileset") {
+    if (!asset.tileset) return asset;
+
+    const tileWidth = tilesetOverridePositiveInteger(
+      overrides.tileset?.tileWidth,
+      asset.tileset.tileWidth,
+      `${asset.id}.tileset.tileWidth`
+    );
+    const tileHeight = tilesetOverridePositiveInteger(
+      overrides.tileset?.tileHeight,
+      asset.tileset.tileHeight,
+      `${asset.id}.tileset.tileHeight`
+    );
+    const capacity = asset.tileset.columns * asset.tileset.rows;
+    const tileCount = tilesetOverridePositiveInteger(
+      overrides.tileset?.tileCount,
+      asset.tileset.tileCount ?? capacity,
+      `${asset.id}.tileset.tileCount`
+    );
+    if (tileCount > capacity) {
+      throw new Error(
+        `${asset.id}.tileset.tileCount must not exceed columns * rows (${capacity}).`
+      );
+    }
+    const columns = asset.tileset.columns;
+    const rows = asset.tileset.rows;
+    const tileset: AiAssetTileset = {
+      ...asset.tileset,
+      tileWidth,
+      tileHeight,
+      columns,
+      rows,
+      tileCount,
+      tiles: overrides.tileset?.tiles === undefined
+        ? asset.tileset.tiles
+        : overrides.tileset.tiles
+    };
+    const margin = tileset.margin ?? 0;
+    const spacing = tileset.spacing ?? 0;
+
+    const generationAsset: AiAssetDefinition = {
+      ...asset,
+      dimensions: {
+        width: margin * 2 + columns * tileWidth + Math.max(0, columns - 1) * spacing,
+        height: margin * 2 + rows * tileHeight + Math.max(0, rows - 1) * spacing
+      },
+      tileset
+    };
+    assertAsset(generationAsset);
+    return generationAsset;
+  }
+
   if (!asset.frameGrid) {
     const dimensions = sanitizeDimensions(overrides.dimensions) ?? asset.dimensions;
 
@@ -625,6 +896,45 @@ function sanitizePositiveInteger(value: number | undefined): number | undefined 
   return Math.max(1, Math.floor(value));
 }
 
+function tilesetOverridePositiveInteger(
+  value: number | undefined,
+  fallback: number,
+  label: string
+): number {
+  if (value === undefined) return fallback;
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a positive integer.`);
+  }
+
+  return value;
+}
+
+function abortOnClientDisconnect(
+  request: IncomingMessage,
+  response: ServerResponse
+): { signal: AbortSignal; dispose(): void } {
+  const controller = new AbortController();
+  const abort = () => {
+    if (!controller.signal.aborted) {
+      controller.abort(new Error("AI asset generation client disconnected."));
+    }
+  };
+  const handleResponseClose = () => {
+    if (!response.writableEnded) abort();
+  };
+
+  request.once("aborted", abort);
+  response.once("close", handleResponseClose);
+
+  return {
+    signal: controller.signal,
+    dispose() {
+      request.off("aborted", abort);
+      response.off("close", handleResponseClose);
+    }
+  };
+}
+
 async function readJson<T>(request: IncomingMessage): Promise<T> {
   const chunks: Buffer[] = [];
 
@@ -643,6 +953,7 @@ function optionFromDataUrl(
     revisedPrompt?: string;
     dimensions?: AiAssetDimensions;
     frameGrid?: AiAssetFrameGrid;
+    tileset?: AiAssetTileset;
     animations?: AiAssetDefinition["animations"];
     settings?: AiAssetDefinition["settings"];
     audioSettings?: AiAssetDefinition["audioSettings"];
@@ -651,20 +962,17 @@ function optionFromDataUrl(
     durationSeconds?: number;
   }
 ) {
-  const match = /^data:(.+);base64,(.+)$/.exec(dataUrl);
-
-  if (!match) {
-    throw new Error("Expected a base64 data URL.");
-  }
+  const decoded = imageFromDataUrl(dataUrl, "generated asset");
 
   return {
-    image: Buffer.from(match[2], "base64"),
-    mimeType: match[1],
+    image: decoded.image,
+    mimeType: decoded.mimeType,
     prompt: metadata.prompt,
     model: metadata.model,
     revisedPrompt: metadata.revisedPrompt,
     dimensions: metadata.dimensions,
     frameGrid: metadata.frameGrid,
+    tileset: metadata.tileset,
     animations: metadata.animations,
     settings: metadata.settings,
     audioSettings: metadata.audioSettings,
@@ -672,6 +980,25 @@ function optionFromDataUrl(
     voiceSettings: metadata.voiceSettings,
     durationSeconds: metadata.durationSeconds
   };
+}
+
+function imageFromDataUrl(
+  dataUrl: string,
+  label: string
+): { image: Uint8Array; mimeType: string } {
+  if (typeof dataUrl !== "string") {
+    throw new Error(`Expected ${label} to be a base64 data URL.`);
+  }
+  const match = /^data:([^;,]+);base64,([a-zA-Z0-9+/=\r\n]+)$/.exec(dataUrl);
+  if (!match) {
+    throw new Error(`Expected ${label} to be a base64 data URL.`);
+  }
+  const image = Buffer.from(match[2], "base64");
+  if (!image.byteLength) {
+    throw new Error(`Expected ${label} to contain image data.`);
+  }
+
+  return { image, mimeType: match[1] };
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
