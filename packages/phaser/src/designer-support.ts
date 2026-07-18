@@ -1008,6 +1008,17 @@ type FrameTouchUpPreferences = {
   tool: FrameTouchUpTool;
 };
 
+type FrameTouchUpClipboard = {
+  width: number;
+  height: number;
+  pixels: Uint8ClampedArray;
+};
+
+type FrameTouchUpFloatingSelection = {
+  background: ImageData;
+  pixels: ImageData;
+};
+
 const frameTouchUpPreferences: FrameTouchUpPreferences = {
   alpha: 255,
   antiAlias: true,
@@ -1015,6 +1026,8 @@ const frameTouchUpPreferences: FrameTouchUpPreferences = {
   color: "#f8fafc",
   tool: "brush"
 };
+
+let frameTouchUpClipboard: FrameTouchUpClipboard | undefined;
 
 export async function openFrameTouchUpEditor(options: {
   root: HTMLElement;
@@ -1087,6 +1100,7 @@ export async function openFrameTouchUpEditor(options: {
   const eraserButton = touchUpButton("Eraser");
   const pickerButton = touchUpButton("Picker");
   const selectButton = touchUpButton("Select");
+  selectButton.title = "Select pixels. Cmd/Ctrl+C copies; Cmd/Ctrl+V pastes.";
   const fillButton = touchUpButton("Fill");
   const undoButton = touchUpButton("Undo");
   const redoButton = touchUpButton("Redo");
@@ -1180,6 +1194,7 @@ export async function openFrameTouchUpEditor(options: {
   let drawingPointerId: number | undefined;
   let selectionStart: { x: number; y: number } | undefined;
   let selection: FrameTouchUpSelection | undefined;
+  let floatingSelection: FrameTouchUpFloatingSelection | undefined;
   let animationTimeout: number | undefined;
   let animationCursor = 0;
   let disposed = false;
@@ -1247,6 +1262,51 @@ export async function openFrameTouchUpEditor(options: {
   };
 
   const snapshot = () => context.getImageData(0, 0, canvas.width, canvas.height);
+  const clipboardImageData = (): ImageData | undefined => {
+    if (!frameTouchUpClipboard) return undefined;
+    const width = Math.min(frameTouchUpClipboard.width, canvas.width);
+    const height = Math.min(frameTouchUpClipboard.height, canvas.height);
+    const imageData = context.createImageData(width, height);
+    const sourceStride = frameTouchUpClipboard.width * 4;
+    const targetStride = width * 4;
+
+    for (let row = 0; row < height; row += 1) {
+      imageData.data.set(
+        frameTouchUpClipboard.pixels.subarray(
+          row * sourceStride,
+          (row * sourceStride) + targetStride
+        ),
+        row * targetStride
+      );
+    }
+    return imageData;
+  };
+  const drawFloatingSelection = () => {
+    if (!selection || !floatingSelection) return;
+    context.putImageData(floatingSelection.background, 0, 0);
+    const floatingCanvas = document.createElement("canvas");
+    floatingCanvas.width = floatingSelection.pixels.width;
+    floatingCanvas.height = floatingSelection.pixels.height;
+    const floatingContext = floatingCanvas.getContext("2d");
+    if (!floatingContext) return;
+    floatingContext.putImageData(floatingSelection.pixels, 0, 0);
+    context.drawImage(floatingCanvas, selection.x, selection.y);
+  };
+  const copySelection = (): boolean => {
+    if (!selection) return false;
+    const imageData = floatingSelection?.pixels ?? context.getImageData(
+      selection.x,
+      selection.y,
+      selection.width,
+      selection.height
+    );
+    frameTouchUpClipboard = {
+      width: imageData.width,
+      height: imageData.height,
+      pixels: new Uint8ClampedArray(imageData.data)
+    };
+    return true;
+  };
   const pushUndo = () => {
     undoStack.push(snapshot());
     if (undoStack.length > 60) undoStack.shift();
@@ -1256,6 +1316,7 @@ export async function openFrameTouchUpEditor(options: {
   const restore = (imageData: ImageData) => {
     context.putImageData(imageData, 0, 0);
     selection = undefined;
+    floatingSelection = undefined;
     redrawEditor();
     setDirty(true);
   };
@@ -1514,6 +1575,13 @@ export async function openFrameTouchUpEditor(options: {
     pushUndo();
     const nextX = clamp(selection.x + deltaX, 0, canvas.width - selection.width);
     const nextY = clamp(selection.y + deltaY, 0, canvas.height - selection.height);
+    if (floatingSelection) {
+      selection = { ...selection, x: nextX, y: nextY };
+      drawFloatingSelection();
+      setDirty(true);
+      redrawEditor();
+      return;
+    }
     const imageData = context.getImageData(selection.x, selection.y, selection.width, selection.height);
     context.clearRect(selection.x, selection.y, selection.width, selection.height);
     context.putImageData(imageData, nextX, nextY);
@@ -1526,10 +1594,46 @@ export async function openFrameTouchUpEditor(options: {
     if (!selection) return;
 
     pushUndo();
-    context.clearRect(selection.x, selection.y, selection.width, selection.height);
+    if (floatingSelection) {
+      context.putImageData(floatingSelection.background, 0, 0);
+      floatingSelection = undefined;
+    } else {
+      context.clearRect(selection.x, selection.y, selection.width, selection.height);
+    }
     selection = undefined;
     setDirty(true);
     redrawEditor();
+  };
+
+  const pasteSelection = (): boolean => {
+    const pixels = clipboardImageData();
+    if (!pixels) return false;
+    const x = clamp(
+      selection?.x ?? Math.floor((canvas.width - pixels.width) / 2),
+      0,
+      canvas.width - pixels.width
+    );
+    const y = clamp(
+      selection?.y ?? Math.floor((canvas.height - pixels.height) / 2),
+      0,
+      canvas.height - pixels.height
+    );
+    pushUndo();
+    floatingSelection = {
+      background: snapshot(),
+      pixels
+    };
+    selection = {
+      x,
+      y,
+      width: pixels.width,
+      height: pixels.height
+    };
+    selectTool("select");
+    drawFloatingSelection();
+    setDirty(true);
+    redrawEditor();
+    return true;
   };
 
   const drawAnimationFrame = () => {
@@ -1621,6 +1725,25 @@ export async function openFrameTouchUpEditor(options: {
     if (!dialog.isConnected) return;
     const key = event.key.toLowerCase();
     const commandModifier = event.metaKey || event.ctrlKey;
+    const target = event.target;
+    const isEditingInput = target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      (target instanceof HTMLElement && target.isContentEditable);
+
+    if (isEditingInput && event.key !== "Escape") return;
+
+    if (commandModifier && !event.altKey && key === "c" && copySelection()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (commandModifier && !event.altKey && key === "v" && pasteSelection()) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
 
     if (commandModifier && !event.altKey && (key === "z" || key === "y")) {
       event.preventDefault();
@@ -1690,6 +1813,7 @@ export async function openFrameTouchUpEditor(options: {
       return;
     }
 
+    floatingSelection = undefined;
     pushUndo();
     drawing = true;
     drawingPointerId = event.pointerId;
