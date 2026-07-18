@@ -37,6 +37,7 @@ import {
   openTilesetBaseMixerDialog,
   openTilesetAnimationMixerDialog,
   tilesetAnimationForKey,
+  resolveTilesetBaseMixCurrent,
   tilesetMetadataForAsset
 } from "./tileset-dialog.js";
 import { aiTilesetAnimationTextureKey } from "./keys.js";
@@ -767,6 +768,7 @@ export function installAiAssetDesigner(
     activeGeneration = undefined;
     elements.regenerateButton.textContent = "Regenerate";
     unlockGenerationStatus();
+    elements.promoteButton.disabled = !selectedOption || activePromotionId !== undefined;
     syncMixTilesetButton();
     return true;
   };
@@ -1091,7 +1093,10 @@ export function installAiAssetDesigner(
     setStatus(elements, "Opening tileset mixer...", "busy");
 
     try {
-      const baseSheetSrc = await imageSourceToDataUrl(resolveAssetUrl(activeVersion.file));
+      const currentOption = editedCurrentOption;
+      const activeSheetSrc = currentOption?.dataUrl ??
+        await imageSourceToDataUrl(resolveAssetUrl(activeVersion.file));
+      const current = resolveTilesetBaseMixCurrent(asset, activeSheetSrc, currentOption);
       if (
         panelRevision !== mixPanelRevision ||
         selectedTargetAssetId !== assetId ||
@@ -1102,9 +1107,9 @@ export function installAiAssetDesigner(
 
       const mixed = await openTilesetBaseMixerDialog({
         root: elements.root,
-        asset,
+        asset: current.asset,
         assetId,
-        baseSheetSrc,
+        baseSheetSrc: current.sheetSrc,
         candidates
       });
       if (
@@ -1157,6 +1162,7 @@ export function installAiAssetDesigner(
       activeGeneration = undefined;
       elements.regenerateButton.textContent = "Regenerate";
       unlockGenerationStatus();
+      elements.promoteButton.disabled = !selectedOption || activePromotionId !== undefined;
       setStatus(elements, "Generation cancelled.", "info");
       return;
     }
@@ -1204,7 +1210,7 @@ export function installAiAssetDesigner(
     elements.promoteButton.disabled = true;
     elements.regenerateButton.textContent = "Cancel";
     clearGeneratedOptions();
-    selectedOption = undefined;
+    selectedOption = editedCurrentOption;
     const streamedOptions: GeneratedDebugOption[] = [];
 
     try {

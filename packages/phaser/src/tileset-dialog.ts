@@ -9,6 +9,7 @@ import type {
   GeneratedTilesetAnimationCandidate
 } from "./debug-client.js";
 import {
+  assetWithGeneratedGeometry,
   loadImageElement,
   readableAssetName,
   setFrameBackground
@@ -39,6 +40,25 @@ export type TilesetBaseMixPlan = {
   tileset: DesignerTilesetMetadata;
   selections: TilesetMixSelection[];
 };
+
+export type TilesetBaseMixCurrent = {
+  asset: AiAssetDefinition;
+  sheetSrc: string;
+};
+
+export function resolveTilesetBaseMixCurrent(
+  asset: AiAssetDefinition,
+  activeSheetSrc: string,
+  currentOption?: GeneratedDebugOption
+): TilesetBaseMixCurrent {
+  return currentOption ? {
+    asset: assetWithGeneratedGeometry(asset, currentOption),
+    sheetSrc: currentOption.dataUrl
+  } : {
+    asset,
+    sheetSrc: activeSheetSrc
+  };
+}
 
 export function createMixedTilesetOption(
   template: GeneratedDebugOption,

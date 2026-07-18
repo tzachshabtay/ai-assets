@@ -5,6 +5,7 @@ import { uploadedImageGeometry } from "../dist/designer-support.js";
 import {
   createMixedTilesetOption,
   planTilesetBaseMix,
+  resolveTilesetBaseMixCurrent,
   tilesetTilePrompt
 } from "../dist/tileset-dialog.js";
 
@@ -166,6 +167,27 @@ test("a mixed base tileset is promoted as PNG with the composed geometry", () =>
       settings: { format: "png" }
     }
   );
+});
+
+test("a mixed preview becomes the current source for the next tileset mixer", () => {
+  const mixedOption = {
+    index: 3,
+    dataUrl: "data:image/png;base64,mixed-current",
+    mimeType: "image/png",
+    prompt: "Mixed forest tiles.",
+    dimensions: { width: 50, height: 22 },
+    tileset: {
+      ...asset.tileset,
+      tileWidth: 24,
+      tileHeight: 20
+    }
+  };
+
+  const current = resolveTilesetBaseMixCurrent(asset, "/forest.png", mixedOption);
+
+  assert.equal(current.sheetSrc, mixedOption.dataUrl);
+  assert.deepEqual(current.asset.dimensions, mixedOption.dimensions);
+  assert.deepEqual(current.asset.tileset, mixedOption.tileset);
 });
 
 test("tileset mixer prompts are read from the target tile metadata", () => {
