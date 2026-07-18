@@ -193,7 +193,7 @@ test("a cross-origin active preview supersedes an older generated preview", () =
   }
 });
 
-test("temporary previews update bound textures without replacing the canonical manifest asset", () => {
+test("temporary previews update current and future bindings without replacing the manifest", () => {
   const asset = tilesetAsset();
   const manifest = { schemaVersion: 1, assets: { forest: asset } };
   const scene = {
@@ -214,15 +214,36 @@ test("temporary previews update bound textures without replacing the canonical m
   };
 
   runtime.bindTexture(target, "forest", { frame: 1, setInitialTexture: false });
-  runtime.designerCallbacks().onPreview(
+  const callbacks = runtime.designerCallbacks();
+  callbacks.onPreview(
     "forest",
     "temporary-preview",
     { ...asset, prompt: "Temporary generated tiles." }
   );
+  const futureTextureCalls = [];
+  runtime.bindTexture({
+    setTexture(key, frame) {
+      futureTextureCalls.push({ key, frame });
+    }
+  }, "forest", { frame: 0 });
 
   assert.strictEqual(manifest.assets.forest, asset);
   assert.equal(manifest.assets.forest.prompt, "Forest tiles.");
+  assert.equal(runtime.key("forest"), "temporary-preview");
   assert.deepEqual(textureCalls, [{ key: "temporary-preview", frame: 1 }]);
+  assert.deepEqual(futureTextureCalls, [{ key: "temporary-preview", frame: 0 }]);
+
+  callbacks.onAssetReady("forest", "forest", asset);
+
+  assert.equal(runtime.key("forest"), "forest");
+  assert.deepEqual(textureCalls, [
+    { key: "temporary-preview", frame: 1 },
+    { key: "forest", frame: 1 }
+  ]);
+  assert.deepEqual(futureTextureCalls, [
+    { key: "temporary-preview", frame: 0 },
+    { key: "forest", frame: 0 }
+  ]);
 });
 
 test("a promoted tileset install survives transient previews and replaces the canonical texture", async () => {

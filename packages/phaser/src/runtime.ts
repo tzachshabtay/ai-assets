@@ -101,6 +101,7 @@ export class AiAssetRuntime {
   readonly baseUrl?: string;
   readonly targetId?: string;
   private readonly textureBindings = new Set<StoredTextureBinding>();
+  private readonly previewTextureKeys = new Map<string, string>();
   private readonly warnedMissingTextureKeys = new Set<string>();
 
   constructor(
@@ -116,6 +117,9 @@ export class AiAssetRuntime {
 
   key(selection: AiAssetSelection | string): string {
     const assetId = this.resolveAssetId(selection);
+    const previewTextureKey = this.previewTextureKeys.get(assetId);
+    if (previewTextureKey) return previewTextureKey;
+
     const asset = this.manifest.assets[assetId];
 
     if (asset && Object.keys(asset.versions).length === 0) {
@@ -286,9 +290,11 @@ export class AiAssetRuntime {
   designerCallbacks(): AiAssetRuntimeDesignerCallbacks {
     return {
       onPreview: (assetId, textureKey, asset) => {
+        this.previewTextureKeys.set(assetId, textureKey);
         this.applyAssetTexture(assetId, textureKey, asset);
       },
       onAssetReady: (assetId, textureKey, asset) => {
+        this.previewTextureKeys.delete(assetId);
         this.applyAssetTexture(assetId, textureKey, asset);
       },
       onManifestUpdated: (manifest) => {
