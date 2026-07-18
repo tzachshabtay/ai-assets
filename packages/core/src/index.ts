@@ -55,10 +55,13 @@ export {
 export type { CreateVersionInput } from "./generation.js";
 
 export {
-  registerInGameDesignerPanel
+  registerInGameDesignerPanel,
+  registerInGameDesignerToggle
 } from "./designer-dock.js";
 
 export type {
   InGameDesignerPanelOptions,
-  InGameDesignerPanelRegistration
+  InGameDesignerPanelRegistration,
+  InGameDesignerToggleOptions,
+  InGameDesignerToggleRegistration
 } from "./designer-dock.js";

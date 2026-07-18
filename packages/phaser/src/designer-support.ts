@@ -1149,6 +1149,13 @@ export async function openFrameTouchUpEditor(options: {
   const selectionBox = document.createElement("div");
   selectionBox.className = "ai-game-assets-designer__touchup-selection";
   selectionBox.hidden = true;
+  const rotateSelectionButton = document.createElement("button");
+  rotateSelectionButton.type = "button";
+  rotateSelectionButton.className = "ai-game-assets-designer__touchup-selection-rotate";
+  rotateSelectionButton.textContent = "↻";
+  rotateSelectionButton.setAttribute("aria-label", "Rotate selection 90 degrees clockwise");
+  rotateSelectionButton.title = "Rotate selection 90° clockwise";
+  selectionBox.append(rotateSelectionButton);
   canvasWrap.append(canvas, selectionBox);
 
   const side = document.createElement("div");
@@ -1292,6 +1299,33 @@ export async function openFrameTouchUpEditor(options: {
     floatingContext.putImageData(floatingSelection.pixels, 0, 0);
     context.drawImage(floatingCanvas, selection.x, selection.y);
   };
+  const rotateImageDataWithinBounds = (imageData: ImageData): ImageData => {
+    const sourceCanvas = document.createElement("canvas");
+    sourceCanvas.width = imageData.width;
+    sourceCanvas.height = imageData.height;
+    const sourceContext = sourceCanvas.getContext("2d");
+    const targetCanvas = document.createElement("canvas");
+    targetCanvas.width = imageData.width;
+    targetCanvas.height = imageData.height;
+    const targetContext = targetCanvas.getContext("2d", { willReadFrequently: true });
+    if (!sourceContext || !targetContext) return imageData;
+
+    sourceContext.putImageData(imageData, 0, 0);
+    targetContext.imageSmoothingEnabled = false;
+    targetContext.translate(imageData.width / 2, imageData.height / 2);
+    targetContext.scale(
+      imageData.width / imageData.height,
+      imageData.height / imageData.width
+    );
+    targetContext.rotate(Math.PI / 2);
+    targetContext.drawImage(
+      sourceCanvas,
+      -imageData.width / 2,
+      -imageData.height / 2
+    );
+    targetContext.setTransform(1, 0, 0, 1, 0, 0);
+    return targetContext.getImageData(0, 0, imageData.width, imageData.height);
+  };
   const copySelection = (): boolean => {
     if (!selection) return false;
     const imageData = floatingSelection?.pixels ?? context.getImageData(
@@ -1350,6 +1384,12 @@ export async function openFrameTouchUpEditor(options: {
     selectionBox.style.top = `${selection.y * zoom}px`;
     selectionBox.style.width = `${selection.width * zoom}px`;
     selectionBox.style.height = `${selection.height * zoom}px`;
+    const renderedWidth = selection.width * zoom;
+    const renderedHeight = selection.height * zoom;
+    rotateSelectionButton.hidden = renderedWidth < 12 || renderedHeight < 12;
+    const handleSize = Math.max(0, Math.min(18, renderedWidth - 4, renderedHeight - 4));
+    rotateSelectionButton.style.width = `${handleSize}px`;
+    rotateSelectionButton.style.height = `${handleSize}px`;
   };
 
   const refreshPreviews = () => {
@@ -1586,6 +1626,26 @@ export async function openFrameTouchUpEditor(options: {
     context.clearRect(selection.x, selection.y, selection.width, selection.height);
     context.putImageData(imageData, nextX, nextY);
     selection = { ...selection, x: nextX, y: nextY };
+    setDirty(true);
+    redrawEditor();
+  };
+
+  const rotateSelection = () => {
+    if (!selection) return;
+    pushUndo();
+    const pixels = floatingSelection?.pixels ?? context.getImageData(
+      selection.x,
+      selection.y,
+      selection.width,
+      selection.height
+    );
+    const rotated = rotateImageDataWithinBounds(pixels);
+    if (floatingSelection) {
+      floatingSelection.pixels = rotated;
+      drawFloatingSelection();
+    } else {
+      context.putImageData(rotated, selection.x, selection.y);
+    }
     setDirty(true);
     redrawEditor();
   };
@@ -1932,6 +1992,15 @@ export async function openFrameTouchUpEditor(options: {
     });
   }, { passive: false });
 
+  rotateSelectionButton.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  rotateSelectionButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    rotateSelection();
+  });
   closeButton.addEventListener("click", requestClose);
   zoomOutButton.addEventListener("click", () => {
     setZoom(zoom - 1);
@@ -5008,6 +5077,30 @@ export function ensureDesignerStyles(): void {
   border: 1px dashed #f8fafc;
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.9);
   transform: translate(24px, 24px);
+}
+.ai-game-assets-designer__touchup-selection-rotate {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  color: #f8fafc;
+  padding: 0;
+  font: 700 11px/1 ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.ai-game-assets-designer__touchup-selection-rotate:hover,
+.ai-game-assets-designer__touchup-selection-rotate:focus-visible {
+  border-color: #6ed3ff;
+  color: #6ed3ff;
+  outline: none;
 }
 .ai-game-assets-designer__touchup-side {
   min-height: 0;

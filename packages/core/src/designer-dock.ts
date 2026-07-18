@@ -18,6 +18,24 @@ export type InGameDesignerPanelRegistration = {
   destroy(): void;
 };
 
+export type InGameDesignerToggleOptions = {
+  id: string;
+  label: string;
+  button?: HTMLButtonElement;
+  order?: number;
+  ariaLabel?: string;
+  initialPressed?: boolean;
+  onPressedChange?(isPressed: boolean): void;
+};
+
+export type InGameDesignerToggleRegistration = {
+  readonly button: HTMLButtonElement;
+  setPressed(isPressed: boolean): void;
+  toggle(): void;
+  isPressed(): boolean;
+  destroy(): void;
+};
+
 type DockItem = {
   id: string;
   order: number;
@@ -38,6 +56,19 @@ type DockItem = {
   onDragPointerDown?: (event: PointerEvent) => void;
 };
 
+type DockToggleItem = {
+  id: string;
+  order: number;
+  sequence: number;
+  button: HTMLButtonElement;
+  pressed: boolean;
+  createdButton: boolean;
+  buttonParent: Node | null;
+  buttonNextSibling: Node | null;
+  onPressedChange?: (isPressed: boolean) => void;
+  onButtonClick: () => void;
+};
+
 type PanelGeometry = { left: number; top: number; width: number; height: number };
 type ResizeEdge = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
 
@@ -45,6 +76,7 @@ type DockState = {
   document: Document;
   root: HTMLDivElement;
   items: Map<string, DockItem>;
+  toggles: Map<string, DockToggleItem>;
   layoutAnimations: Map<HTMLButtonElement, Animation>;
   onWindowResize: () => void;
   activeId?: string;
@@ -66,8 +98,8 @@ export function registerInGameDesignerPanel(
   const document = options.panel.ownerDocument;
   const state = ensureDockState(document);
 
-  if (state.items.has(id)) {
-    throw new Error(`In-game designer panel "${id}" is already registered.`);
+  if (state.items.has(id) || state.toggles.has(id)) {
+    throw new Error(`In-game designer tool "${id}" is already registered.`);
   }
 
   const button = options.button ?? document.createElement("button");
@@ -144,6 +176,68 @@ export function registerInGameDesignerPanel(
   };
 }
 
+export function registerInGameDesignerToggle(
+  options: InGameDesignerToggleOptions
+): InGameDesignerToggleRegistration {
+  const id = options.id.trim();
+  const label = options.label.trim();
+
+  if (!id) throw new Error("In-game designer toggle id is required.");
+  if (!label) throw new Error("In-game designer toggle label is required.");
+
+  const document = options.button?.ownerDocument ?? globalThis.document;
+  if (!document) throw new Error("In-game designer toggles require a document.");
+  const state = ensureDockState(document);
+  if (state.items.has(id) || state.toggles.has(id)) {
+    throw new Error(`In-game designer tool "${id}" is already registered.`);
+  }
+
+  const button = options.button ?? document.createElement("button");
+  const sequence = state.nextSequence;
+  state.nextSequence += 1;
+  const item: DockToggleItem = {
+    id,
+    order: options.order ?? sequence,
+    sequence,
+    button,
+    pressed: options.initialPressed ?? false,
+    createdButton: !options.button,
+    buttonParent: button.parentNode,
+    buttonNextSibling: button.nextSibling,
+    onPressedChange: options.onPressedChange,
+    onButtonClick: () => setDockTogglePressed(item, !item.pressed)
+  };
+
+  button.type = "button";
+  button.textContent = label;
+  button.classList.add("ai-game-assets-in-game-designer-dock__button");
+  button.setAttribute("aria-label", options.ariaLabel ?? `Toggle ${label}`);
+  button.setAttribute("aria-pressed", String(item.pressed));
+  button.classList.toggle("is-open", item.pressed);
+  button.addEventListener("click", item.onButtonClick);
+  state.toggles.set(id, item);
+  renderDockButtons(state);
+
+  let destroyed = false;
+  return {
+    button,
+    setPressed(isPressed) {
+      if (!destroyed) setDockTogglePressed(item, isPressed);
+    },
+    toggle() {
+      if (!destroyed) setDockTogglePressed(item, !item.pressed);
+    },
+    isPressed() {
+      return !destroyed && item.pressed;
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      removeDockToggle(state, item);
+    }
+  };
+}
+
 function ensureDockState(document: Document): DockState {
   const host = globalThis as typeof globalThis & Record<string, unknown>;
   let states = host[dockStatesKey] as WeakMap<Document, DockState> | undefined;
@@ -171,6 +265,7 @@ function ensureDockState(document: Document): DockState {
     document,
     root,
     items: new Map(),
+    toggles: new Map(),
     layoutAnimations: new Map(),
     onWindowResize: () => undefined,
     nextSequence: 0
@@ -204,7 +299,7 @@ function activateDockItem(state: DockState, activeId: string | undefined): void 
 }
 
 function renderDockButtons(state: DockState): void {
-  const items = [...state.items.values()].sort((left, right) => (
+  const items = [...state.items.values(), ...state.toggles.values()].sort((left, right) => (
     left.order - right.order || left.sequence - right.sequence
   ));
 
@@ -244,14 +339,51 @@ function removeDockItem(state: DockState, item: DockItem): void {
 
   if (wasOpen) item.onOpenChange?.(false);
 
-  if (state.items.size === 0) {
+  removeDockIfEmpty(state);
+  if (state.items.size > 0 || state.toggles.size > 0) {
+    renderDockButtons(state);
+  }
+}
+
+function setDockTogglePressed(item: DockToggleItem, isPressed: boolean): void {
+  if (item.pressed === isPressed) return;
+  item.pressed = isPressed;
+  item.button.setAttribute("aria-pressed", String(isPressed));
+  item.button.classList.toggle("is-open", isPressed);
+  item.onPressedChange?.(isPressed);
+}
+
+function removeDockToggle(state: DockState, item: DockToggleItem): void {
+  state.toggles.delete(item.id);
+  item.button.removeEventListener("click", item.onButtonClick);
+  state.layoutAnimations.get(item.button)?.cancel();
+  state.layoutAnimations.delete(item.button);
+  item.button.classList.remove("ai-game-assets-in-game-designer-dock__button", "is-open");
+  item.button.removeAttribute("aria-pressed");
+
+  if (item.createdButton) {
+    item.button.remove();
+  } else if (item.buttonParent) {
+    item.buttonParent.insertBefore(
+      item.button,
+      item.buttonNextSibling?.parentNode === item.buttonParent ? item.buttonNextSibling : null
+    );
+  }
+
+  if (item.pressed) item.onPressedChange?.(false);
+  removeDockIfEmpty(state);
+  if (state.items.size > 0 || state.toggles.size > 0) {
+    renderDockButtons(state);
+  }
+}
+
+function removeDockIfEmpty(state: DockState): void {
+  if (state.items.size === 0 && state.toggles.size === 0) {
     state.document.defaultView?.removeEventListener("resize", state.onWindowResize);
     state.root.remove();
     const host = globalThis as typeof globalThis & Record<string, unknown>;
     const states = host[dockStatesKey] as WeakMap<Document, DockState> | undefined;
     states?.delete(state.document);
-  } else {
-    renderDockButtons(state);
   }
 }
 
@@ -479,7 +611,7 @@ function ensureDockStyles(document: Document): void {
 function setDockPanelOpenState(state: DockState, isOpen: boolean): void {
   if (state.root.classList.contains("is-panel-open") === isOpen) return;
 
-  const buttons = [...state.items.values()].map((item) => item.button);
+  const buttons = [...state.items.values(), ...state.toggles.values()].map((item) => item.button);
   const previousRects = new Map(buttons.map((button) => [button, button.getBoundingClientRect()]));
   state.root.classList.toggle("is-panel-open", isOpen);
 
