@@ -67,6 +67,7 @@ export type DesignerElements = {
   mixTilesetButton: HTMLButtonElement;
   versionsButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
+  promoteAllButton: HTMLButtonElement;
   restartButton: HTMLButtonElement;
   versionLabel: HTMLDivElement;
   options: HTMLDivElement;
@@ -280,6 +281,11 @@ export function createDesignerElements(
   promoteButton.textContent = "Promote";
   promoteButton.disabled = true;
 
+  const promoteAllButton = document.createElement("button");
+  promoteAllButton.type = "button";
+  promoteAllButton.textContent = "Promote all";
+  promoteAllButton.disabled = true;
+
   const restartButton = document.createElement("button");
   restartButton.type = "button";
   restartButton.textContent = "Restart";
@@ -293,6 +299,7 @@ export function createDesignerElements(
     deriveButton,
     versionsButton,
     promoteButton,
+    promoteAllButton,
     restartButton
   );
 
@@ -375,6 +382,7 @@ export function createDesignerElements(
     mixTilesetButton,
     versionsButton,
     promoteButton,
+    promoteAllButton,
     restartButton,
     versionLabel,
     options: optionsGrid,
@@ -2513,6 +2521,7 @@ export async function openStyleGuideEditor(options: {
   initial: StyleGuideDraft;
   onConfirm(draft: StyleGuideDraft): void;
   onPromote(draft: StyleGuideDraft): void | Promise<void>;
+  onRegenerateAll(draft: StyleGuideDraft): void | Promise<void>;
 }): Promise<void> {
   const dialog = document.createElement("div");
   dialog.className = "ai-game-assets-designer__modal";
@@ -2614,9 +2623,12 @@ export async function openStyleGuideEditor(options: {
   const promoteButton = document.createElement("button");
   promoteButton.type = "button";
   promoteButton.textContent = "Promote style";
+  const regenerateAllButton = document.createElement("button");
+  regenerateAllButton.type = "button";
+  regenerateAllButton.textContent = "Regenerate all...";
   const actions = document.createElement("div");
   actions.className = "ai-game-assets-designer__modal-actions";
-  actions.append(cancelButton, promoteButton, confirmButton);
+  actions.append(cancelButton, promoteButton, regenerateAllButton, confirmButton);
 
   const draft = (): StyleGuideDraft => ({
     prompt: promptInput.value.trim(),
@@ -2642,6 +2654,12 @@ export async function openStyleGuideEditor(options: {
     } finally {
       promoteButton.disabled = false;
     }
+  });
+  regenerateAllButton.addEventListener("click", () => {
+    const current = draft();
+    options.onConfirm(current);
+    close();
+    void options.onRegenerateAll(current);
   });
 
   card.append(title, promptField, dropZone, uploadButton, fileInput, imageList, actions);

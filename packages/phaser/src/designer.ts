@@ -11,6 +11,7 @@ import type {
   AiAssetManifest
 } from "@ai-game-assets/core";
 import {
+  expandAiAssetIds,
   linkedAnimationAssetIds,
   registerInGameDesignerPanel,
   resolveTargetAssetId,
@@ -165,6 +166,11 @@ export function installAiAssetDesigner(
   let stopCurrentAnimationPreview: (() => void) | undefined;
   let editedCurrentOption: GeneratedDebugOption | undefined;
   let previewedVersionName: string | undefined;
+  const pendingOptions = new Map<string, {
+    option: GeneratedDebugOption;
+    inheritAnimations: boolean;
+    previewedVersionName?: string;
+  }>();
   let styleGuideDraft = styleGuideDraftFromManifest(manifest, resolveAssetUrl);
   const formatDrafts = new Map<string, AiAssetFormat>();
   const tilesetPromptDrafts = new Map<string, string[]>();
@@ -227,6 +233,29 @@ export function installAiAssetDesigner(
   const mount = options.mount ?? document.body;
   mount.append(elements.root);
   bindKeyboardCapture(elements.root, options.scene);
+
+  const syncPromoteAllButton = () => {
+    elements.promoteAllButton.disabled =
+      pendingOptions.size === 0 ||
+      Boolean(activeGeneration) ||
+      activePromotionId !== undefined;
+  };
+  const rememberPendingOption = (
+    assetId: string,
+    option: GeneratedDebugOption,
+    pending: { inheritAnimations?: boolean; previewedVersionName?: string } = {}
+  ) => {
+    pendingOptions.set(assetId, {
+      option,
+      inheritAnimations: Boolean(pending.inheritAnimations),
+      previewedVersionName: pending.previewedVersionName
+    });
+    syncPromoteAllButton();
+  };
+  const forgetPendingOption = (assetId: string) => {
+    pendingOptions.delete(assetId);
+    syncPromoteAllButton();
+  };
 
   const applyOpenState = (isOpen: boolean) => {
     elements.root.dataset.open = String(isOpen);
@@ -482,6 +511,17 @@ export function installAiAssetDesigner(
     selectedOption = undefined;
     editedCurrentOption = undefined;
     previewedVersionName = undefined;
+    const pending = pendingOptions.get(assetId);
+    if (pending) {
+      selectedOption = pending.option;
+      editedCurrentOption = pending.option;
+      previewedVersionName = pending.previewedVersionName;
+      showOptionInCurrentPreview(pending.option, "pending preview");
+      previewedVersionName = pending.previewedVersionName;
+      elements.currentPreview.classList.add("is-selected");
+      elements.promoteButton.disabled = activePromotionId !== undefined;
+    }
+    syncPromoteAllButton();
   };
 
   const showOptionInCurrentPreview = (
@@ -563,6 +603,7 @@ export function installAiAssetDesigner(
       onPreview: options.onPreview,
       onSelected(option) {
         selectedOption = option;
+        rememberPendingOption(assetId, option);
         showOptionInCurrentPreview(option);
         elements.promoteButton.disabled = activePromotionId !== undefined;
       }
@@ -588,6 +629,7 @@ export function installAiAssetDesigner(
     editedCurrentOption = undefined;
     previewedVersionName = undefined;
     selectedOption = undefined;
+    forgetPendingOption(selectedTargetAssetId);
 
     for (const item of elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
       item.classList.remove("is-selected");
@@ -808,6 +850,7 @@ export function installAiAssetDesigner(
     elements.regenerateButton.textContent = "Regenerate";
     unlockGenerationStatus();
     elements.promoteButton.disabled = !selectedOption || activePromotionId !== undefined;
+    syncPromoteAllButton();
     syncMixTilesetButton();
     return true;
   };
@@ -841,6 +884,7 @@ export function installAiAssetDesigner(
     const currentGenerationId = generationId + 1;
     generationId = currentGenerationId;
     activeGeneration = { controller, id: currentGenerationId };
+    syncPromoteAllButton();
     elements.regenerateButton.textContent = "Cancel";
     clearGeneratedOptions();
     elements.promoteButton.disabled = true;
@@ -1174,6 +1218,7 @@ export function installAiAssetDesigner(
         Math.max(...candidates.map((option) => option.index)) + 1
       );
       selectedOption = mixedOption;
+      rememberPendingOption(assetId, mixedOption);
       showOptionInCurrentPreview(mixedOption, "mixed tileset");
       elements.currentPreview.classList.add("is-selected");
       elements.promoteButton.disabled = activePromotionId !== undefined;
@@ -1204,6 +1249,7 @@ export function installAiAssetDesigner(
       elements.regenerateButton.textContent = "Regenerate";
       unlockGenerationStatus();
       elements.promoteButton.disabled = !selectedOption || activePromotionId !== undefined;
+      syncPromoteAllButton();
       setStatus(elements, "Generation cancelled.", "info");
       return;
     }
@@ -1245,6 +1291,7 @@ export function installAiAssetDesigner(
     }
     generationId = currentGenerationId;
     activeGeneration = { controller, id: currentGenerationId };
+    syncPromoteAllButton();
 
     setStatus(elements, "Generating options...", "busy");
     lockGenerationStatus();
@@ -1334,6 +1381,7 @@ export function installAiAssetDesigner(
       }
       renderGeneratedOptions(selectedTargetAssetId, [uploadedOption]);
       selectedOption = uploadedOption;
+      rememberPendingOption(selectedTargetAssetId, uploadedOption);
       showOptionInCurrentPreview(uploadedOption);
       elements.promoteButton.disabled = activePromotionId !== undefined;
 
@@ -1398,6 +1446,7 @@ export function installAiAssetDesigner(
 
           renderGeneratedOptions(derivationAssetId, [option]);
           selectedOption = option;
+          rememberPendingOption(derivationAssetId, option);
           showOptionInCurrentPreview(option);
           elements.promoteButton.disabled = activePromotionId !== undefined;
           previewOption({
@@ -1420,6 +1469,7 @@ export function installAiAssetDesigner(
 
         generationId = currentGenerationId;
         activeGeneration = { controller, id: currentGenerationId };
+        syncPromoteAllButton();
         elements.regenerateButton.textContent = "Cancel";
         setStatus(elements, "Generating options...", "busy");
         lockGenerationStatus();
@@ -1472,6 +1522,7 @@ export function installAiAssetDesigner(
     const currentPromotionId = promotionId + 1;
     promotionId = currentPromotionId;
     activePromotionId = currentPromotionId;
+    syncPromoteAllButton();
     syncMixTilesetButton();
     const promotedAssetId = selectedTargetAssetId;
     const promotedOption = selectedOption;
@@ -1521,6 +1572,7 @@ export function installAiAssetDesigner(
       if (activePromotionId === currentPromotionId) {
         activePromotionId = undefined;
       }
+      syncPromoteAllButton();
       syncMixTilesetButton();
       elements.panel.removeAttribute("aria-busy");
       elements.panel.removeAttribute("inert");
@@ -1532,6 +1584,7 @@ export function installAiAssetDesigner(
     }
 
     manifest = saved.manifest;
+    forgetPendingOption(promotedAssetId);
     const promotedAsset = saved.asset;
     if (isDesignerTilesetAsset(promotedAsset)) {
       tilesetPromptDrafts.set(
@@ -1623,6 +1676,7 @@ export function installAiAssetDesigner(
     if (activePromotionId === currentPromotionId) {
       activePromotionId = undefined;
     }
+    syncPromoteAllButton();
     syncMixTilesetButton();
     elements.panel.removeAttribute("aria-busy");
     elements.panel.removeAttribute("inert");
@@ -1631,6 +1685,152 @@ export function installAiAssetDesigner(
     }
 
     if (options.restartOnPromote) {
+      window.location.reload();
+    }
+  });
+
+  elements.promoteAllButton.addEventListener("click", async () => {
+    if (pendingOptions.size === 0 || activePromotionId !== undefined) return;
+
+    const entries = [...pendingOptions.entries()];
+    const currentPromotionId = promotionId + 1;
+    promotionId = currentPromotionId;
+    activePromotionId = currentPromotionId;
+    elements.panel.setAttribute("aria-busy", "true");
+    elements.panel.setAttribute("inert", "");
+    elements.promoteButton.disabled = true;
+    syncPromoteAllButton();
+    syncMixTilesetButton();
+    let promotedCount = 0;
+    let promotionError: { assetId: string; error: unknown } | undefined;
+    const liveRefreshErrors: Array<{ assetId: string; error: unknown }> = [];
+
+    for (const [index, [assetId, pending]] of entries.entries()) {
+      const asset = manifest.assets[assetId];
+      if (!asset) {
+        promotionError = { assetId, error: new Error("Asset no longer exists in the manifest.") };
+        break;
+      }
+
+      const versionName = `promoted-${Date.now()}-${index + 1}`;
+      setStatus(
+        elements,
+        `Promoting ${readableAssetName(assetId)} (${index + 1}/${entries.length})...`,
+        "busy"
+      );
+
+      try {
+        const saved = await client.save({
+          assetId,
+          versionName,
+          dataUrl: pending.option.dataUrl,
+          prompt: pending.option.prompt,
+          model: pending.option.model,
+          revisedPrompt: pending.option.revisedPrompt,
+          dimensions: pending.option.dimensions,
+          frameGrid: pending.option.frameGrid,
+          tileset: pending.option.tileset,
+          animations: assetWithGeneratedGeometry(asset, pending.option, {
+            inheritAnimations: pending.inheritAnimations
+          }).animations,
+          settings: pending.option.settings,
+          audioSettings: pending.option.audioSettings,
+          audioPlayback: pending.option.audioPlayback,
+          voiceSettings: pending.option.voiceSettings,
+          durationSeconds: pending.option.durationSeconds,
+          activate: true,
+          notes: "Promoted from the AI asset designer with Promote all."
+        });
+        manifest = saved.manifest;
+        const promotedAsset = saved.asset;
+        if (isDesignerTilesetAsset(promotedAsset)) {
+          tilesetPromptDrafts.set(
+            assetId,
+            promotedAsset.tileset?.tiles?.map((tile) => tile.prompt) ?? []
+          );
+        }
+
+        try {
+          if (isAudioAsset(promotedAsset)) {
+            (options.onAssetReady ?? options.onPreview)(
+              assetId,
+              resolveAssetUrl(saved.file),
+              promotedAsset
+            );
+          } else {
+            let installed;
+            try {
+              installed = await installPromotedImageTexture({
+                scene: options.scene,
+                manifest,
+                assetId,
+                src: pending.option.dataUrl,
+                assetOverride: promotedAsset
+              });
+            } catch {
+              installed = await installPromotedImageTexture({
+                scene: options.scene,
+                manifest,
+                assetId,
+                src: resolveAssetUrl(saved.file),
+                assetOverride: promotedAsset
+              });
+            }
+            (options.onAssetReady ?? options.onPreview)(
+              assetId,
+              installed.textureKey,
+              promotedAsset
+            );
+          }
+        } catch (error) {
+          liveRefreshErrors.push({ assetId, error });
+        }
+
+        pendingOptions.delete(assetId);
+        formatDrafts.delete(assetId);
+        promotedCount += 1;
+      } catch (error) {
+        promotionError = { assetId, error };
+        break;
+      }
+    }
+
+    try {
+      if (promotedCount > 0) {
+        options.onManifestUpdated?.(manifest);
+      }
+      syncTargetAsset(selectedTargetAssetId);
+      renderAssetBrowser();
+    } catch (error) {
+      liveRefreshErrors.push({ assetId: selectedTargetAssetId, error });
+    }
+
+    activePromotionId = undefined;
+    elements.panel.removeAttribute("aria-busy");
+    elements.panel.removeAttribute("inert");
+    syncPromoteAllButton();
+    syncMixTilesetButton();
+
+    if (promotionError) {
+      setStatus(
+        elements,
+        `Promoted ${promotedCount}/${entries.length} assets. ` +
+          `${readableAssetName(promotionError.assetId)} failed: ${errorMessage(promotionError.error)}`,
+        "error"
+      );
+    } else if (liveRefreshErrors.length > 0) {
+      const firstError = liveRefreshErrors[0]!;
+      setStatus(
+        elements,
+        `Promoted all ${promotedCount} assets, but ${readableAssetName(firstError.assetId)} ` +
+          `could not refresh live. Restart to load it. ${errorMessage(firstError.error)}`,
+        "error"
+      );
+    } else {
+      setStatus(elements, `Promoted all ${promotedCount} pending assets.`, "success");
+    }
+
+    if (options.restartOnPromote && promotedCount > 0) {
       window.location.reload();
     }
   });
@@ -1655,6 +1855,10 @@ export function installAiAssetDesigner(
         }
 
         selectedOption = option;
+        rememberPendingOption(selectedTargetAssetId, option, {
+          inheritAnimations: true,
+          previewedVersionName: versionName
+        });
         showOptionInCurrentPreview(option, versionName);
         previewedVersionName = versionName;
         elements.currentPreview.classList.add("is-selected");
@@ -1692,6 +1896,7 @@ export function installAiAssetDesigner(
           options.onManifestUpdated?.(manifest);
 
           if (previewedVersionName === versionName) {
+            forgetPendingOption(selectedTargetAssetId);
             syncTargetAsset(selectedTargetAssetId);
           } else {
             elements.versionsButton.disabled =
@@ -1706,6 +1911,96 @@ export function installAiAssetDesigner(
       }
     });
   });
+
+  const regenerateAllGraphicalAssets = async (styleGuide: DebugStyleGuideDraft) => {
+    if (activeGeneration || activePromotionId !== undefined) return;
+
+    const assetIds = expandAiAssetIds(manifest, visibleAssetIds(), {
+      includeLinkedAnimations: true,
+      targetId: selectedTargetId
+    }).filter((assetId) => {
+      const asset = manifest.assets[assetId];
+      return Boolean(asset && asset.kind !== "collection" && !isAudioAsset(asset));
+    });
+
+    if (assetIds.length === 0) {
+      setStatus(elements, "There are no graphical assets to regenerate.", "info");
+      return;
+    }
+
+    const controller = new AbortController();
+    const currentGenerationId = generationId + 1;
+    generationId = currentGenerationId;
+    activeGeneration = { controller, id: currentGenerationId };
+    clearGeneratedOptions();
+    syncPromoteAllButton();
+    const failures: Array<{ assetId: string; error: unknown }> = [];
+    let generatedCount = 0;
+
+    for (const [index, assetId] of assetIds.entries()) {
+      if (activeGeneration?.id !== currentGenerationId) return;
+
+      setStatus(
+        elements,
+        `Regenerating ${readableAssetName(assetId)} (${index + 1}/${assetIds.length})...`,
+        "busy"
+      );
+
+      try {
+        const generated = await client.generate({
+          assetId,
+          count: 1,
+          styleGuide
+        }, {
+          signal: controller.signal
+        });
+        const option = generated[0];
+        if (!option) {
+          throw new Error("Generation finished without an option.");
+        }
+
+        rememberPendingOption(assetId, option);
+        previewOption({
+          scene: options.scene,
+          manifest,
+          assetId,
+          option,
+          onPreview: options.onPreview
+        });
+        generatedCount += 1;
+
+        if (selectedTargetAssetId === assetId) {
+          selectedOption = option;
+          showOptionInCurrentPreview(option, "regenerated preview");
+          elements.currentPreview.classList.add("is-selected");
+          elements.promoteButton.disabled = activePromotionId !== undefined;
+        }
+      } catch (error) {
+        if (isAbortError(error)) return;
+        failures.push({ assetId, error });
+      }
+    }
+
+    if (!finishGeneration(currentGenerationId)) return;
+
+    if (failures.length > 0) {
+      const firstFailure = failures[0]!;
+      setStatus(
+        elements,
+        `Regenerated ${generatedCount}/${assetIds.length} graphical assets. ` +
+          `${readableAssetName(firstFailure.assetId)} failed: ${errorMessage(firstFailure.error)}`,
+        "error"
+      );
+      return;
+    }
+
+    setStatus(
+      elements,
+      `Regenerated and previewed ${generatedCount} graphical assets. ` +
+        "Use Promote all to save them.",
+      "success"
+    );
+  };
 
   elements.styleButton.addEventListener("click", () => {
     void openStyleGuideEditor({
@@ -1731,6 +2026,13 @@ export function installAiAssetDesigner(
         } catch (error) {
           setStatus(elements, `Style promotion failed. ${errorMessage(error)}`, "error");
           throw error;
+        }
+      },
+      async onRegenerateAll(draft) {
+        try {
+          await regenerateAllGraphicalAssets(await styleGuideRequest(draft));
+        } catch (error) {
+          setStatus(elements, `Bulk regeneration failed. ${errorMessage(error)}`, "error");
         }
       }
     });
@@ -1774,6 +2076,10 @@ export function installAiAssetDesigner(
             durationSeconds: previousOption?.durationSeconds ?? activeVersion?.durationSeconds
           };
           selectedOption = editedCurrentOption;
+          rememberPendingOption(selectedTargetAssetId, editedCurrentOption, {
+            inheritAnimations: Boolean(previewedVersionName),
+            previewedVersionName
+          });
           elements.promoteButton.disabled = activePromotionId !== undefined;
           elements.currentRevertButton.hidden = false;
           options.onPreview(selectedTargetAssetId, dataUrl, optionAsset);
@@ -1828,6 +2134,10 @@ export function installAiAssetDesigner(
           animations
         };
         selectedOption = editedCurrentOption;
+        rememberPendingOption(selectedTargetAssetId, editedCurrentOption, {
+          inheritAnimations: Boolean(previewedVersionName),
+          previewedVersionName
+        });
         elements.promoteButton.disabled = activePromotionId !== undefined;
         elements.currentRevertButton.hidden = false;
         previewImageSource({
@@ -1913,6 +2223,10 @@ export function installAiAssetDesigner(
             settings: optionAsset.settings
           };
           selectedOption = editedCurrentOption;
+          rememberPendingOption(assetId, editedCurrentOption, {
+            inheritAnimations: Boolean(previewedVersionName),
+            previewedVersionName
+          });
           elements.currentImage.src = dataUrl;
           elements.currentPreview.classList.add("is-selected");
           elements.currentRevertButton.hidden = false;
@@ -1957,6 +2271,10 @@ export function installAiAssetDesigner(
           settings: previousOption?.settings ?? activeVersion?.settings ?? asset.settings
         };
         selectedOption = editedCurrentOption;
+        rememberPendingOption(selectedTargetAssetId, editedCurrentOption, {
+          inheritAnimations: Boolean(previewedVersionName),
+          previewedVersionName
+        });
         elements.currentImage.src = dataUrl;
         elements.currentPreview.classList.add("is-selected");
         elements.currentRevertButton.hidden = false;
