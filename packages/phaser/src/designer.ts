@@ -1110,7 +1110,31 @@ export function installAiAssetDesigner(
         asset: current.asset,
         assetId,
         baseSheetSrc: current.sheetSrc,
-        candidates
+        candidates,
+        async regenerateTile(tile, tileset, currentTileSrc) {
+          const guide = await styleGuideRequest(styleGuideDraft);
+          return client.generate({
+            assetId,
+            count: 3,
+            format: effectiveGenerationFormat(
+              manifest,
+              formatDrafts,
+              selectedAssetId,
+              assetId
+            ),
+            tileset,
+            styleGuide: {
+              ...guide,
+              images: [
+                ...guide.images,
+                {
+                  name: `${assetId}-current-tile-${tile + 1}-style.png`,
+                  dataUrl: currentTileSrc
+                }
+              ]
+            }
+          });
+        }
       });
       if (
         panelRevision !== mixPanelRevision ||

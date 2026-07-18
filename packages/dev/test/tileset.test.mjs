@@ -150,7 +150,7 @@ test("structured tileset prompts bake geometry and preserve exact tile order", (
   assert.ok(explicitPrompt.indexOf("Tile 1 —") < explicitPrompt.indexOf("Tile 2 —"));
 });
 
-test("tileset base generation and promotion honor tile size and tile count overrides", async () => {
+test("tileset base generation and promotion honor tile and grid geometry overrides", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "ai-assets-tileset-base-"));
   const assetsDir = path.join(root, "assets");
   const manifestPath = path.join(root, "manifest.json");
@@ -209,6 +209,8 @@ test("tileset base generation and promotion honor tile size and tile count overr
         tileset: {
           tileWidth: 24,
           tileHeight: 20,
+          columns: 1,
+          rows: 1,
           tileCount: 1,
           tiles: [{ prompt: "One seamless grass tile." }]
         }
@@ -220,12 +222,12 @@ test("tileset base generation and promotion honor tile size and tile count overr
       ...tilesetAsset().tileset,
       tileWidth: 24,
       tileHeight: 20,
-      columns: 2,
+      columns: 1,
       rows: 1,
       tileCount: 1,
       tiles: [{ prompt: "One seamless grass tile." }]
     });
-    assert.deepEqual(generationAsset.dimensions, { width: 48, height: 20 });
+    assert.deepEqual(generationAsset.dimensions, { width: 24, height: 20 });
     assert.deepEqual(generated.tileset, generationAsset.tileset);
     assert.deepEqual(generated.dimensions, generationAsset.dimensions);
 
@@ -255,7 +257,7 @@ test("tileset base generation and promotion honor tile size and tile count overr
     assert.deepEqual(saveResult.manifest, saved);
     assert.deepEqual(saveResult.asset, saved.assets.forest);
     assert.equal(saved.assets.forest.activeVersion, "resized");
-    assert.deepEqual(saved.assets.forest.dimensions, { width: 48, height: 20 });
+    assert.deepEqual(saved.assets.forest.dimensions, { width: 24, height: 20 });
     assert.deepEqual(saved.assets.forest.tileset, generationAsset.tileset);
   } finally {
     await devServer.close();

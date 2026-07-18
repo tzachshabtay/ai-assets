@@ -46,6 +46,11 @@ export type TilesetBaseMixCurrent = {
   sheetSrc: string;
 };
 
+export type TilesetTileGenerationOverride = Pick<
+  DesignerTilesetMetadata,
+  "tileWidth" | "tileHeight" | "columns" | "rows" | "tileCount" | "tiles"
+>;
+
 export function resolveTilesetBaseMixCurrent(
   asset: AiAssetDefinition,
   activeSheetSrc: string,
@@ -57,6 +62,24 @@ export function resolveTilesetBaseMixCurrent(
   } : {
     asset,
     sheetSrc: activeSheetSrc
+  };
+}
+
+export function tilesetTileGenerationOverride(
+  tileset: DesignerTilesetMetadata,
+  tile: number
+): TilesetTileGenerationOverride {
+  const prompt = tilesetTilePrompt(tileset, tile);
+  if (!prompt || tile < 0 || tile >= tilesetTileCount(tileset)) {
+    throw new Error(`Tile ${tile + 1} requires a prompt before it can be regenerated.`);
+  }
+  return {
+    tileWidth: tileset.tileWidth,
+    tileHeight: tileset.tileHeight,
+    columns: 1,
+    rows: 1,
+    tileCount: 1,
+    tiles: [{ prompt }]
   };
 }
 
@@ -89,6 +112,18 @@ type TilesetMixSource = {
   overviewSheetSrc: string;
   sheetSrcs: string[];
   tileset: DesignerTilesetMetadata;
+  tileOverrides?: Map<number, {
+    src: string;
+    tile: number;
+    tileset: DesignerTilesetMetadata;
+  }>;
+};
+
+type TilesetTileReplacement = {
+  selection: TilesetMixSelection;
+  src: string;
+  tile: number;
+  tileset: DesignerTilesetMetadata;
 };
 
 type TilesetMixerResult = {
@@ -111,6 +146,7 @@ type TilesetMixerOptions = {
   navigatorSource?: TilesetMixSelection;
   sources: TilesetMixSource[];
   selections: TilesetMixSelection[];
+  regenerateTile?(tile: number): Promise<TilesetTileReplacement[]>;
 };
 
 export function isDesignerTilesetAsset(asset: AiAssetDefinition | undefined): boolean {
@@ -202,6 +238,11 @@ export async function openTilesetBaseMixerDialog(options: {
   assetId: string;
   baseSheetSrc: string;
   candidates: GeneratedDebugOption[];
+  regenerateTile?(
+    tile: number,
+    tileset: TilesetTileGenerationOverride,
+    currentTileSrc: string
+  ): Promise<GeneratedDebugOption[]>;
 }): Promise<TilesetBaseMixResult | undefined> {
   const currentTileset = tilesetMetadataForAsset(options.asset);
   if (!currentTileset) {
@@ -241,7 +282,35 @@ export async function openTilesetBaseMixerDialog(options: {
     targetDimensions: plan.dimensions,
     frameCount: 1,
     sources,
-    selections: plan.selections
+    selections: plan.selections,
+    regenerateTile: options.regenerateTile ? async (tile) => {
+      const currentTileSrc = await extractTilesetTileDataUrl(
+        options.baseSheetSrc,
+        currentTileset,
+        tile
+      );
+      const generated = [...await options.regenerateTile!(
+        tile,
+        tilesetTileGenerationOverride(plan.tileset, tile),
+        currentTileSrc
+      )].sort((left, right) => left.index - right.index);
+      if (generated.length !== candidates.length) {
+        throw new Error(`Expected ${candidates.length} regenerated tile options, received ${generated.length}.`);
+      }
+      assertUniqueCandidateIndexes(generated);
+      return candidates.map((candidate, index): TilesetTileReplacement => {
+        const option = generated[index]!;
+        if (!option.tileset || tilesetTileCount(option.tileset) < 1) {
+          throw new Error(`Regenerated option ${index + 1} did not return tile geometry.`);
+        }
+        return {
+          selection: candidate.index,
+          src: option.dataUrl,
+          tile: 0,
+          tileset: option.tileset
+        };
+      });
+    } : undefined
   });
 
   const dataUrl = mixed?.sheets[0];
@@ -419,12 +488,17 @@ function openTilesetMixerDialog(
     const cancelButton = document.createElement("button");
     cancelButton.type = "button";
     cancelButton.textContent = "Cancel";
+    const regenerateButton = document.createElement("button");
+    regenerateButton.type = "button";
+    regenerateButton.textContent = "Regenerate";
+    regenerateButton.hidden = !options.regenerateTile;
+    regenerateButton.setAttribute("aria-label", "Regenerate three options for the current tile");
     const confirmButton = document.createElement("button");
     confirmButton.type = "button";
     confirmButton.textContent = options.confirmLabel;
     const actions = document.createElement("div");
     actions.className = "ai-game-assets-designer__modal-actions";
-    actions.append(cancelButton, confirmButton);
+    actions.append(regenerateButton, cancelButton, confirmButton);
 
     card.append(title, hint, body, feedback, actions);
     dialog.append(card);
@@ -434,17 +508,31 @@ function openTilesetMixerDialog(
     let frameSlot = 0;
     let timeout: number | undefined;
     let closed = false;
+    let busy = false;
     const selections = [...options.selections];
     const navigatorButtons: HTMLButtonElement[] = [];
     const choiceButtons = new Map<TilesetMixSelection, HTMLButtonElement>();
     const previewStages = new Map<TilesetMixSelection, HTMLDivElement>();
 
-    const sourceSheet = (source: TilesetMixSource, slot: number): string => (
-      source.sheetSrcs[slot] ?? source.sheetSrcs[0] ?? source.overviewSheetSrc
-    );
     const sourceIsAvailable = (source: TilesetMixSource, tile: number): boolean => (
-      tile < tilesetTileCount(source.tileset)
+      source.tileOverrides?.has(tile) || tile < tilesetTileCount(source.tileset)
     );
+    const sourceTileView = (
+      source: TilesetMixSource,
+      tile: number,
+      slot: number,
+      overview = false
+    ): { src: string; tile: number; tileset: DesignerTilesetMetadata } => {
+      const override = source.tileOverrides?.get(tile);
+      if (override) return override;
+      return {
+        src: overview
+          ? source.overviewSheetSrc
+          : source.sheetSrcs[slot] ?? source.sheetSrcs[0] ?? source.overviewSheetSrc,
+        tile,
+        tileset: source.tileset
+      };
+    };
 
     const updateNavigatorSelection = () => {
       navigatorButtons.forEach((button, tile) => {
@@ -457,15 +545,16 @@ function openTilesetMixerDialog(
           ? preferredSource
           : selectedSource;
         if (!source || !selectedSource) return;
+        const view = sourceTileView(source, tile, 0, true);
 
         button.classList.toggle("is-selected", tile === selectedTile);
         button.classList.toggle("is-mixed", selection !== "base");
         button.dataset.source = selectedSource.shortLabel;
         button.setAttribute("aria-pressed", String(tile === selectedTile));
         setFrameBackground(button, {
-          src: source.overviewSheetSrc,
-          frame: tile,
-          frameGrid: tilesetFrameGrid(source.tileset),
+          src: view.src,
+          frame: view.tile,
+          frameGrid: tilesetFrameGrid(view.tileset),
           displaySize: { width: 56, height: 56 }
         });
       });
@@ -501,10 +590,11 @@ function openTilesetMixerDialog(
         }
 
         delete stage.dataset.unavailable;
+        const view = sourceTileView(source, selectedTile, frameSlot);
         setFrameBackground(stage, {
-          src: sourceSheet(source, frameSlot),
-          frame: selectedTile,
-          frameGrid: tilesetFrameGrid(source.tileset),
+          src: view.src,
+          frame: view.tile,
+          frameGrid: tilesetFrameGrid(view.tileset),
           displaySize: { width: 112, height: 112 }
         });
       }
@@ -526,6 +616,23 @@ function openTilesetMixerDialog(
       updateNavigatorSelection();
       updateChoiceSelection();
       renderPreviews();
+    };
+
+    const setBusy = (nextBusy: boolean) => {
+      busy = nextBusy;
+      regenerateButton.disabled = nextBusy;
+      cancelButton.disabled = nextBusy;
+      confirmButton.disabled = nextBusy;
+      navigatorButtons.forEach((button) => {
+        button.disabled = nextBusy;
+      });
+      if (nextBusy) {
+        choiceButtons.forEach((button) => {
+          button.disabled = true;
+        });
+      } else {
+        updateChoiceSelection();
+      }
     };
 
     for (let tile = 0; tile < tileCount; tile += 1) {
@@ -569,14 +676,55 @@ function openTilesetMixerDialog(
 
     const keyHandler = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (busy) return;
       event.preventDefault();
       close(undefined);
     };
 
     cancelButton.addEventListener("click", () => close(undefined));
+    regenerateButton.addEventListener("click", async () => {
+      if (!options.regenerateTile || busy) return;
+      const tile = selectedTile;
+      setBusy(true);
+      feedback.hidden = false;
+      feedback.dataset.kind = "busy";
+      feedback.textContent = `Generating 3 new options for tile ${tile + 1}...`;
+
+      try {
+        const replacements = await options.regenerateTile(tile);
+        if (replacements.length !== options.sources.length - 1) {
+          throw new Error(
+            `Expected ${options.sources.length - 1} tile replacements, received ${replacements.length}.`
+          );
+        }
+        for (const replacement of replacements) {
+          const source = sourceBySelection.get(replacement.selection);
+          if (!source || replacement.selection === "base") {
+            throw new Error("Regenerated tile options did not match the existing choices.");
+          }
+          source.tileOverrides ??= new Map();
+          source.tileOverrides.set(tile, {
+            src: replacement.src,
+            tile: replacement.tile,
+            tileset: replacement.tileset
+          });
+        }
+        const base = sourceBySelection.get("base");
+        selections[tile] = base && sourceIsAvailable(base, tile)
+          ? "base"
+          : replacements[0]!.selection;
+        selectTile(tile);
+        feedback.dataset.kind = "success";
+        feedback.textContent = `Replaced the three options for tile ${tile + 1}.`;
+      } catch (error) {
+        feedback.dataset.kind = "error";
+        feedback.textContent = error instanceof Error ? error.message : String(error);
+      } finally {
+        setBusy(false);
+      }
+    });
     confirmButton.addEventListener("click", async () => {
-      confirmButton.disabled = true;
-      cancelButton.disabled = true;
+      setBusy(true);
       feedback.hidden = false;
       feedback.dataset.kind = "busy";
       feedback.textContent = options.busyLabel;
@@ -593,8 +741,7 @@ function openTilesetMixerDialog(
       } catch (error) {
         feedback.dataset.kind = "error";
         feedback.textContent = error instanceof Error ? error.message : String(error);
-        confirmButton.disabled = false;
-        cancelButton.disabled = false;
+        setBusy(false);
       }
     });
 
@@ -617,10 +764,17 @@ async function composeTilesetSheets(options: {
     options.sources.map((source) => [source.selection, source] as const)
   );
   const sourceEntries = options.sources.flatMap((source) => (
-    [...new Set([
-      source.overviewSheetSrc,
-      ...source.sheetSrcs.slice(0, options.frameCount)
-    ])].map((src) => ({ source, src }))
+    [
+      ...[...new Set([
+        source.overviewSheetSrc,
+        ...source.sheetSrcs.slice(0, options.frameCount)
+      ])].map((src) => ({ label: source.label, src, tileset: source.tileset })),
+      ...[...(source.tileOverrides?.values() ?? [])].map((override) => ({
+        label: source.label,
+        src: override.src,
+        tileset: override.tileset
+      }))
+    ]
   ));
   const loadedEntries = await Promise.all(
     [...new Set(sourceEntries.map((entry) => entry.src))].map(async (src) => (
@@ -629,12 +783,12 @@ async function composeTilesetSheets(options: {
   );
   const images = new Map(loadedEntries);
 
-  for (const { source, src } of sourceEntries) {
+  for (const { label, src, tileset } of sourceEntries) {
     const image = images.get(src);
-    const required = tilesetDimensions(source.tileset);
+    const required = tilesetDimensions(tileset);
     if (!image || image.naturalWidth !== required.width || image.naturalHeight !== required.height) {
       throw new Error(
-        `${source.label} must be exactly ${required.width}x${required.height}px for its declared tile grid.`
+        `${label} must be exactly ${required.width}x${required.height}px for its declared tile grid.`
       );
     }
   }
@@ -667,17 +821,18 @@ async function composeTilesetSheets(options: {
 
     for (const [tile, selection] of options.selections.entries()) {
       const source = sourceBySelection.get(selection);
-      if (!source || tile >= tilesetTileCount(source.tileset)) {
+      const override = source?.tileOverrides?.get(tile);
+      if (!source || (!override && tile >= tilesetTileCount(source.tileset))) {
         throw new Error(`Tile ${tile + 1} does not have a valid selected source.`);
       }
 
-      const src = source.sheetSrcs[frameSlot] ?? source.sheetSrcs[0];
+      const src = override?.src ?? source.sheetSrcs[frameSlot] ?? source.sheetSrcs[0];
       const image = src ? images.get(src) : undefined;
       if (!image) {
         throw new Error(`${source.label} is missing frame ${frameSlot + 1}.`);
       }
 
-      const sourceRect = tileRect(source.tileset, tile);
+      const sourceRect = tileRect(override?.tileset ?? source.tileset, override?.tile ?? tile);
       const targetRect = tileRect(options.targetTileset, tile);
       context.clearRect(targetRect.x, targetRect.y, targetRect.width, targetRect.height);
       context.drawImage(
@@ -734,6 +889,32 @@ function tilesetDimensions(
     height: margin * 2 + tileset.rows * tileset.tileHeight +
       Math.max(0, tileset.rows - 1) * spacing
   };
+}
+
+async function extractTilesetTileDataUrl(
+  src: string,
+  tileset: DesignerTilesetMetadata,
+  tile: number
+): Promise<string> {
+  const image = await loadImageElement(src);
+  const source = tileRect(tileset, tile);
+  const canvas = document.createElement("canvas");
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not create a canvas for the current tile reference.");
+  context.drawImage(
+    image,
+    source.x,
+    source.y,
+    source.width,
+    source.height,
+    0,
+    0,
+    source.width,
+    source.height
+  );
+  return canvas.toDataURL("image/png");
 }
 
 function tilesetTileCount(tileset: DesignerTilesetMetadata): number {

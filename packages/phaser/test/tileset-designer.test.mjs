@@ -6,6 +6,7 @@ import {
   createMixedTilesetOption,
   planTilesetBaseMix,
   resolveTilesetBaseMixCurrent,
+  tilesetTileGenerationOverride,
   tilesetTilePrompt
 } from "../dist/tileset-dialog.js";
 
@@ -188,6 +189,25 @@ test("a mixed preview becomes the current source for the next tileset mixer", ()
   assert.equal(current.sheetSrc, mixedOption.dataUrl);
   assert.deepEqual(current.asset.dimensions, mixedOption.dimensions);
   assert.deepEqual(current.asset.tileset, mixedOption.tileset);
+});
+
+test("regenerating one tileset tile requests a one-cell sheet with its exact prompt", () => {
+  const tileset = {
+    ...asset.tileset,
+    tiles: [
+      { prompt: "Mossy grass." },
+      { prompt: "Stone path." }
+    ]
+  };
+
+  assert.deepEqual(tilesetTileGenerationOverride(tileset, 1), {
+    tileWidth: 16,
+    tileHeight: 16,
+    columns: 1,
+    rows: 1,
+    tileCount: 1,
+    tiles: [{ prompt: "Stone path." }]
+  });
 });
 
 test("tileset mixer prompts are read from the target tile metadata", () => {

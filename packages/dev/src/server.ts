@@ -61,7 +61,7 @@ export type SerializedGeneratedAssetOption = {
 export type TilesetGenerationOverride = Pick<
   AiAssetTileset,
   "tileWidth" | "tileHeight" | "tileCount" | "tiles"
->;
+> & Partial<Pick<AiAssetTileset, "columns" | "rows">>;
 
 export type GenerateTilesetAnimationStreamRequest = {
   assetId: string;
@@ -787,7 +787,17 @@ function applyGenerationOverrides(
       asset.tileset.tileHeight,
       `${asset.id}.tileset.tileHeight`
     );
-    const capacity = asset.tileset.columns * asset.tileset.rows;
+    const columns = tilesetOverridePositiveInteger(
+      overrides.tileset?.columns,
+      asset.tileset.columns,
+      `${asset.id}.tileset.columns`
+    );
+    const rows = tilesetOverridePositiveInteger(
+      overrides.tileset?.rows,
+      asset.tileset.rows,
+      `${asset.id}.tileset.rows`
+    );
+    const capacity = columns * rows;
     const tileCount = tilesetOverridePositiveInteger(
       overrides.tileset?.tileCount,
       asset.tileset.tileCount ?? capacity,
@@ -798,8 +808,6 @@ function applyGenerationOverrides(
         `${asset.id}.tileset.tileCount must not exceed columns * rows (${capacity}).`
       );
     }
-    const columns = asset.tileset.columns;
-    const rows = asset.tileset.rows;
     const tileset: AiAssetTileset = {
       ...asset.tileset,
       tileWidth,

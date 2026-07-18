@@ -22,7 +22,10 @@ export type GenerateDebugOptionsRequest = {
     height: number;
   };
   frameCount?: number;
-  tileset?: Pick<AiAssetTileset, "tileWidth" | "tileHeight" | "tileCount" | "tiles">;
+  tileset?: Pick<
+    AiAssetTileset,
+    "tileWidth" | "tileHeight" | "tileCount" | "tiles"
+  > & Partial<Pick<AiAssetTileset, "columns" | "rows">>;
   format?: AiAssetGenerationSettings["format"];
   audioSettings?: AiAudioGenerationSettings;
   voiceSettings?: AiVoiceGenerationSettings;
