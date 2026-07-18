@@ -4288,6 +4288,22 @@ export function ensureDesignerStyles(): void {
 .ai-game-assets-designer__tileset-mixer-card {
   width: min(980px, calc(100vw - 36px));
 }
+.ai-game-assets-designer__tileset-editor-card {
+  width: min(720px, calc(100vw - 36px));
+}
+.ai-game-assets-designer__tileset-editor-stage {
+  border: 1px solid #303a49;
+  border-radius: 8px;
+}
+.ai-game-assets-designer__tileset-editor-strip {
+  margin-top: 8px;
+}
+.ai-game-assets-designer__tileset-regenerate-card {
+  width: min(620px, calc(100vw - 36px));
+}
+.ai-game-assets-designer__tileset-regenerate-card .ai-game-assets-designer__tileset-tile-prompt {
+  margin: 0 0 12px;
+}
 .ai-game-assets-designer__tileset-mixer-hint {
   margin: -5px 0 12px;
   color: #aeb8c8;
@@ -4417,6 +4433,9 @@ export function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__modal-feedback[data-kind="error"] {
   color: #ffb4b4;
+}
+.ai-game-assets-designer__modal-feedback[data-kind="success"] {
+  color: #86efac;
 }
 .ai-game-assets-designer__version-list {
   display: grid;

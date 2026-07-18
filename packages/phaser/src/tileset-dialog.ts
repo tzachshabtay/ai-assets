@@ -11,7 +11,9 @@ import type {
 import {
   assetWithGeneratedGeometry,
   loadImageElement,
+  openFrameTouchUpEditor,
   readableAssetName,
+  replaceSpriteSheetFrames,
   setFrameBackground
 } from "./designer-support.js";
 
@@ -44,6 +46,10 @@ export type TilesetBaseMixPlan = {
 export type TilesetBaseMixCurrent = {
   asset: AiAssetDefinition;
   sheetSrc: string;
+};
+
+export type TilesetEditorResult = {
+  dataUrl: string;
 };
 
 export type TilesetTileGenerationOverride = Pick<
@@ -230,6 +236,393 @@ export function planTilesetBaseMix(
     tileset: targetTileset,
     selections
   };
+}
+
+export async function openTilesetEditor(options: {
+  root: HTMLElement;
+  asset: AiAssetDefinition;
+  assetId: string;
+  src: string;
+  regenerateTile(
+    tile: number,
+    tileset: TilesetTileGenerationOverride,
+    currentTileSrc: string
+  ): Promise<GeneratedDebugOption[]>;
+  onConfirm(result: TilesetEditorResult): void | Promise<void>;
+}): Promise<void> {
+  const tileset = tilesetMetadataForAsset(options.asset);
+  if (!tileset) return;
+
+  const tileCount = tilesetTileCount(tileset);
+  const frameGrid = tilesetFrameGrid(tileset);
+  const touchUpScale = Math.min(224 / tileset.tileWidth, 224 / tileset.tileHeight);
+  const touchUpDisplaySize = {
+    width: Math.max(1, Math.round(tileset.tileWidth * touchUpScale)),
+    height: Math.max(1, Math.round(tileset.tileHeight * touchUpScale))
+  };
+  const dialog = document.createElement("div");
+  dialog.className = "ai-game-assets-designer__modal ai-game-assets-designer__tileset-editor";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-label", `Edit ${readableAssetName(options.assetId)} tileset`);
+
+  const card = document.createElement("div");
+  card.className = "ai-game-assets-designer__modal-card ai-game-assets-designer__tileset-editor-card";
+  const title = document.createElement("div");
+  title.className = "ai-game-assets-designer__modal-title";
+  title.textContent = `Edit ${readableAssetName(options.assetId)} tileset`;
+  const stage = document.createElement("div");
+  stage.className = "ai-game-assets-designer__modal-stage ai-game-assets-designer__tileset-editor-stage";
+  const prompt = document.createElement("div");
+  prompt.className = "ai-game-assets-designer__tileset-tile-prompt";
+  const strip = document.createElement("div");
+  strip.className = "ai-game-assets-designer__frame-strip ai-game-assets-designer__tileset-editor-strip";
+  const feedback = document.createElement("div");
+  feedback.className = "ai-game-assets-designer__modal-feedback";
+  feedback.hidden = true;
+
+  const touchUpButton = modalButton("Touch up...");
+  const regenerateButton = modalButton("Regenerate...");
+  const copyButton = modalButton("Copy");
+  const pasteButton = modalButton("Paste");
+  const cancelButton = modalButton("Cancel");
+  const confirmButton = modalButton("Confirm");
+  const actions = document.createElement("div");
+  actions.className = "ai-game-assets-designer__modal-actions";
+  actions.append(
+    touchUpButton,
+    regenerateButton,
+    copyButton,
+    pasteButton,
+    cancelButton,
+    confirmButton
+  );
+
+  card.append(title, stage, prompt, strip, feedback, actions);
+  dialog.append(card);
+  options.root.append(dialog);
+
+  let selectedTile = 0;
+  let sheetSrc = options.src;
+  let editedSheetSrc: string | undefined;
+  let copiedTileSrc: string | undefined;
+  let busy = false;
+  let closed = false;
+  const tileButtons: HTMLButtonElement[] = [];
+
+  const setFeedback = (
+    message: string,
+    kind: "idle" | "busy" | "error" | "success" = "idle"
+  ) => {
+    feedback.textContent = message;
+    feedback.dataset.kind = kind;
+    feedback.hidden = message.length === 0;
+  };
+
+  const syncButtons = () => {
+    touchUpButton.disabled = busy;
+    regenerateButton.disabled = busy || !tilesetTilePrompt(tileset, selectedTile);
+    copyButton.disabled = busy;
+    pasteButton.disabled = busy || !copiedTileSrc;
+    cancelButton.disabled = busy;
+    confirmButton.disabled = busy;
+    tileButtons.forEach((button) => {
+      button.disabled = busy;
+    });
+  };
+
+  const render = () => {
+    setFrameBackground(stage, {
+      src: sheetSrc,
+      frame: selectedTile,
+      frameGrid,
+      displaySize: { width: 224, height: 224 }
+    });
+    const tilePrompt = tilesetTilePrompt(tileset, selectedTile);
+    prompt.textContent = tilePrompt
+      ? `Tile ${selectedTile + 1}: ${tilePrompt}`
+      : `Tile ${selectedTile + 1}`;
+    tileButtons.forEach((button, tile) => {
+      button.classList.toggle("is-selected", tile === selectedTile);
+      button.setAttribute("aria-pressed", String(tile === selectedTile));
+      setFrameBackground(button, {
+        src: sheetSrc,
+        frame: tile,
+        frameGrid,
+        displaySize: { width: 48, height: 48 }
+      });
+    });
+    syncButtons();
+  };
+
+  const replaceTile = async (tileSrc: string) => {
+    sheetSrc = await replaceSpriteSheetFrames({
+      src: sheetSrc,
+      uploadSrc: tileSrc,
+      frameGrid,
+      frames: [selectedTile]
+    });
+    editedSheetSrc = sheetSrc;
+    render();
+  };
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    window.removeEventListener("keydown", keyHandler, true);
+    dialog.remove();
+  };
+
+  const keyHandler = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || busy) return;
+    event.preventDefault();
+    close();
+  };
+
+  for (let tile = 0; tile < tileCount; tile += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ai-game-assets-designer__frame-thumb";
+    button.setAttribute("aria-label", `Tile ${tile + 1}`);
+    button.addEventListener("click", () => {
+      selectedTile = tile;
+      setFeedback("");
+      render();
+    });
+    tileButtons.push(button);
+    strip.append(button);
+  }
+
+  touchUpButton.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true;
+    syncButtons();
+    setFeedback(`Opening touch-up for tile ${selectedTile + 1}...`, "busy");
+    try {
+      const tile = selectedTile;
+      const tileSrc = await extractTilesetTileDataUrl(sheetSrc, tileset, tile);
+      await openFrameTouchUpEditor({
+        root: options.root,
+        asset: options.asset,
+        title: `${readableAssetName(options.assetId)} tile ${tile + 1}`,
+        frameSrc: tileSrc,
+        displaySize: touchUpDisplaySize,
+        onSave: async (editedTileSrc) => {
+          selectedTile = tile;
+          await replaceTile(editedTileSrc);
+          setFeedback(`Touched up tile ${tile + 1}.`, "success");
+        }
+      });
+      setFeedback("");
+    } catch (error) {
+      setFeedback(`Could not open tile touch-up: ${tilesetErrorMessage(error)}`, "error");
+    } finally {
+      busy = false;
+      syncButtons();
+    }
+  });
+
+  regenerateButton.addEventListener("click", async () => {
+    if (busy || regenerateButton.disabled) return;
+    const tile = selectedTile;
+    busy = true;
+    syncButtons();
+    setFeedback(`Generating 3 new options for tile ${tile + 1}...`, "busy");
+    try {
+      const currentTileSrc = await extractTilesetTileDataUrl(sheetSrc, tileset, tile);
+      const generated = [...await options.regenerateTile(
+        tile,
+        tilesetTileGenerationOverride(tileset, tile),
+        currentTileSrc
+      )].sort((left, right) => left.index - right.index);
+      if (generated.length !== 3) {
+        throw new Error(`Expected 3 regenerated tile options, received ${generated.length}.`);
+      }
+      assertUniqueCandidateIndexes(generated);
+      const selected = await openTilesetTileChoiceDialog({
+        root: options.root,
+        assetId: options.assetId,
+        tile,
+        prompt: tilesetTilePrompt(tileset, tile)!,
+        candidates: generated
+      });
+      if (selected) {
+        selectedTile = tile;
+        await replaceTile(selected.dataUrl);
+        setFeedback(`Replaced tile ${tile + 1}.`, "success");
+      } else {
+        setFeedback(`Kept tile ${tile + 1}.`, "idle");
+      }
+    } catch (error) {
+      setFeedback(`Could not regenerate tile: ${tilesetErrorMessage(error)}`, "error");
+    } finally {
+      busy = false;
+      syncButtons();
+    }
+  });
+
+  copyButton.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true;
+    syncButtons();
+    try {
+      copiedTileSrc = await extractTilesetTileDataUrl(sheetSrc, tileset, selectedTile);
+      setFeedback(`Copied tile ${selectedTile + 1}. Select another tile and paste.`, "success");
+    } catch (error) {
+      setFeedback(`Could not copy tile: ${tilesetErrorMessage(error)}`, "error");
+    } finally {
+      busy = false;
+      syncButtons();
+    }
+  });
+
+  pasteButton.addEventListener("click", async () => {
+    if (busy || !copiedTileSrc) return;
+    busy = true;
+    syncButtons();
+    try {
+      await replaceTile(copiedTileSrc);
+      setFeedback(`Pasted into tile ${selectedTile + 1}.`, "success");
+    } catch (error) {
+      setFeedback(`Could not paste tile: ${tilesetErrorMessage(error)}`, "error");
+    } finally {
+      busy = false;
+      syncButtons();
+    }
+  });
+
+  cancelButton.addEventListener("click", close);
+  confirmButton.addEventListener("click", async () => {
+    if (busy) return;
+    if (!editedSheetSrc) {
+      close();
+      return;
+    }
+    busy = true;
+    syncButtons();
+    setFeedback("Applying tileset edits...", "busy");
+    try {
+      await options.onConfirm({ dataUrl: editedSheetSrc });
+      close();
+    } catch (error) {
+      setFeedback(`Could not apply tileset edits: ${tilesetErrorMessage(error)}`, "error");
+      busy = false;
+      syncButtons();
+    }
+  });
+
+  window.addEventListener("keydown", keyHandler, true);
+  render();
+  tileButtons[0]?.focus();
+}
+
+function openTilesetTileChoiceDialog(options: {
+  root: HTMLElement;
+  assetId: string;
+  tile: number;
+  prompt: string;
+  candidates: GeneratedDebugOption[];
+}): Promise<GeneratedDebugOption | undefined> {
+  for (const [index, candidate] of options.candidates.entries()) {
+    if (!candidate.tileset || tilesetTileCount(candidate.tileset) < 1) {
+      throw new Error(`Regenerated option ${index + 1} did not return tile geometry.`);
+    }
+  }
+
+  return new Promise((resolve) => {
+    const dialog = document.createElement("div");
+    dialog.className = "ai-game-assets-designer__modal ai-game-assets-designer__tileset-regenerate";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute(
+      "aria-label",
+      `Choose regenerated ${readableAssetName(options.assetId)} tile ${options.tile + 1}`
+    );
+    const card = document.createElement("div");
+    card.className = "ai-game-assets-designer__modal-card ai-game-assets-designer__tileset-regenerate-card";
+    const title = document.createElement("div");
+    title.className = "ai-game-assets-designer__modal-title";
+    title.textContent = `Choose tile ${options.tile + 1}`;
+    const prompt = document.createElement("div");
+    prompt.className = "ai-game-assets-designer__tileset-tile-prompt";
+    prompt.textContent = options.prompt;
+    const choices = document.createElement("div");
+    choices.className = "ai-game-assets-designer__tileset-choices";
+    const cancelButton = modalButton("Cancel");
+    const confirmButton = modalButton("Use selected");
+    confirmButton.disabled = true;
+    const actions = document.createElement("div");
+    actions.className = "ai-game-assets-designer__modal-actions";
+    actions.append(cancelButton, confirmButton);
+    card.append(title, prompt, choices, actions);
+    dialog.append(card);
+    options.root.append(dialog);
+
+    let selected: GeneratedDebugOption | undefined;
+    let closed = false;
+    const choiceButtons: HTMLButtonElement[] = [];
+
+    const close = (result: GeneratedDebugOption | undefined) => {
+      if (closed) return;
+      closed = true;
+      window.removeEventListener("keydown", keyHandler, true);
+      dialog.remove();
+      resolve(result);
+    };
+    const keyHandler = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      close(undefined);
+    };
+
+    options.candidates.forEach((candidate, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ai-game-assets-designer__tileset-choice";
+      button.setAttribute("aria-label", `Option ${index + 1}`);
+      button.setAttribute("aria-pressed", "false");
+      const stage = document.createElement("div");
+      stage.className = "ai-game-assets-designer__tileset-choice-preview";
+      setFrameBackground(stage, {
+        src: candidate.dataUrl,
+        frame: 0,
+        frameGrid: tilesetFrameGrid(candidate.tileset!),
+        displaySize: { width: 112, height: 112 }
+      });
+      const label = document.createElement("span");
+      label.textContent = `Option ${index + 1}`;
+      button.append(stage, label);
+      button.addEventListener("click", () => {
+        selected = candidate;
+        confirmButton.disabled = false;
+        choiceButtons.forEach((choice) => {
+          const isSelected = choice === button;
+          choice.classList.toggle("is-selected", isSelected);
+          choice.setAttribute("aria-pressed", String(isSelected));
+        });
+      });
+      button.addEventListener("dblclick", () => close(candidate));
+      choiceButtons.push(button);
+      choices.append(button);
+    });
+
+    cancelButton.addEventListener("click", () => close(undefined));
+    confirmButton.addEventListener("click", () => close(selected));
+    window.addEventListener("keydown", keyHandler, true);
+    choiceButtons[0]?.focus();
+  });
+}
+
+function modalButton(label: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  return button;
+}
+
+function tilesetErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export async function openTilesetBaseMixerDialog(options: {

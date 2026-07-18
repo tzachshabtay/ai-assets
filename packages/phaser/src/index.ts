@@ -90,6 +90,7 @@ export type {
   DesignerTilesetMetadata,
   TilesetBaseMixPlan,
   TilesetBaseMixResult,
+  TilesetEditorResult,
   TilesetMixSelection,
   TilesetAnimationMixResult
 } from "./tileset-dialog.js";
@@ -99,6 +100,7 @@ export {
   isDesignerTilesetAsset,
   openTilesetBaseMixerDialog,
   openTilesetAnimationMixerDialog,
+  openTilesetEditor,
   planTilesetBaseMix,
   tilesetAnimationForKey,
   tilesetMetadataForAsset

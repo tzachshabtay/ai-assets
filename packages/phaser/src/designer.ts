@@ -36,9 +36,11 @@ import {
   isDesignerTilesetAsset,
   openTilesetBaseMixerDialog,
   openTilesetAnimationMixerDialog,
+  openTilesetEditor,
   tilesetAnimationForKey,
   resolveTilesetBaseMixCurrent,
-  tilesetMetadataForAsset
+  tilesetMetadataForAsset,
+  type TilesetTileGenerationOverride
 } from "./tileset-dialog.js";
 import { aiTilesetAnimationTextureKey } from "./keys.js";
 
@@ -177,6 +179,36 @@ export function installAiAssetDesigner(
   let promotionId = 0;
   let activePromotionId: number | undefined;
   let mixingTileset = false;
+
+  const regenerateTilesetTile = async (
+    assetId: string,
+    tile: number,
+    tileset: TilesetTileGenerationOverride,
+    currentTileSrc: string
+  ): Promise<GeneratedDebugOption[]> => {
+    const guide = await styleGuideRequest(styleGuideDraft);
+    return client.generate({
+      assetId,
+      count: 3,
+      format: effectiveGenerationFormat(
+        manifest,
+        formatDrafts,
+        selectedAssetId,
+        assetId
+      ),
+      tileset,
+      styleGuide: {
+        ...guide,
+        images: [
+          ...guide.images,
+          {
+            name: `${assetId}-current-tile-${tile + 1}-style.png`,
+            dataUrl: currentTileSrc
+          }
+        ]
+      }
+    });
+  };
 
   if (!selectedAssetId) {
     throw new Error("AI asset designer requires at least one asset.");
@@ -426,6 +458,7 @@ export function installAiAssetDesigner(
     elements.currentAudio.hidden = !isAudio;
     elements.currentImage.hidden = isAudio;
     elements.currentAnimationButton.textContent = "Edit...";
+    elements.currentTouchUpButton.textContent = isBaseTileset ? "Edit tileset..." : "Touch up...";
     elements.currentRevertButton.hidden = true;
     elements.currentPreview.classList.add("is-selected");
     elements.currentAnimationButton.hidden = !activeVersion?.file || (!asset.frameGrid && !isAudio);
@@ -471,6 +504,9 @@ export function installAiAssetDesigner(
     elements.currentAnimation.hidden = true;
     elements.currentAnimationButton.textContent = "Edit...";
     elements.currentAnimationButton.hidden = !optionAsset.frameGrid && !isAudio;
+    elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(optionAsset)
+      ? "Edit tileset..."
+      : "Touch up...";
     elements.currentTouchUpButton.hidden =
       isAudio ||
       Boolean(optionAsset.frameGrid) ||
@@ -567,6 +603,9 @@ export function installAiAssetDesigner(
     elements.currentAnimation.hidden = true;
     elements.currentAnimationButton.textContent = "Edit...";
     elements.currentAnimationButton.hidden = !asset.frameGrid && !isAudio;
+    elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(asset)
+      ? "Edit tileset..."
+      : "Touch up...";
     elements.currentTouchUpButton.hidden =
       isAudio ||
       Boolean(asset.frameGrid) ||
@@ -1111,30 +1150,8 @@ export function installAiAssetDesigner(
         assetId,
         baseSheetSrc: current.sheetSrc,
         candidates,
-        async regenerateTile(tile, tileset, currentTileSrc) {
-          const guide = await styleGuideRequest(styleGuideDraft);
-          return client.generate({
-            assetId,
-            count: 3,
-            format: effectiveGenerationFormat(
-              manifest,
-              formatDrafts,
-              selectedAssetId,
-              assetId
-            ),
-            tileset,
-            styleGuide: {
-              ...guide,
-              images: [
-                ...guide.images,
-                {
-                  name: `${assetId}-current-tile-${tile + 1}-style.png`,
-                  dataUrl: currentTileSrc
-                }
-              ]
-            }
-          });
-        }
+        regenerateTile: (tile, tileset, currentTileSrc) =>
+          regenerateTilesetTile(assetId, tile, tileset, currentTileSrc)
       });
       if (
         panelRevision !== mixPanelRevision ||
@@ -1833,11 +1850,14 @@ export function installAiAssetDesigner(
     const activeVersion = asset.versions[asset.activeVersion];
 
     const sourceOption = editedCurrentOption;
+    const editorAsset = sourceOption
+      ? assetWithGeneratedGeometry(asset, sourceOption)
+      : asset;
 
     if (
       (!sourceOption && !activeVersion?.file) ||
       isAudioAsset(asset) ||
-      asset.frameGrid ||
+      editorAsset.frameGrid ||
       sourceOption?.mimeType === "image/svg+xml" ||
       (!sourceOption && (
         normalizeAssetFormat(asset.settings?.format) === "svg" ||
@@ -1847,9 +1867,74 @@ export function installAiAssetDesigner(
       return;
     }
 
+    if (isDesignerTilesetAsset(editorAsset)) {
+      const assetId = selectedTargetAssetId;
+      const editorTileset = tilesetMetadataForAsset(editorAsset)!;
+      const draftTiles = tilesetPromptDefinitions(
+        assetId,
+        editorTileset.tileCount ?? editorTileset.columns * editorTileset.rows
+      );
+      const tilesetEditorAsset = draftTiles ? {
+        ...editorAsset,
+        tileset: {
+          ...editorTileset,
+          tiles: draftTiles
+        }
+      } : editorAsset;
+      void openTilesetEditor({
+        root: elements.root,
+        asset: tilesetEditorAsset,
+        assetId,
+        src: sourceOption?.dataUrl ?? resolveAssetUrl(activeVersion!.file),
+        regenerateTile: (tile, tileset, currentTileSrc) =>
+          regenerateTilesetTile(assetId, tile, tileset, currentTileSrc),
+        onConfirm: async ({ dataUrl }) => {
+          const previousOption = editedCurrentOption;
+          const optionAsset = {
+            ...tilesetEditorAsset,
+            dimensions: previousOption?.dimensions ?? tilesetEditorAsset.dimensions,
+            tileset: tilesetEditorAsset.tileset,
+            settings: {
+              ...(previousOption?.settings ?? activeVersion?.settings ?? tilesetEditorAsset.settings),
+              format: "png" as const
+            }
+          };
+
+          editedCurrentOption = {
+            ...previousOption,
+            index: previousOption?.index ?? -1,
+            dataUrl,
+            mimeType: "image/png",
+            prompt: previousOption?.prompt ?? activeVersion?.prompt ?? asset.prompt,
+            model: previousOption?.model ?? activeVersion?.model,
+            revisedPrompt: previousOption?.revisedPrompt ?? activeVersion?.revisedPrompt,
+            dimensions: optionAsset.dimensions,
+            tileset: optionAsset.tileset,
+            settings: optionAsset.settings
+          };
+          selectedOption = editedCurrentOption;
+          elements.currentImage.src = dataUrl;
+          elements.currentPreview.classList.add("is-selected");
+          elements.currentRevertButton.hidden = false;
+          elements.promoteButton.disabled = activePromotionId !== undefined;
+          previewImageSource({
+            scene: options.scene,
+            manifest,
+            assetId,
+            src: dataUrl,
+            textureKey: `ai-current-tileset-edit:${assetId}:${Date.now()}`,
+            assetOverride: optionAsset,
+            onPreview: options.onPreview
+          });
+          setStatus(elements, "Tileset edits applied. Promote to save them to code.", "success");
+        }
+      });
+      return;
+    }
+
     void openFrameTouchUpEditor({
       root: elements.root,
-      asset,
+      asset: editorAsset,
       title: readableAssetName(selectedTargetAssetId),
       frameSrc: sourceOption?.dataUrl ?? resolveAssetUrl(activeVersion!.file),
       displaySize: resolvePreviewDisplaySize(options, selectedTargetAssetId, asset),
