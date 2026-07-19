@@ -167,6 +167,43 @@ test("structured tileset prompts bake geometry and preserve exact tile order", (
   assert.ok(explicitPrompt.indexOf("Tile 1 —") < explicitPrompt.indexOf("Tile 2 —"));
 });
 
+test("base tileset variations never receive animation variation instructions", () => {
+  const asset = tilesetAsset();
+  asset.tileset.tiles = [
+    { prompt: "Seamless mossy grass." },
+    { prompt: "A centered brass key on transparent padding." }
+  ];
+  const context = {
+    prompt: asset.prompt,
+    model: "gpt-image-2",
+    outputFormat: "png",
+    requestedBackground: "transparent",
+    chromaKey: { red: 255, green: 0, blue: 255 },
+    variation: "candidate-two",
+    variationIndex: 1,
+    variationCount: 3
+  };
+
+  const basePrompt = gameAssetPrompt({ asset }, context);
+  assert.match(basePrompt, /complete base tileset candidate/i);
+  assert.match(basePrompt, /Base tileset variation direction/i);
+  assert.match(basePrompt, /Never animate a tile/i);
+  assert.doesNotMatch(basePrompt, /coherent motion treatment/i);
+  assert.doesNotMatch(basePrompt, /pose progression|different timing|secondary motion/i);
+
+  const animationPrompt = gameAssetPrompt({
+    asset,
+    purpose: "tileset-animation",
+    references: [{
+      image: pngImage(32, 16, 12),
+      mimeType: "image/png",
+      fileName: "base.png"
+    }]
+  }, context);
+  assert.match(animationPrompt, /coherent motion treatment/i);
+  assert.doesNotMatch(animationPrompt, /Base tileset variation direction/i);
+});
+
 test("image generation chooses the closest supported aspect ratio by default", () => {
   assert.equal(closestImageGenerationSize({ width: 128, height: 64 }), "1536x1024");
   assert.equal(closestImageGenerationSize({ width: 64, height: 128 }), "1024x1536");
@@ -287,17 +324,20 @@ test("tileset base generation and promotion honor tile and grid geometry overrid
   }
 });
 
-test("tileset animation generation uses three sequential candidate branches", async () => {
+test("tileset animation generation isolates tile ownership while preserving per-tile history", async () => {
   const calls = [];
-  let generatedIndex = 0;
   const provider = {
     async generate(request) {
       calls.push(request);
-      generatedIndex += 1;
+      const tile = request.asset.tileset.tiles[0].prompt.includes("grass") ? 0 : 1;
+      const frame = Number(/animation frame (\d+) of/.exec(request.prompt)?.[1]) - 1;
+      const branch = Number(/candidate branch (\d+) of/.exec(request.prompt)?.[1]) - 1;
       return [{
-        image: Uint8Array.of(generatedIndex),
+        image: pngImage(16, 16, 40 + tile * 80 + frame * 20 + branch * 3),
         mimeType: "image/png",
-        prompt: request.prompt
+        prompt: request.prompt,
+        dimensions: request.asset.dimensions,
+        tileset: request.asset.tileset
       }];
     }
   };
@@ -311,12 +351,20 @@ test("tileset animation generation uses three sequential candidate branches", as
     { prompt: "Tile zero stays perfectly still." },
     { prompt: "Tile one ripples clockwise." }
   ];
+  const base = new PNG({ width: 32, height: 16 });
+  for (let y = 0; y < base.height; y += 1) {
+    for (let x = 0; x < base.width; x += 1) {
+      const offset = (y * base.width + x) * 4;
+      base.data[offset] = x < 16 ? 11 : 22;
+      base.data[offset + 3] = 255;
+    }
+  }
   const options = await generateTilesetAnimationBranches(provider, {
     asset,
     animationKey: "water",
     count: 99,
     baseReference: {
-      image: Uint8Array.of(0),
+      image: PNG.sync.write(base),
       mimeType: "image/png",
       fileName: "base-forest.png"
     }
@@ -325,22 +373,41 @@ test("tileset animation generation uses three sequential candidate branches", as
   assert.equal(options.length, 3);
   assert.deepEqual(options.map((option) => option.index), [0, 1, 2]);
   assert.ok(options.every((option) => option.frames.length === 2));
-  assert.equal(calls.filter((call) => call.references.length === 1).length, 3);
-  assert.equal(calls.filter((call) => call.references.length === 2).length, 3);
+  assert.equal(calls.length, 12);
+  assert.equal(calls.filter((call) => call.references.length === 1).length, 6);
+  assert.equal(calls.filter((call) => call.references.length === 2).length, 6);
   assert.ok(calls.every((call) => call.purpose === "tileset-animation"));
-  assert.ok(calls.every((call) => call.references[0].fileName === "base-forest.png"));
+  assert.ok(calls.every((call) => call.asset.tileset.columns === 1));
+  assert.ok(calls.every((call) => call.asset.tileset.rows === 1));
+  assert.ok(calls.every((call) => call.asset.tileset.tileCount === 1));
+  assert.ok(calls.every((call) => call.asset.dimensions.width === 16));
+  assert.ok(calls.every((call) => call.asset.dimensions.height === 16));
+  assert.ok(calls.every((call) => call.settings.size === undefined));
+  assert.ok(calls.every((call) => /base-forest\.tile-[12]\.png/.test(
+    call.references[0].fileName
+  )));
+  assert.ok(calls.every((call) => {
+    const tile = call.asset.tileset.tiles[0].prompt.includes("grass") ? 1 : 2;
+    return call.references.every((reference, index) => (
+      index === 0 || reference.fileName.includes(`tile-${tile}-frame-`)
+    ));
+  }));
+  assert.ok(calls.every((call) => /return exactly this one complete tile image/i.test(
+    call.prompt
+  )));
+  assert.ok(calls.every((call) => !/never an individual tile/i.test(call.prompt)));
   assert.match(
     calls.find((call) => call.references.length === 2).prompt,
     /Reference 1 is the immutable spatial source of truth/
   );
-  assert.match(calls[0].prompt, /Full-sheet tileset geometry: output exactly one 32x16 sheet/);
-  assert.match(calls[0].prompt, /Exact usable tile rectangles: Tile 1 \[x=0-15, y=0-15\]; Tile 2 \[x=16-31, y=0-15\]/);
-  assert.match(calls[0].prompt, /Tile 1 \[x=0-15, y=0-15\]: Tile zero stays perfectly still\./);
-  assert.match(calls[0].prompt, /Tile 2 \[x=16-31, y=0-15\]: Tile one ripples clockwise\./);
-  assert.ok(calls[0].prompt.indexOf("Tile 1 [") < calls[0].prompt.indexOf("Tile 2 ["));
-  assert.doesNotMatch(calls[0].prompt, /Loop the water\./);
-  assert.doesNotMatch(calls[0].prompt, /Draw exactly these/);
-  assert.doesNotMatch(calls[0].prompt, /Seamless mossy grass/);
+  assert.match(calls[0].prompt, /Full-sheet tileset geometry: output exactly one 16x16 sheet/);
+  assert.match(calls[0].prompt, /Exact usable tile rectangles: Tile 1 \[x=0-15, y=0-15\]/);
+  assert.doesNotMatch(calls[0].prompt, /Tile 2 \[/);
+  assert.ok(calls.every((call) => {
+    const tile = call.asset.tileset.tiles[0].prompt.includes("grass") ? 0 : 1;
+    const reference = PNG.sync.read(call.references[0].image);
+    return reference.data[0] === (tile === 0 ? 11 : 22);
+  }));
 
   const finalProviderPrompt = gameAssetPrompt(calls[0], {
     prompt: calls[0].prompt,
@@ -350,12 +417,69 @@ test("tileset animation generation uses three sequential candidate branches", as
     chromaKey: { red: 255, green: 0, blue: 255 }
   });
   assert.match(finalProviderPrompt, /Perform a minimal in-place edit/);
-  assert.match(finalProviderPrompt, /Reference 1 always controls sheet geometry/);
+  assert.match(finalProviderPrompt, /Reference 1 always controls this tile's geometry/);
+  assert.doesNotMatch(finalProviderPrompt, /do not redraw the sheet|shifted grid/);
   assert.doesNotMatch(finalProviderPrompt, /Draw exactly these/);
-  assert.doesNotMatch(finalProviderPrompt, /Seamless mossy grass/);
+
+  for (const [branch, option] of options.entries()) {
+    for (let frame = 0; frame < option.frames.length; frame += 1) {
+      const sheet = PNG.sync.read(option.frames[frame].image);
+      assert.deepEqual({ width: sheet.width, height: sheet.height }, { width: 32, height: 16 });
+      assert.equal(sheet.data[0], 40 + frame * 20 + branch * 3);
+      assert.equal(sheet.data[16 * 4], 120 + frame * 20 + branch * 3);
+      assert.deepEqual(option.frames[frame].dimensions, asset.dimensions);
+      assert.deepEqual(option.frames[frame].tileset, asset.tileset);
+    }
+  }
 
   const serialized = serializeGeneratedTilesetAnimationOption(options[0]);
   assert.deepEqual(serialized.frames.map((frame) => frame.index), [0, 1]);
+});
+
+test("tileset animation isolation preserves trailing grid cells when only one tile is usable", async () => {
+  const asset = tilesetAsset();
+  asset.tileset.tileCount = 1;
+  asset.tileset.tiles = [{ prompt: "Seamless mossy grass." }];
+  asset.tileset.animations[0] = {
+    ...asset.tileset.animations[0],
+    frameCount: 1,
+    tiles: [{ prompt: "Grass moves gently in the wind." }]
+  };
+  const base = new PNG({ width: 32, height: 16 });
+  for (let offset = 0; offset < base.data.length; offset += 4) {
+    const x = (offset / 4) % base.width;
+    base.data[offset] = x < 16 ? 11 : 99;
+    base.data[offset + 3] = 255;
+  }
+  const calls = [];
+  const provider = {
+    async generate(request) {
+      calls.push(request);
+      return [{
+        image: pngImage(16, 16, 55),
+        mimeType: "image/png",
+        prompt: request.prompt
+      }];
+    }
+  };
+
+  const [option] = await generateTilesetAnimationBranches(provider, {
+    asset,
+    animationKey: "water",
+    count: 1,
+    baseReference: {
+      image: PNG.sync.write(base),
+      mimeType: "image/png",
+      fileName: "base-one-usable.png"
+    }
+  });
+  const frame = PNG.sync.read(option.frames[0].image);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].asset.tileset.columns, 1);
+  assert.equal(calls[0].asset.tileset.tileCount, 1);
+  assert.equal(frame.data[0], 55);
+  assert.equal(frame.data[16 * 4], 99);
 });
 
 test("one-cell generation overrides reconcile inherited tileset animation prompts", async () => {

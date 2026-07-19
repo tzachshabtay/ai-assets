@@ -22,6 +22,7 @@ import {
   type GeneratedAssetOptionCallback,
   type GeneratedTilesetAnimationOption
 } from "./provider.js";
+import { generateAssetWithIsolatedTilesetCells } from "./tileset-generation.js";
 import type { AiAudioProvider } from "./audio-provider.js";
 import {
   type AssetStoreOptions,
@@ -346,7 +347,7 @@ async function routeRequest(
         continue;
       }
 
-      const optionsForAsset = await options.provider.generate({
+      const optionsForAsset = await generateAssetWithIsolatedTilesetCells(options.provider, {
         asset,
         count: 1,
         references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds),
@@ -579,7 +580,7 @@ async function generateImage(
   const onGeneratedOption = onOption
     ? (option: GeneratedAssetOption, index: number) => onOption(withAssetGeometry(option), index)
     : undefined;
-  const generated = await options.provider.generate({
+  const generated = await generateAssetWithIsolatedTilesetCells(options.provider, {
     asset,
     prompt: body.prompt,
     count: body.count,
