@@ -9,7 +9,8 @@ export type {
   AiAssetManifest,
   AiAssetStyleGuide,
   AiAssetTarget,
-  AiAssetVersion
+  AiAssetVersion,
+  AiTilesetAnimation
 } from "@ai-game-assets/core";
 
 export type { GeneratedAssetOption } from "./provider.js";

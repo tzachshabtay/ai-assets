@@ -196,10 +196,12 @@ export function tilesetAnimationFramePrompt(
   const priorReferenceDescription = context.priorFrameCount
     ? `References 2 through ${context.priorFrameCount + 1} are the already-generated earlier frames for this same candidate branch, in chronological order.`
     : "There are no prior animation frames yet; derive this first phase directly from the base sheet.";
+  const tileInstructions = animation.tiles?.map((tile, index) => (
+    `Tile ${index + 1}: ${tile.prompt.trim()}`
+  )) ?? [];
 
   return [
-    brief,
-    "",
+    ...(animation.tiles?.length ? [] : [brief, ""]),
     `Generate animation frame ${frameNumber} of ${animation.frameCount} for tileset animation "${animation.key}".`,
     `This is candidate branch ${context.branchIndex + 1} of ${context.branchCount}; branch identity seed: ${context.branchSeed}.`,
     "Return one complete full-size tileset sheet, never an individual tile or a contact sheet of animation phases.",
@@ -207,6 +209,12 @@ export function tilesetAnimationFramePrompt(
     priorReferenceDescription,
     "Preserve every tile at exactly the same index and coordinates. Do not add, remove, reorder, resize, crop, relight, restyle, or redesign tiles.",
     "Only change pixels needed for the requested animated material or object. Every non-animated tile must remain visually identical to the base sheet.",
+    ...(tileInstructions.length
+      ? [
+          "Follow these tile instructions in exact row-major sheet order:",
+          ...tileInstructions
+        ]
+      : []),
     `Depict the ${frameNumber}/${animation.frameCount} temporal phase of a seamless loop; keep motion coherent with all prior references and make the final phase transition cleanly back to the first.`,
     ...tilesetContractPromptLines(asset)
   ].join("\n");

@@ -220,6 +220,14 @@ function assertTileset(asset: AiAssetDefinition): void {
     if (animation.prompt !== undefined) {
       assertNonEmpty(animation.prompt, `${label}.prompt`);
     }
+    if (animation.tiles !== undefined) {
+      if (!Array.isArray(animation.tiles) || animation.tiles.length !== tileCount) {
+        throw new Error(`${label}.tiles must contain exactly ${tileCount} entries.`);
+      }
+      for (const [tileIndex, tile] of animation.tiles.entries()) {
+        assertNonEmpty(tile?.prompt, `${label}.tiles.${tileIndex}.prompt`);
+      }
+    }
     assertPositiveInteger(animation.frameCount, `${label}.frameCount`);
     assertPositiveNumber(animation.frameRate, `${label}.frameRate`);
     if (animation.repeat !== undefined) {
@@ -459,9 +467,17 @@ function assertVersion(
         `${assetId}.versions.${versionName}.tilesetAnimations references undeclared animation "${animationKey}".`
       );
     }
-    if (!Array.isArray(sequence.files) || sequence.files.length !== definition.frameCount) {
+    if (!Array.isArray(sequence.files) || sequence.files.length === 0) {
       throw new Error(
-        `${assetId}.versions.${versionName}.tilesetAnimations.${animationKey}.files must contain exactly ${definition.frameCount} files.`
+        `${assetId}.versions.${versionName}.tilesetAnimations.${animationKey}.files must contain at least one file.`
+      );
+    }
+    if (
+      versionName === asset.activeVersion &&
+      sequence.files.length !== definition.frameCount
+    ) {
+      throw new Error(
+        `${assetId}.versions.${versionName}.tilesetAnimations.${animationKey}.files must contain exactly ${definition.frameCount} files for the active version.`
       );
     }
     for (const [fileIndex, file] of sequence.files.entries()) {

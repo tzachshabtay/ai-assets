@@ -7,6 +7,7 @@ import {
   type AiAssetStyleGuide,
   type AiAssetTarget,
   type AiAssetVersion,
+  type AiTilesetAnimation,
   type GeneratedAssetOption
 } from "./internal.js";
 import { randomUUID } from "node:crypto";
@@ -44,6 +45,7 @@ export type SaveTilesetAnimationInput = {
   assetId: string;
   animationKey: string;
   frames: TilesetAnimationFrameInput[];
+  definition?: AiTilesetAnimation;
   versionName?: string;
   notes?: string;
 };
@@ -205,14 +207,27 @@ export async function saveTilesetAnimation(
     throw new Error(`AI asset "${input.assetId}" is not a tileset.`);
   }
 
-  const animation = asset.tileset.animations?.find(
+  const declaredAnimation = asset.tileset.animations?.find(
     (candidate) => candidate.key === input.animationKey
   );
-  if (!animation) {
+  if (!declaredAnimation) {
     throw new Error(
       `Unknown tileset animation "${input.animationKey}" for AI asset "${input.assetId}".`
     );
   }
+  const animation = input.definition ?? declaredAnimation;
+  if (animation.key !== input.animationKey) {
+    throw new Error("Tileset animation definition key must match animationKey.");
+  }
+  const assetDefinition = input.definition ? {
+    ...asset,
+    tileset: {
+      ...asset.tileset,
+      animations: (asset.tileset.animations ?? []).map((candidate) => (
+        candidate.key === input.animationKey ? animation : candidate
+      ))
+    }
+  } : asset;
   if (input.frames.length !== animation.frameCount) {
     throw new Error(
       `Tileset animation "${input.animationKey}" requires exactly ${animation.frameCount} frames.`
@@ -284,7 +299,7 @@ export async function saveTilesetAnimation(
   );
 
   const sequenceFiles: Record<string, { files: string[] }> = {};
-  for (const definition of asset.tileset.animations ?? []) {
+  for (const definition of assetDefinition.tileset?.animations ?? []) {
     if (definition.key === input.animationKey) {
       const publicFiles: string[] = [];
       for (const [index, frame] of input.frames.entries()) {
@@ -327,7 +342,7 @@ export async function saveTilesetAnimation(
     if (!baseFile) {
       throw new Error(`AI tileset "${input.assetId}" did not produce a base file.`);
     }
-    const version = createAiAssetVersion(asset, {
+    const version = createAiAssetVersion(assetDefinition, {
       name: versionName,
       file: baseFile.publicFile,
       prompt: sourceVersion.prompt,
@@ -338,7 +353,7 @@ export async function saveTilesetAnimation(
       notes: input.notes,
       tilesetAnimations: sequenceFiles
     });
-    const updatedAsset = addVersion(asset, versionName, version, { activate: true });
+    const updatedAsset = addVersion(assetDefinition, versionName, version, { activate: true });
     manifest.assets[input.assetId] = updatedAsset;
     assertManifest(manifest);
     await writeManifest(options.manifestPath, manifest);

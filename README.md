@@ -120,7 +120,16 @@ A tileset is a first-class asset because its grid, generation rules, version bun
     ],
     animations: [{
       key: "water",
-      prompt: "A subtle seamless water shimmer; preserve every other tile exactly.",
+      tiles: [
+        { prompt: "Keep the grass tile unchanged in every frame." },
+        { prompt: "Keep the dirt tile unchanged in every frame." },
+        { prompt: "Animate a subtle seamless ripple shimmer." },
+        { prompt: "Keep the reeds tile unchanged in every frame." },
+        { prompt: "Keep the tree tile unchanged in every frame." },
+        { prompt: "Keep the wildflowers tile unchanged in every frame." },
+        { prompt: "Keep the boulder tile unchanged in every frame." },
+        { prompt: "Keep the bridge tile unchanged in every frame." }
+      ],
       frameCount: 2,
       frameRate: 3,
       repeat: -1
@@ -146,7 +155,7 @@ A tileset is a first-class asset because its grid, generation rules, version bun
 }
 ```
 
-The grid dimensions must exactly cover `dimensions`, including optional `margin` and `spacing`. When `tiles` is present, it must contain one non-empty prompt per usable tile in row-major order. The image provider programmatically adds the exact tile size, sheet dimensions, grid, and ordering contract, then appends these tile prompts to form the model request; authors do not repeat that boilerplate. Animation files must match the declared `frameCount` and contain complete sheets at the same dimensions. During generation, each of the three candidate branches is produced sequentially: the base sheet and all earlier frames in that branch are supplied as references for the next frame. The designer then lets you choose one complete candidate sequence independently for every tile and saves the composed sheets as one atomic version bundle.
+The grid dimensions must exactly cover `dimensions`, including optional `margin` and `spacing`. Base `tiles` and animation `tiles` each contain one non-empty prompt per usable tile in row-major order. The image provider programmatically adds the exact tile size, sheet dimensions, grid, and ordering contract, then appends the applicable tile prompts to form the model request; authors do not repeat that boilerplate. The animation's editable `frameCount` determines how many complete, aligned sheets are generated. During generation, each of the three candidate branches is produced sequentially: the base sheet and all earlier frames in that branch are supplied as references for the next frame. The three sequences remain available for preview until the user explicitly opens Mix tilesets, where each tile shows its animation prompt and can regenerate three tile-specific sequences. Selecting or mixing previews the result without promoting it.
 
 Transparent spritesheet generations are aligned to their declared frame grid by default. The provider
 normalizes the generated row and column placement without scaling individual frames. Set
@@ -280,7 +289,8 @@ The designer supports:
 - animation editor with per-frame delay, offset, scale, rotation, and tags
 - base tileset controls for tile width, tile height, usable tile count, and one ordered prompt per tile, with exact-grid upload validation
 - an explicit Mix tileset action after three base candidates finish, with a current/three-candidate choice and the intended prompt shown for every tile before promotion
-- tileset animation mixer with synchronized base/three-candidate previews and a separate sequence choice for every tile
+- tileset animation controls for frame count and one ordered animation prompt per tile, with retained preview options and an explicit Mix tilesets action
+- tileset animation mixer with synchronized current/three-candidate previews, the intended prompt, per-tile regeneration, and a separate sequence choice for every tile
 - frame touch-up editor for raster images with session-persistent tool settings, keyboard undo/redo, and guarded pointer drawing
 - audio editor with waveform preview, trim markers, volume, loop, and playback settings
 

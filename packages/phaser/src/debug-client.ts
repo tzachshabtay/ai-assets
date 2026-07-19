@@ -3,6 +3,8 @@ import type {
   AiAssetGenerationSettings,
   AiAssetManifest,
   AiAssetTileset,
+  AiTilesetTile,
+  AiTilesetAnimation,
   AiAssetVersion,
   AiAudioPlaybackSettings,
   AiAudioGenerationSettings,
@@ -87,7 +89,14 @@ export type GeneratedDebugOption = {
 export type GenerateTilesetAnimationRequest = {
   assetId: string;
   animationKey: string;
+  /** Backward-compatible animation-wide prompt. Prefer `tiles`. */
   prompt?: string;
+  frameCount?: number;
+  tiles?: AiTilesetTile[];
+  tileset?: Pick<
+    AiAssetTileset,
+    "tileWidth" | "tileHeight" | "tileCount" | "tiles"
+  > & Partial<Pick<AiAssetTileset, "columns" | "rows">>;
   count?: number;
   baseDataUrl?: string;
   styleGuide?: DebugStyleGuideDraft;
@@ -103,6 +112,7 @@ export type SaveTilesetAnimationRequest = {
   assetId: string;
   animationKey: string;
   frames: string[];
+  definition?: AiTilesetAnimation;
   versionName?: string;
   notes?: string;
 };

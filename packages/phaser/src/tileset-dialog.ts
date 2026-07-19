@@ -120,6 +120,7 @@ type TilesetMixSource = {
   tileset: DesignerTilesetMetadata;
   tileOverrides?: Map<number, {
     src: string;
+    sheetSrcs?: string[];
     tile: number;
     tileset: DesignerTilesetMetadata;
   }>;
@@ -128,6 +129,7 @@ type TilesetMixSource = {
 type TilesetTileReplacement = {
   selection: TilesetMixSelection;
   src: string;
+  sheetSrcs?: string[];
   tile: number;
   tileset: DesignerTilesetMetadata;
 };
@@ -152,6 +154,7 @@ type TilesetMixerOptions = {
   navigatorSource?: TilesetMixSelection;
   sources: TilesetMixSource[];
   selections: TilesetMixSelection[];
+  tilePrompt?(tile: number): string | undefined;
   regenerateTile?(tile: number): Promise<TilesetTileReplacement[]>;
 };
 
@@ -725,6 +728,12 @@ export async function openTilesetAnimationMixerDialog(options: {
   baseSheetSrc: string;
   baseAnimationFrameSrcs: string[];
   candidates: GeneratedTilesetAnimationCandidate[];
+  initialSelections?: TilesetMixSelection[];
+  tilePrompts?: Array<{ prompt: string }>;
+  regenerateTile?(
+    tile: number,
+    currentTileSrc: string
+  ): Promise<GeneratedTilesetAnimationCandidate[]>;
 }): Promise<TilesetAnimationMixResult | undefined> {
   const tileset = tilesetMetadataForAsset(options.asset);
   const animation = tilesetAnimationForKey(options.asset, options.animationKey);
@@ -764,8 +773,8 @@ export async function openTilesetAnimationMixerDialog(options: {
   const sources: TilesetMixSource[] = [
     {
       selection: "base",
-      label: "Keep base",
-      shortLabel: "Base",
+      label: "Keep current",
+      shortLabel: "Current",
       overviewSheetSrc: options.baseSheetSrc,
       sheetSrcs: baseFrameSrcs,
       tileset
@@ -781,7 +790,7 @@ export async function openTilesetAnimationMixerDialog(options: {
   ];
   const selections: TilesetMixSelection[] = Array.from(
     { length: tilesetTileCount(tileset) },
-    (): TilesetMixSelection => "base"
+    (_, tile): TilesetMixSelection => options.initialSelections?.[tile] ?? "base"
   );
   const mixed = await openTilesetMixerDialog({
     root: options.root,
@@ -789,7 +798,7 @@ export async function openTilesetAnimationMixerDialog(options: {
     ariaLabel: `Mix ${readableAssetName(options.assetId)} ${readableAssetName(options.animationKey)}`,
     title: `${readableAssetName(options.assetId)} · ${readableAssetName(options.animationKey)}`,
     hint: "Choose one complete animation sequence for each tile. All previews are synchronized.",
-    confirmLabel: "Save mixed animation",
+    confirmLabel: "Use mixed animation",
     busyLabel: "Compositing full animation sheets...",
     targetTileset: tileset,
     targetDimensions,
@@ -800,7 +809,43 @@ export async function openTilesetAnimationMixerDialog(options: {
     },
     navigatorSource: "base",
     sources,
-    selections
+    selections,
+    tilePrompt: (tile) => options.tilePrompts?.[tile]?.prompt ??
+      animation.tiles?.[tile]?.prompt,
+    regenerateTile: options.regenerateTile ? async (tile) => {
+      const currentTileSrc = await extractTilesetTileDataUrl(
+        baseFrameSrcs[0] ?? options.baseSheetSrc,
+        tileset,
+        tile
+      );
+      const regenerated = [...await options.regenerateTile!(tile, currentTileSrc)]
+        .sort((left, right) => left.index - right.index);
+      if (regenerated.length !== candidates.length) {
+        throw new Error(
+          `Expected ${candidates.length} regenerated animation options, received ${regenerated.length}.`
+        );
+      }
+      assertUniqueCandidateIndexes(regenerated);
+      return candidates.map((candidate, index): TilesetTileReplacement => {
+        const option = regenerated[index]!;
+        if (option.frames.length < frameCount) {
+          throw new Error(`Regenerated option ${index + 1} is missing animation frames.`);
+        }
+        return {
+          selection: candidate.index,
+          src: option.frames[0]!.dataUrl,
+          sheetSrcs: option.frames.slice(0, frameCount).map((frame) => frame.dataUrl),
+          tile: 0,
+          tileset: {
+            ...tileset,
+            columns: 1,
+            rows: 1,
+            tileCount: 1,
+            tiles: tileset.tiles?.[tile] ? [tileset.tiles[tile]!] : undefined
+          }
+        };
+      });
+    } : undefined
   });
 
   if (!mixed) return undefined;
@@ -917,7 +962,14 @@ function openTilesetMixerDialog(
       overview = false
     ): { src: string; tile: number; tileset: DesignerTilesetMetadata } => {
       const override = source.tileOverrides?.get(tile);
-      if (override) return override;
+      if (override) {
+        return {
+          ...override,
+          src: overview
+            ? override.src
+            : override.sheetSrcs?.[slot] ?? override.src
+        };
+      }
       return {
         src: overview
           ? source.overviewSheetSrc
@@ -969,7 +1021,8 @@ function openTilesetMixerDialog(
       previewTitle.textContent = options.frameCount > 1
         ? `Tile ${selectedTile + 1} · frame ${frameSlot + 1}/${options.frameCount}`
         : `Tile ${selectedTile + 1}`;
-      const prompt = tilesetTilePrompt(options.targetTileset, selectedTile);
+      const prompt = options.tilePrompt?.(selectedTile) ??
+        tilesetTilePrompt(options.targetTileset, selectedTile);
       tilePrompt.hidden = !prompt;
       tilePrompt.textContent = prompt ? `Tile prompt: ${prompt}` : "";
       for (const [selection, stage] of previewStages) {
@@ -1098,6 +1151,7 @@ function openTilesetMixerDialog(
           source.tileOverrides ??= new Map();
           source.tileOverrides.set(tile, {
             src: replacement.src,
+            sheetSrcs: replacement.sheetSrcs,
             tile: replacement.tile,
             tileset: replacement.tileset
           });
@@ -1166,7 +1220,14 @@ async function composeTilesetSheets(options: {
         label: source.label,
         src: override.src,
         tileset: override.tileset
-      }))
+      })),
+      ...[...(source.tileOverrides?.values() ?? [])].flatMap((override) => (
+        (override.sheetSrcs ?? []).map((src) => ({
+          label: source.label,
+          src,
+          tileset: override.tileset
+        }))
+      ))
     ]
   ));
   const loadedEntries = await Promise.all(
@@ -1219,7 +1280,8 @@ async function composeTilesetSheets(options: {
         throw new Error(`Tile ${tile + 1} does not have a valid selected source.`);
       }
 
-      const src = override?.src ?? source.sheetSrcs[frameSlot] ?? source.sheetSrcs[0];
+      const src = override?.sheetSrcs?.[frameSlot] ?? override?.src ??
+        source.sheetSrcs[frameSlot] ?? source.sheetSrcs[0];
       const image = src ? images.get(src) : undefined;
       if (!image) {
         throw new Error(`${source.label} is missing frame ${frameSlot + 1}.`);

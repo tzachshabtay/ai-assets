@@ -50,7 +50,9 @@ export type AiTilesetAnimationFrameTiming = {
 
 export type AiTilesetAnimation = {
   key: string;
+  /** @deprecated Prefer a prompt for each entry in `tiles`. */
   prompt?: string;
+  tiles?: AiTilesetTile[];
   frameCount: number;
   frameRate: number;
   repeat?: number;

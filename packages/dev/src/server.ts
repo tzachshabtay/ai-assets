@@ -10,6 +10,8 @@ import {
   type AiAssetManifest,
   type AiAssetStyleGuide,
   type AiAssetTileset,
+  type AiTilesetTile,
+  type AiTilesetAnimation,
   type AiAssetVersion,
   type AiVoiceGenerationSettings
 } from "@ai-game-assets/core";
@@ -67,6 +69,9 @@ export type GenerateTilesetAnimationStreamRequest = {
   assetId: string;
   animationKey: string;
   prompt?: string;
+  frameCount?: number;
+  tiles?: AiTilesetTile[];
+  tileset?: TilesetGenerationOverride;
   count?: number;
   baseDataUrl?: string;
   styleGuide?: DebugStyleGuide;
@@ -87,6 +92,7 @@ export type SaveTilesetAnimationRequest = {
   assetId: string;
   animationKey: string;
   frames: string[];
+  definition?: AiTilesetAnimation;
   versionName?: string;
   notes?: string;
 };
@@ -245,7 +251,8 @@ async function routeRequest(
   ) {
     const body = await readJson<GenerateTilesetAnimationStreamRequest>(request);
     const manifest = await readManifest(options.manifestPath);
-    const asset = getAsset(manifest, body.assetId);
+    const sourceAsset = getAsset(manifest, body.assetId);
+    const asset = applyTilesetAnimationGenerationOverrides(sourceAsset, body);
     if (!options.provider) {
       throw new Error("OPENAI_API_KEY is required to generate tileset animations.");
     }
@@ -468,6 +475,7 @@ async function routeRequest(
       frames: body.frames.map((dataUrl, index) =>
         imageFromDataUrl(dataUrl, `tileset animation frame ${index + 1}`)
       ),
+      definition: body.definition,
       versionName: body.versionName,
       notes: body.notes
     });
@@ -880,6 +888,46 @@ function applyGenerationOverrides(
         : undefined
     }))
   };
+}
+
+function applyTilesetAnimationGenerationOverrides(
+  asset: AiAssetDefinition,
+  overrides: Pick<
+    GenerateTilesetAnimationStreamRequest,
+    "animationKey" | "frameCount" | "tiles" | "tileset"
+  >
+): AiAssetDefinition {
+  const generationAsset = applyGenerationOverrides(asset, { tileset: overrides.tileset });
+  const tileset = generationAsset.tileset;
+  if (!tileset) return generationAsset;
+  const tileCount = tileset.tileCount ?? tileset.columns * tileset.rows;
+  if (overrides.tiles && overrides.tiles.length !== tileCount) {
+    throw new Error(
+      `${asset.id} tileset animation prompts must contain exactly ${tileCount} entries.`
+    );
+  }
+
+  const animations = tileset.animations?.map((animation) => {
+    if (animation.key !== overrides.animationKey) return animation;
+    const frameCount = sanitizePositiveInteger(overrides.frameCount) ?? animation.frameCount;
+    const frameDelayMs = Math.round(1000 / Math.max(1, animation.frameRate));
+    return {
+      ...animation,
+      frameCount,
+      tiles: overrides.tiles ?? animation.tiles,
+      frameTimings: Array.from({ length: frameCount }, (_, index) => (
+        animation.frameTimings?.[index] ?? { delayMs: frameDelayMs }
+      ))
+    };
+  });
+  const updated = {
+    ...generationAsset,
+    tileset: {
+      ...tileset,
+      animations
+    }
+  };
+  return updated;
 }
 
 function createFrameGrid(

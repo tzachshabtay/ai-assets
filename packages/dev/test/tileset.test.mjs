@@ -106,6 +106,19 @@ test("structured tileset validation requires one non-empty prompt per usable til
     () => assertManifest({ schemaVersion: 1, assets: { forest: blankPrompt } }),
     /forest\.tileset\.tiles\.1\.prompt must be a non-empty string/
   );
+
+  asset.tileset.animations[0].tiles = [
+    { prompt: "Keep the grass still." },
+    { prompt: "Ripple the water." }
+  ];
+  assert.doesNotThrow(() => assertManifest({ schemaVersion: 1, assets: { forest: asset } }));
+
+  const missingAnimationTile = structuredClone(asset);
+  missingAnimationTile.tileset.animations[0].tiles.pop();
+  assert.throws(
+    () => assertManifest({ schemaVersion: 1, assets: { forest: missingAnimationTile } }),
+    /forest\.tileset\.animations\.0\.tiles must contain exactly 2 entries/
+  );
 });
 
 test("structured tileset prompts bake geometry and preserve exact tile order", () => {
@@ -279,8 +292,13 @@ test("tileset animation generation uses three sequential candidate branches", as
     }
   };
 
+  const asset = tilesetAsset();
+  asset.tileset.animations[0].tiles = [
+    { prompt: "Tile zero stays perfectly still." },
+    { prompt: "Tile one ripples clockwise." }
+  ];
   const options = await generateTilesetAnimationBranches(provider, {
-    asset: tilesetAsset(),
+    asset,
     animationKey: "water",
     count: 99,
     baseReference: {
@@ -297,6 +315,10 @@ test("tileset animation generation uses three sequential candidate branches", as
   assert.equal(calls.filter((call) => call.references.length === 2).length, 3);
   assert.ok(calls.every((call) => call.references[0].fileName === "base-forest.png"));
   assert.match(calls.find((call) => call.references.length === 2).prompt, /Preserve every tile at exactly the same index and coordinates/);
+  assert.match(calls[0].prompt, /Tile 1: Tile zero stays perfectly still\./);
+  assert.match(calls[0].prompt, /Tile 2: Tile one ripples clockwise\./);
+  assert.ok(calls[0].prompt.indexOf("Tile 1:") < calls[0].prompt.indexOf("Tile 2:"));
+  assert.doesNotMatch(calls[0].prompt, /Loop the water\./);
 
   const serialized = serializeGeneratedTilesetAnimationOption(options[0]);
   assert.deepEqual(serialized.frames.map((frame) => frame.index), [0, 1]);
@@ -498,6 +520,11 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
         assetId: "forest",
         animationKey: "water",
         count: 1,
+        frameCount: 3,
+        tiles: [
+          { prompt: "Keep tile one still." },
+          { prompt: "Animate tile two." }
+        ],
         baseDataUrl: `data:image/png;base64,${providedBase.toString("base64")}`,
         styleGuide: { prompt: "Hand-painted moonlit forest.", images: [] }
       })
@@ -515,7 +542,7 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
     );
     assert.ok(branchEvents.every((event) =>
       event.option.animationKey === "water" &&
-      event.option.frames.map((frame) => frame.index).join(",") === "0,1"
+      event.option.frames.map((frame) => frame.index).join(",") === "0,1,2"
     ));
     assert.equal(events.at(-1).type, "done");
     assert.ok(providerRequests.every((request) =>
@@ -533,6 +560,15 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
         assetId: "forest",
         animationKey: "water",
         frames,
+        definition: {
+          ...asset.tileset.animations[0],
+          frameCount: 3,
+          tiles: [
+            { prompt: "Keep tile one still." },
+            { prompt: "Animate tile two." }
+          ],
+          frameTimings: [{ delayMs: 125 }, { delayMs: 125 }, { delayMs: 125 }]
+        },
         versionName: "http-v2"
       })
     });
@@ -540,7 +576,9 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
     const saved = await saveResponse.json();
     assert.equal(saved.versionName, "http-v2");
     assert.equal(saved.asset.activeVersion, "http-v2");
-    assert.equal(saved.version.tilesetAnimations.water.files.length, 2);
+    assert.equal(saved.version.tilesetAnimations.water.files.length, 3);
+    assert.equal(saved.asset.tileset.animations[0].frameCount, 3);
+    assert.equal(saved.asset.versions.v1.tilesetAnimations.water.files.length, 2);
     assert.match(saved.file, /forest\.http-v2\..+\.png$/);
   } finally {
     await devServer.close();
