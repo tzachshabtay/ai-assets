@@ -11,7 +11,11 @@ import {
   generateTilesetAnimationBranches,
   serializeGeneratedTilesetAnimationOption
 } from "../dist/index.js";
-import { gameAssetPrompt, tilesetBasePrompt } from "../dist/provider.js";
+import {
+  closestImageGenerationSize,
+  gameAssetPrompt,
+  tilesetBasePrompt
+} from "../dist/provider.js";
 import {
   deleteAssetVersion,
   ensureTargetVariant,
@@ -163,6 +167,12 @@ test("structured tileset prompts bake geometry and preserve exact tile order", (
   assert.ok(explicitPrompt.indexOf("Tile 1 —") < explicitPrompt.indexOf("Tile 2 —"));
 });
 
+test("image generation chooses the closest supported aspect ratio by default", () => {
+  assert.equal(closestImageGenerationSize({ width: 128, height: 64 }), "1536x1024");
+  assert.equal(closestImageGenerationSize({ width: 64, height: 128 }), "1024x1536");
+  assert.equal(closestImageGenerationSize({ width: 96, height: 96 }), "1024x1024");
+});
+
 test("tileset base generation and promotion honor tile and grid geometry overrides", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "ai-assets-tileset-base-"));
   const assetsDir = path.join(root, "assets");
@@ -293,6 +303,10 @@ test("tileset animation generation uses three sequential candidate branches", as
   };
 
   const asset = tilesetAsset();
+  asset.tileset.tiles = [
+    { prompt: "Seamless mossy grass." },
+    { prompt: "Dark forest water." }
+  ];
   asset.tileset.animations[0].tiles = [
     { prompt: "Tile zero stays perfectly still." },
     { prompt: "Tile one ripples clockwise." }
@@ -313,15 +327,159 @@ test("tileset animation generation uses three sequential candidate branches", as
   assert.ok(options.every((option) => option.frames.length === 2));
   assert.equal(calls.filter((call) => call.references.length === 1).length, 3);
   assert.equal(calls.filter((call) => call.references.length === 2).length, 3);
+  assert.ok(calls.every((call) => call.purpose === "tileset-animation"));
   assert.ok(calls.every((call) => call.references[0].fileName === "base-forest.png"));
-  assert.match(calls.find((call) => call.references.length === 2).prompt, /Preserve every tile at exactly the same index and coordinates/);
-  assert.match(calls[0].prompt, /Tile 1: Tile zero stays perfectly still\./);
-  assert.match(calls[0].prompt, /Tile 2: Tile one ripples clockwise\./);
-  assert.ok(calls[0].prompt.indexOf("Tile 1:") < calls[0].prompt.indexOf("Tile 2:"));
+  assert.match(
+    calls.find((call) => call.references.length === 2).prompt,
+    /Reference 1 is the immutable spatial source of truth/
+  );
+  assert.match(calls[0].prompt, /Full-sheet tileset geometry: output exactly one 32x16 sheet/);
+  assert.match(calls[0].prompt, /Exact usable tile rectangles: Tile 1 \[x=0-15, y=0-15\]; Tile 2 \[x=16-31, y=0-15\]/);
+  assert.match(calls[0].prompt, /Tile 1 \[x=0-15, y=0-15\]: Tile zero stays perfectly still\./);
+  assert.match(calls[0].prompt, /Tile 2 \[x=16-31, y=0-15\]: Tile one ripples clockwise\./);
+  assert.ok(calls[0].prompt.indexOf("Tile 1 [") < calls[0].prompt.indexOf("Tile 2 ["));
   assert.doesNotMatch(calls[0].prompt, /Loop the water\./);
+  assert.doesNotMatch(calls[0].prompt, /Draw exactly these/);
+  assert.doesNotMatch(calls[0].prompt, /Seamless mossy grass/);
+
+  const finalProviderPrompt = gameAssetPrompt(calls[0], {
+    prompt: calls[0].prompt,
+    model: "gpt-image-2",
+    outputFormat: "png",
+    requestedBackground: "opaque",
+    chromaKey: { red: 255, green: 0, blue: 255 }
+  });
+  assert.match(finalProviderPrompt, /Perform a minimal in-place edit/);
+  assert.match(finalProviderPrompt, /Reference 1 always controls sheet geometry/);
+  assert.doesNotMatch(finalProviderPrompt, /Draw exactly these/);
+  assert.doesNotMatch(finalProviderPrompt, /Seamless mossy grass/);
 
   const serialized = serializeGeneratedTilesetAnimationOption(options[0]);
   assert.deepEqual(serialized.frames.map((frame) => frame.index), [0, 1]);
+});
+
+test("one-cell generation overrides reconcile inherited tileset animation prompts", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "ai-assets-tileset-one-cell-"));
+  const assetsDir = path.join(root, "assets");
+  const manifestPath = path.join(root, "manifest.json");
+  const asset = tilesetAsset();
+  asset.tileset.tiles = [
+    { prompt: "Mossy grass." },
+    { prompt: "Shallow water." }
+  ];
+  asset.tileset.animations[0].tiles = [
+    { prompt: "Keep the grass still." },
+    { prompt: "Ripple the water." }
+  ];
+  asset.tileset.animations[1].tiles = [
+    { prompt: "Keep the grass still." },
+    { prompt: "Flicker the torch light." }
+  ];
+  const manifest = { schemaVersion: 1, assets: { forest: asset } };
+  await mkdir(assetsDir, { recursive: true });
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+  const providerRequests = [];
+  const provider = {
+    async generate(request) {
+      providerRequests.push(request);
+      return [{
+        image: pngImage(request.asset.dimensions.width, request.asset.dimensions.height, 21),
+        mimeType: "image/png",
+        prompt: request.prompt,
+        dimensions: request.asset.dimensions
+      }];
+    }
+  };
+  const devServer = createAiAssetDevServer({
+    manifestPath,
+    assetsDir,
+    publicPathPrefix: "/assets",
+    provider,
+    port: 0
+  });
+  await devServer.listen();
+  const address = devServer.server.address();
+  assert.ok(address && typeof address !== "string");
+  const origin = `http://127.0.0.1:${address.port}`;
+  const oneCellTileset = {
+    tileWidth: 16,
+    tileHeight: 16,
+    columns: 1,
+    rows: 1,
+    tileCount: 1,
+    tiles: [{ prompt: "Shallow water." }]
+  };
+
+  try {
+    const baseResponse = await fetch(`${origin}/__ai-assets/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        assetId: "forest",
+        count: 1,
+        tileset: oneCellTileset
+      })
+    });
+    assert.equal(baseResponse.status, 200);
+    const baseOption = (await baseResponse.json()).options[0];
+    const baseRequest = providerRequests[0];
+    assert.deepEqual(baseRequest.asset.dimensions, { width: 16, height: 16 });
+    assert.deepEqual(baseRequest.asset.tileset.tiles, oneCellTileset.tiles);
+    assert.ok(baseRequest.asset.tileset.animations.every(
+      (animation) => animation.tiles === undefined
+    ));
+    assert.deepEqual(baseOption.dimensions, { width: 16, height: 16 });
+
+    const oneCellBase = pngImage(16, 16, 99);
+    const animationResponse = await fetch(
+      `${origin}/__ai-assets/generate-tileset-animation-stream`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assetId: "forest",
+          animationKey: "water",
+          count: 1,
+          frameCount: 1,
+          tiles: [{ prompt: "Ripple only this isolated water tile." }],
+          tileset: oneCellTileset,
+          baseDataUrl: `data:image/png;base64,${oneCellBase.toString("base64")}`
+        })
+      }
+    );
+    assert.equal(animationResponse.status, 200);
+    const events = (await animationResponse.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const optionEvent = events.find((event) => event.type === "option");
+    assert.ok(optionEvent);
+    assert.deepEqual(optionEvent.option.frames[0].dimensions, { width: 16, height: 16 });
+    assert.equal(events.at(-1).type, "done");
+
+    const animationRequest = providerRequests[1];
+    assert.deepEqual(animationRequest.asset.dimensions, { width: 16, height: 16 });
+    assert.deepEqual(
+      animationRequest.asset.tileset.animations.find(
+        (animation) => animation.key === "water"
+      ).tiles,
+      [{ prompt: "Ripple only this isolated water tile." }]
+    );
+    assert.equal(
+      animationRequest.asset.tileset.animations.find(
+        (animation) => animation.key === "torch"
+      ).tiles,
+      undefined
+    );
+
+    const unchanged = await readManifest(manifestPath);
+    assert.equal(unchanged.assets.forest.tileset.tiles.length, 2);
+    assert.equal(unchanged.assets.forest.tileset.animations[0].tiles.length, 2);
+    assert.equal(unchanged.assets.forest.tileset.animations[1].tiles.length, 2);
+  } finally {
+    await devServer.close();
+  }
 });
 
 test("tileset animation save composes and deletes an atomic version bundle", async () => {

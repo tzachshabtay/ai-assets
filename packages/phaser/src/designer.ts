@@ -186,6 +186,8 @@ export function installAiAssetDesigner(
   const formatDrafts = new Map<string, AiAssetFormat>();
   const tilesetPromptDrafts = new Map<string, string[]>();
   const tilesetAnimationPromptDrafts = new Map<string, string[]>();
+  const tilesetAnimationFrameDrafts = new Map<string, Promise<string[]>>();
+  let tilesetAnimationPromptRevision = 0;
   let displayedTilesetAnimationOptions:
     | {
         assetId: string;
@@ -481,6 +483,10 @@ export function installAiAssetDesigner(
       input.setAttribute("aria-label", `Tile ${tileIndex + 1} prompt`);
       input.addEventListener("input", () => {
         drafts[tileIndex] = input.value;
+        if (isAnimation && selectedTilesetAnimationKey) {
+          elements.promoteButton.disabled = true;
+          void stageTilesetAnimationPromptDraft(assetId, selectedTilesetAnimationKey);
+        }
       });
 
       const label = document.createElement("label");
@@ -815,13 +821,141 @@ export function installAiAssetDesigner(
     };
   };
 
+  const activeTilesetAnimationFrames = (
+    assetId: string,
+    animationKey: string
+  ): Promise<string[]> => {
+    const asset = manifest.assets[assetId];
+    const activeVersion = asset?.versions[asset.activeVersion];
+    const files = activeVersion?.tilesetAnimations?.[animationKey]?.files;
+    if (!asset || !activeVersion || !files?.length) {
+      return Promise.reject(new Error(
+        `Generate ${readableAssetName(animationKey)} animation frames before promoting its prompts.`
+      ));
+    }
+
+    const cacheKey = `${assetId}\u0000${asset.activeVersion}\u0000${animationKey}`;
+    const existing = tilesetAnimationFrameDrafts.get(cacheKey);
+    if (existing) return existing;
+
+    const loading = Promise.all(
+      files.map((file) => imageSourceToDataUrl(resolveAssetUrl(file)))
+    );
+    tilesetAnimationFrameDrafts.set(cacheKey, loading);
+    void loading.catch(() => {
+      if (tilesetAnimationFrameDrafts.get(cacheKey) === loading) {
+        tilesetAnimationFrameDrafts.delete(cacheKey);
+      }
+    });
+    return loading;
+  };
+
+  const promptOnlyTilesetAnimationDefinition = (
+    assetId: string,
+    animationKey: string,
+    pending = pendingOptions.get(assetId)
+  ): AiTilesetAnimation | undefined => {
+    const tiles = tilesetAnimationPromptDefinitions(assetId, animationKey);
+    const declared = tilesetAnimationForKey(manifest.assets[assetId], animationKey);
+    const pendingDefinition = pending?.option.tileset?.animations?.find(
+      (animation) => animation.key === animationKey
+    );
+    const source = pendingDefinition ?? declared;
+    return source && tiles ? { ...source, tiles } : undefined;
+  };
+
+  const stageTilesetAnimationPromptDraft = async (
+    assetId: string,
+    animationKey: string
+  ) => {
+    const revision = tilesetAnimationPromptRevision + 1;
+    tilesetAnimationPromptRevision = revision;
+    if (!promptOnlyTilesetAnimationDefinition(assetId, animationKey)) {
+      elements.promoteButton.disabled = true;
+      return;
+    }
+
+    try {
+      const pendingBeforeLoad = pendingOptions.get(assetId);
+      const loadedFrames = pendingBeforeLoad?.tilesetAnimations?.[animationKey] ??
+        await activeTilesetAnimationFrames(assetId, animationKey);
+      if (
+        revision !== tilesetAnimationPromptRevision ||
+        selectedTargetAssetId !== assetId ||
+        selectedTilesetAnimationKey !== animationKey
+      ) return;
+
+      const pending = pendingOptions.get(assetId);
+      const frames = pending?.tilesetAnimations?.[animationKey] ?? loadedFrames;
+      const definition = promptOnlyTilesetAnimationDefinition(assetId, animationKey, pending);
+      if (!definition) {
+        elements.promoteButton.disabled = true;
+        return;
+      }
+      if (frames.length !== definition.frameCount) {
+        throw new Error(
+          `${readableAssetName(animationKey)} has ${frames.length} current frames, but ` +
+            `${definition.frameCount} are configured. Generate new frames before promoting.`
+        );
+      }
+
+      const option = await currentTilesetOption(assetId, definition);
+      if (
+        revision !== tilesetAnimationPromptRevision ||
+        selectedTargetAssetId !== assetId ||
+        selectedTilesetAnimationKey !== animationKey
+      ) return;
+
+      const latestPending = pendingOptions.get(assetId);
+      selectedOption = option;
+      editedCurrentOption = option;
+      rememberPendingOption(assetId, option, {
+        inheritAnimations: latestPending?.inheritAnimations,
+        previewedVersionName: latestPending?.previewedVersionName,
+        tilesetAnimations: {
+          ...(latestPending?.tilesetAnimations ?? {}),
+          [animationKey]: latestPending?.tilesetAnimations?.[animationKey] ?? frames
+        },
+        animationOnlyKey: latestPending?.animationOnlyKey ??
+          (latestPending ? undefined : animationKey)
+      });
+      if (
+        displayedTilesetAnimationOptions?.assetId === assetId &&
+        displayedTilesetAnimationOptions.animationKey === animationKey
+      ) {
+        displayedTilesetAnimationOptions.animation = {
+          ...displayedTilesetAnimationOptions.animation,
+          tiles: definition.tiles
+        };
+      }
+      elements.promoteButton.disabled = activePromotionId !== undefined;
+      setStatus(
+        elements,
+        "Animation prompt changes ready. Promote to save them.",
+        "info"
+      );
+    } catch (error) {
+      if (
+        revision !== tilesetAnimationPromptRevision ||
+        selectedTargetAssetId !== assetId ||
+        selectedTilesetAnimationKey !== animationKey
+      ) return;
+      elements.promoteButton.disabled = !selectedOption || activePromotionId !== undefined;
+      setStatus(elements, `Could not stage animation prompts. ${errorMessage(error)}`, "error");
+    }
+  };
+
   const selectTilesetAnimationFrames = async (
     assetId: string,
     definition: AiTilesetAnimation,
     frames: string[],
     card?: HTMLElement
   ) => {
-    const option = await currentTilesetOption(assetId, definition);
+    const currentPrompts = tilesetAnimationPromptDefinitions(assetId, definition.key);
+    const selectedDefinition = currentPrompts
+      ? { ...definition, tiles: currentPrompts }
+      : definition;
+    const option = await currentTilesetOption(assetId, selectedDefinition);
     const pending = pendingOptions.get(assetId);
     selectedOption = option;
     rememberPendingOption(assetId, option, {
@@ -829,10 +963,10 @@ export function installAiAssetDesigner(
       previewedVersionName: pending?.previewedVersionName,
       tilesetAnimations: {
         ...(pending?.tilesetAnimations ?? {}),
-        [definition.key]: frames
+        [selectedDefinition.key]: frames
       },
       animationOnlyKey: pending?.animationOnlyKey ??
-        (pending ? undefined : definition.key)
+        (pending ? undefined : selectedDefinition.key)
     });
     for (const item of elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
       item.classList.toggle("is-selected", item === card);
@@ -841,9 +975,9 @@ export function installAiAssetDesigner(
     elements.promoteButton.disabled = activePromotionId !== undefined;
     await previewTilesetAnimationFrames(
       assetId,
-      definition.key,
+      selectedDefinition.key,
       frames,
-      assetWithTilesetAnimationDefinition(manifest.assets[assetId], definition)
+      assetWithTilesetAnimationDefinition(manifest.assets[assetId], selectedDefinition)
     );
   };
 
@@ -1212,12 +1346,8 @@ export function installAiAssetDesigner(
     elements.regenerateButton.textContent = "Cancel generation";
     clearGeneratedOptions();
     elements.promoteButton.disabled = true;
+    setStatus(elements, "Generating options...", "busy");
     lockGenerationStatus();
-    setStatus(
-      elements,
-      `Generating 3 ${readableAssetName(animationKey)} tileset animation options...`,
-      "busy"
-    );
 
     try {
       const candidates = await client.generateTilesetAnimationStream({
@@ -1274,6 +1404,7 @@ export function installAiAssetDesigner(
         "info"
       );
     } catch (error) {
+      finishGeneration(currentGenerationId);
       if (isAbortError(error)) {
         if (isWorkflowPanelCurrent()) {
           setStatus(elements, "Generation cancelled.", "info");

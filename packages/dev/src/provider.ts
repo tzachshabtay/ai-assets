@@ -30,6 +30,7 @@ import {
 import type { RgbColor } from "./provider-image-processing.js";
 export type GenerateAssetRequest = {
   asset: AiAssetDefinition;
+  purpose?: "tileset-animation";
   prompt?: string;
   count?: number;
   settings?: AiAssetGenerationSettings;
@@ -132,6 +133,7 @@ export async function generateTilesetAnimationBranches(
         request.signal?.throwIfAborted();
         const generated = await provider.generate({
           asset: request.asset,
+          purpose: "tileset-animation",
           prompt: tilesetAnimationFramePrompt(request.asset, animation, {
             prompt: request.prompt,
             frameIndex,
@@ -194,29 +196,31 @@ export function tilesetAnimationFramePrompt(
     `Animate the tiles described by "${animation.key}".`;
   const frameNumber = context.frameIndex + 1;
   const priorReferenceDescription = context.priorFrameCount
-    ? `References 2 through ${context.priorFrameCount + 1} are the already-generated earlier frames for this same candidate branch, in chronological order.`
+    ? `References 2 through ${context.priorFrameCount + 1} are earlier frames for motion continuity only, in chronological order. They never override Reference 1's sheet geometry, tile coordinates, or unchanged pixels.`
     : "There are no prior animation frames yet; derive this first phase directly from the base sheet.";
   const tileInstructions = animation.tiles?.map((tile, index) => (
-    `Tile ${index + 1}: ${tile.prompt.trim()}`
+    `${tilesetTileRectangle(asset, index)}: ${tile.prompt.trim()}`
   )) ?? [];
+  const finalFrameIndex = Math.max(0, animation.frameCount - 1);
 
   return [
     ...(animation.tiles?.length ? [] : [brief, ""]),
     `Generate animation frame ${frameNumber} of ${animation.frameCount} for tileset animation "${animation.key}".`,
     `This is candidate branch ${context.branchIndex + 1} of ${context.branchCount}; branch identity seed: ${context.branchSeed}.`,
-    "Return one complete full-size tileset sheet, never an individual tile or a contact sheet of animation phases.",
-    "Reference 1 is the immutable base tileset sheet and defines every tile's identity, index, palette, scale, cell boundaries, edge continuity, and pixel alignment.",
+    "Edit Reference 1 in place and return one complete full-size tileset sheet, never an individual tile or a contact sheet of animation phases.",
+    "Reference 1 is the immutable spatial source of truth. Its canvas bounds, top-left origin, tile coordinates, palette, scale, cell boundaries, edge continuity, and pixel alignment have absolute precedence over every other reference and instruction.",
     priorReferenceDescription,
-    "Preserve every tile at exactly the same index and coordinates. Do not add, remove, reorder, resize, crop, relight, restyle, or redesign tiles.",
-    "Only change pixels needed for the requested animated material or object. Every non-animated tile must remain visually identical to the base sheet.",
+    "Do not redraw or re-lay out the sheet. Preserve every tile at exactly the same index and pixel coordinates; do not shift the canvas or add, remove, reorder, resize, crop, relight, restyle, or redesign tiles.",
+    "Only change pixels explicitly required by a tile's animation instruction. Copy every other pixel from Reference 1 unchanged.",
+    ...tilesetContractPromptLines(asset, false),
     ...(tileInstructions.length
       ? [
-          "Follow these tile instructions in exact row-major sheet order:",
+          "Follow these tile instructions in exact row-major sheet order. Each bracketed rectangle is an immutable cell boundary:",
           ...tileInstructions
         ]
       : []),
-    `Depict the ${frameNumber}/${animation.frameCount} temporal phase of a seamless loop; keep motion coherent with all prior references and make the final phase transition cleanly back to the first.`,
-    ...tilesetContractPromptLines(asset)
+    `This frame samples loop phase t=${context.frameIndex}/${animation.frameCount}. The sequence samples t=0/${animation.frameCount} through t=${finalFrameIndex}/${animation.frameCount}; do not duplicate the first phase as an extra final frame.`,
+    "Keep motion coherent with prior frames and make the final sampled phase transition cleanly back to the first."
   ].join("\n");
 }
 
@@ -295,7 +299,10 @@ export function createOpenAiImageProvider(
           variationCount: count
         }),
         n: 1,
-        size: request.settings?.size ?? request.asset.settings?.size ?? "1024x1024",
+        size:
+          request.settings?.size ??
+          request.asset.settings?.size ??
+          closestImageGenerationSize(dimensions),
         quality:
           request.settings?.quality ??
           request.asset.settings?.quality ??
@@ -600,23 +607,32 @@ export function gameAssetPrompt(
   }
 ): string {
   const dimensions = requireAssetDimensions(request.asset);
+  const isTilesetAnimation = request.purpose === "tileset-animation";
   const lines: string[] = [];
   const brief = assetBriefForModel(request, context.prompt);
   if (brief) {
     lines.push(brief, "");
   }
-  const structuredTilesetPrompt = structuredTilesetPromptLines(request.asset);
+  const structuredTilesetPrompt = isTilesetAnimation
+    ? []
+    : structuredTilesetPromptLines(request.asset);
   if (
     structuredTilesetPrompt.length &&
     !brief?.includes(structuredTilesetPrompt.join("\n"))
   ) {
     lines.push(...structuredTilesetPrompt, "");
   }
-  lines.push(
-    "Create this as a clean 2D game asset sprite.",
-    `Asset kind: ${request.asset.kind}.`,
-    `Target canvas: ${dimensions.width}x${dimensions.height}.`
-  );
+  lines.push(...(isTilesetAnimation
+    ? [
+        "Perform a minimal in-place edit of the immutable base tileset reference; do not redraw the sheet.",
+        `Asset kind: ${request.asset.kind}.`,
+        `Target canvas: ${dimensions.width}x${dimensions.height}. The output origin and every cell boundary must exactly match Reference 1.`
+      ]
+    : [
+        "Create this as a clean 2D game asset sprite.",
+        `Asset kind: ${request.asset.kind}.`,
+        `Target canvas: ${dimensions.width}x${dimensions.height}.`
+      ]));
 
   if (request.asset.kind === "tileset" && shouldRequestRgbaPng(request, context)) {
     lines.push(
@@ -638,7 +654,7 @@ export function gameAssetPrompt(
     );
   }
 
-  if (request.asset.kind === "tileset") {
+  if (request.asset.kind === "tileset" && !isTilesetAnimation) {
     lines.push(...tilesetContractPromptLines(request.asset, false));
   } else if (request.asset.frameGrid) {
     const frameCount =
@@ -684,7 +700,12 @@ export function gameAssetPrompt(
     }
   }
 
-  if (request.references?.length && request.asset.kind === "tileset") {
+  if (request.references?.length && request.asset.kind === "tileset" && isTilesetAnimation) {
+    lines.push(
+      "Reference 1 always controls sheet geometry and unchanged artwork. Use later non-style references only to understand chronological motion; never copy a shifted grid, changed cell boundary, or unintended redraw from them.",
+      "Keep Reference 1's top-left origin and exact tile rectangles. Change only pixels explicitly requested by the animation tile instructions."
+    );
+  } else if (request.references?.length && request.asset.kind === "tileset") {
     lines.push(
       "The first non-style reference image is the immutable base tileset. Any additional non-style references are prior frames in this candidate's animation sequence, ordered chronologically by filename.",
       "Preserve the exact base sheet composition: every tile must keep its index, coordinates, dimensions, palette, shape identity, edge connections, and pixel alignment. Change only the pixels required by the requested animation phase; keep all other tiles identical."
@@ -781,11 +802,12 @@ function tilesetContractPromptLines(
   const margin = tileset.margin ?? 0;
   const spacing = tileset.spacing ?? 0;
   const structuredPrompt = structuredTilesetPromptLines(asset);
-  const geometryPrompt = structuredPrompt.length
-    ? includeStructuredPrompt ? structuredPrompt : []
+  const geometryPrompt = includeStructuredPrompt && structuredPrompt.length
+    ? structuredPrompt
     : [
-        `Full-sheet tileset contract: output exactly one ${dimensions.width}x${dimensions.height} sheet with ${tileset.columns} columns and ${tileset.rows} rows.`,
-        `Every tile cell is exactly ${tileset.tileWidth}x${tileset.tileHeight}, with ${margin}px outer margin and ${spacing}px spacing. The sheet contains ${tileCount} usable tiles in row-major order.`
+        `Full-sheet tileset geometry: output exactly one ${dimensions.width}x${dimensions.height} sheet with ${tileset.columns} columns and ${tileset.rows} rows.`,
+        `Every tile cell is exactly ${tileset.tileWidth}x${tileset.tileHeight}, with ${margin}px outer margin and ${spacing}px spacing. The sheet contains ${tileCount} usable tiles in row-major order.`,
+        `Exact usable tile rectangles: ${tilesetTileRectangles(asset)}.`
       ];
 
   return [
@@ -794,6 +816,47 @@ function tilesetContractPromptLines(
     "Tile indices and cell coordinates are immutable. Keep artwork pixel-aligned to cell boundaries and preserve seamless edge connections between compatible terrain tiles.",
     `If the grid has more than ${tileCount} cells, leave only the trailing unused cells empty while preserving the full declared sheet geometry.`
   ];
+}
+
+function tilesetTileRectangle(asset: AiAssetDefinition, index: number): string {
+  const tileset = asset.tileset;
+  if (!tileset) return `Tile ${index + 1}`;
+
+  const margin = tileset.margin ?? 0;
+  const spacing = tileset.spacing ?? 0;
+  const column = index % tileset.columns;
+  const row = Math.floor(index / tileset.columns);
+  const x1 = margin + column * (tileset.tileWidth + spacing);
+  const y1 = margin + row * (tileset.tileHeight + spacing);
+  const x2 = x1 + tileset.tileWidth - 1;
+  const y2 = y1 + tileset.tileHeight - 1;
+
+  return `Tile ${index + 1} [x=${x1}-${x2}, y=${y1}-${y2}]`;
+}
+
+function tilesetTileRectangles(asset: AiAssetDefinition): string {
+  const tileset = asset.tileset;
+  if (!tileset) return "";
+
+  const tileCount = tileset.tileCount ?? tileset.columns * tileset.rows;
+  return Array.from({ length: tileCount }, (_, index) => tilesetTileRectangle(asset, index))
+    .join("; ");
+}
+
+export function closestImageGenerationSize(dimensions: AiAssetDimensions): string {
+  const targetRatio = dimensions.width / dimensions.height;
+  const sizes = [
+    { value: "1024x1024", ratio: 1 },
+    { value: "1536x1024", ratio: 1.5 },
+    { value: "1024x1536", ratio: 2 / 3 }
+  ];
+
+  return sizes
+    .map((size) => ({
+      ...size,
+      distance: Math.abs(Math.log(targetRatio / size.ratio))
+    }))
+    .sort((left, right) => left.distance - right.distance)[0]!.value;
 }
 
 function sanitizeReferenceName(value: string): string {

@@ -64,6 +64,46 @@ test("OpenAI provider resizes JPEG and WebP output without PNG decoding", async 
   }
 });
 
+test("OpenAI provider chooses the closest output aspect ratio unless size is explicit", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp({
+    create: {
+      width: 4,
+      height: 2,
+      channels: 4,
+      background: { r: 32, g: 96, b: 160, alpha: 1 }
+    }
+  }).png().toBuffer();
+  const requestedSizes = [];
+
+  try {
+    globalThis.fetch = async (_url, init) => {
+      requestedSizes.push(JSON.parse(init.body).size);
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    await provider.generate({
+      asset: imageAsset({ width: 128, height: 64 }, { format: "png" })
+    });
+    await provider.generate({
+      asset: imageAsset(
+        { width: 64, height: 128 },
+        { format: "png", size: "1024x1024" }
+      )
+    });
+
+    assert.deepEqual(requestedSizes, ["1536x1024", "1024x1024"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("OpenAI image edits rasterize SVG references to PNG", async () => {
   const originalFetch = globalThis.fetch;
   const generated = await sharp({

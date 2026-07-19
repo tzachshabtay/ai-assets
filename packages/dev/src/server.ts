@@ -828,6 +828,19 @@ function applyGenerationOverrides(
         `${asset.id}.tileset.tileCount must not exceed columns * rows (${capacity}).`
       );
     }
+    const inheritedTiles = asset.tileset.tiles;
+    const tiles = overrides.tileset?.tiles === undefined
+      ? inheritedTiles?.length === tileCount ? inheritedTiles : undefined
+      : overrides.tileset.tiles;
+    const animations = asset.tileset.animations?.map((animation) => {
+      if (animation.tiles === undefined || animation.tiles.length === tileCount) {
+        return animation;
+      }
+
+      const animationWithoutTiles = { ...animation };
+      delete animationWithoutTiles.tiles;
+      return animationWithoutTiles;
+    });
     const tileset: AiAssetTileset = {
       ...asset.tileset,
       tileWidth,
@@ -835,9 +848,8 @@ function applyGenerationOverrides(
       columns,
       rows,
       tileCount,
-      tiles: overrides.tileset?.tiles === undefined
-        ? asset.tileset.tiles
-        : overrides.tileset.tiles
+      tiles,
+      animations
     };
     const margin = tileset.margin ?? 0;
     const spacing = tileset.spacing ?? 0;
