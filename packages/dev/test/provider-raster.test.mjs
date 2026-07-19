@@ -20,6 +20,34 @@ function imageAsset(dimensions, settings = {}) {
   };
 }
 
+function propsTilesetAsset() {
+  return {
+    id: "tiles.props",
+    kind: "tileset",
+    prompt: "A top-down props tileset.",
+    dimensions: { width: 128, height: 32 },
+    tileset: {
+      tileWidth: 32,
+      tileHeight: 32,
+      columns: 4,
+      rows: 1,
+      tileCount: 4,
+      tiles: [
+        { prompt: "A centered wooden crate." },
+        { prompt: "A centered clay pot." },
+        { prompt: "A centered brass key." },
+        { prompt: "A centered green herb." }
+      ]
+    },
+    settings: {
+      background: "opaque",
+      format: "png"
+    },
+    activeVersion: "draft",
+    versions: {}
+  };
+}
+
 test("OpenAI provider resizes JPEG and WebP output without PNG decoding", async () => {
   const originalFetch = globalThis.fetch;
 
@@ -99,6 +127,139 @@ test("OpenAI provider chooses the closest output aspect ratio unless size is exp
     });
 
     assert.deepEqual(requestedSizes, ["1536x1024", "1024x1024"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("OpenAI provider keeps full-sheet tileset generation to one request per candidate", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp(Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024">
+      <rect width="1536" height="1024" fill="#ff00ff"/>
+      <rect x="0" y="320" width="384" height="384" fill="#c81414"/>
+      <rect x="384" y="320" width="384" height="384" fill="#14c814"/>
+      <rect x="768" y="320" width="384" height="384" fill="#1414c8"/>
+      <rect x="1152" y="320" width="384" height="384" fill="#c8c814"/>
+    </svg>
+  `)).png().toBuffer();
+  const requestBodies = [];
+
+  try {
+    globalThis.fetch = async (url, init) => {
+      assert.match(String(url), /\/v1\/images\/generations$/);
+      const body = JSON.parse(init.body);
+      requestBodies.push(body);
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    const options = await provider.generate({
+      asset: propsTilesetAsset(),
+      count: 3
+    });
+
+    assert.equal(requestBodies.length, 3);
+    assert.equal(options.length, 3);
+    for (const body of requestBodies) {
+      assert.equal(body.n, 1);
+      assert.equal(body.size, "1536x1024");
+      assert.match(body.prompt, /Actual returned raster canvas: 1536x1024 pixels/);
+      assert.match(body.prompt, /active sheet rectangle \[x=0-1535, y=320-703\]/);
+      assert.match(body.prompt, /Tile 1 \[x=0-383, y=320-703\]/);
+      assert.match(body.prompt, /Tile 4 \[x=1152-1535, y=320-703\]/);
+      assert.doesNotMatch(body.prompt, /Target canvas: 128x32|Output one 128×32/);
+    }
+
+    const { data, info } = await sharp(options[0].image)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    assert.deepEqual({ width: info.width, height: info.height }, { width: 128, height: 32 });
+    assert.deepEqual(rgbAt(data, info.width, 16, 16), [200, 20, 20]);
+    assert.deepEqual(rgbAt(data, info.width, 48, 16), [20, 200, 20]);
+    assert.deepEqual(rgbAt(data, info.width, 80, 16), [20, 20, 200]);
+    assert.deepEqual(rgbAt(data, info.width, 112, 16), [200, 200, 20]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("OpenAI provider stages full-sheet tileset edit references in generation space", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp(Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024">
+      <rect width="1536" height="1024" fill="#ff00ff"/>
+      <rect x="0" y="320" width="1536" height="384" fill="#c81414"/>
+    </svg>
+  `)).png().toBuffer();
+  const reference = await sharp({
+    create: {
+      width: 128,
+      height: 32,
+      channels: 4,
+      background: { r: 200, g: 20, b: 20, alpha: 1 }
+    }
+  }).png().toBuffer();
+  let fetchCount = 0;
+
+  try {
+    globalThis.fetch = async (url, init) => {
+      fetchCount += 1;
+      assert.match(String(url), /\/v1\/images\/edits$/);
+      assert.ok(init.body instanceof FormData);
+      assert.equal(init.body.get("size"), "1536x1024");
+      assert.match(
+        String(init.body.get("prompt")),
+        /Actual returned raster canvas: 1536x1024 pixels/
+      );
+
+      const images = init.body.getAll("image[]");
+      assert.equal(images.length, 1);
+      assert.ok(images[0] instanceof Blob);
+      const staged = sharp(Buffer.from(await images[0].arrayBuffer()));
+      const metadata = await staged.metadata();
+      assert.deepEqual(
+        { width: metadata.width, height: metadata.height },
+        { width: 1536, height: 1024 }
+      );
+      const { data, info } = await staged.raw().toBuffer({ resolveWithObject: true });
+      const padding = rgbAt(data, info.width, 0, 0);
+      assert.deepEqual(rgbAt(data, info.width, 0, 320), [200, 20, 20]);
+      assert.deepEqual(rgbAt(data, info.width, 1535, 703), [200, 20, 20]);
+      assert.deepEqual(rgbAt(data, info.width, 1535, 1023), padding);
+      assert.notDeepEqual(padding, [200, 20, 20]);
+
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    const [option] = await provider.generate({
+      asset: propsTilesetAsset(),
+      purpose: "tileset-animation",
+      references: [{
+        image: reference,
+        mimeType: "image/png",
+        fileName: "props-base.png"
+      }]
+    });
+
+    assert.equal(fetchCount, 1);
+    assert.ok(option);
+    const metadata = await sharp(option.image).metadata();
+    assert.deepEqual(
+      { width: metadata.width, height: metadata.height },
+      { width: 128, height: 32 }
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -191,3 +352,8 @@ test("OpenAI provider forwards AbortSignal to the active fetch", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+function rgbAt(data, width, x, y) {
+  const offset = (y * width + x) * 4;
+  return Array.from(data.subarray(offset, offset + 3));
+}

@@ -28,6 +28,18 @@ import {
   variationDirectionPromptLine
 } from "./provider-image-processing.js";
 import type { RgbColor } from "./provider-image-processing.js";
+import {
+  cropTilesetSheetFromGeneration,
+  stageTilesetSheetReference,
+  tilesetSheetGenerationGeometry,
+  tilesetSheetRectLabel
+} from "./tileset-sheet-processing.js";
+import type {
+  TilesetSheetGenerationGeometry,
+  TilesetSheetOutputPadding
+} from "./tileset-sheet-processing.js";
+
+const OPAQUE_TILESET_PADDING: RgbColor = { red: 0, green: 0, blue: 0 };
 export type GenerateAssetRequest = {
   asset: AiAssetDefinition;
   purpose?: "tileset-animation";
@@ -199,7 +211,7 @@ export function tilesetAnimationFramePrompt(
     ? `References 2 through ${context.priorFrameCount + 1} are earlier frames for motion continuity only, in chronological order. They never override Reference 1's sheet geometry, tile coordinates, or unchanged pixels.`
     : "There are no prior animation frames yet; derive this first phase directly from the base sheet.";
   const tileInstructions = animation.tiles?.map((tile, index) => (
-    `${tilesetTileRectangle(asset, index)}: ${tile.prompt.trim()}`
+    `Tile ${index + 1}: ${tile.prompt.trim()}`
   )) ?? [];
   const finalFrameIndex = Math.max(0, animation.frameCount - 1);
 
@@ -215,7 +227,7 @@ export function tilesetAnimationFramePrompt(
     ...tilesetContractPromptLines(asset, false),
     ...(tileInstructions.length
       ? [
-          "Follow these tile instructions in exact row-major sheet order. Each bracketed rectangle is an immutable cell boundary:",
+          "Follow these tile instructions in exact row-major sheet order. Match each tile number to the authoritative generation-canvas rectangle supplied later in the complete model prompt:",
           ...tileInstructions
         ]
       : []),
@@ -277,8 +289,26 @@ export function createOpenAiImageProvider(
         request.settings?.frameAlignment ??
         request.asset.settings?.frameAlignment ??
         "center";
+      const configuredSize =
+        request.settings?.size ??
+        request.asset.settings?.size;
+      const generationSize =
+        request.asset.kind === "tileset" && configuredSize === "auto"
+          ? closestImageGenerationSize(dimensions)
+          : configuredSize ?? closestImageGenerationSize(dimensions);
+      const tilesetGeometry = request.asset.kind === "tileset" && request.asset.tileset
+        ? tilesetSheetGenerationGeometry(request.asset, generationSize)
+        : undefined;
+      const tilesetPadding = tilesetGeometry
+        ? tilesetOutputPadding(postprocessTransparency, chromaKey)
+        : undefined;
+      const assetReferences = tilesetGeometry
+        ? await Promise.all((request.references ?? []).map((reference) => (
+            stageTilesetSheetReference(reference, tilesetGeometry, chromaKey)
+          )))
+        : request.references ?? [];
       const allReferences = [
-        ...(request.references ?? []),
+        ...assetReferences,
         ...(request.styleReferences ?? []).map((reference, index) => ({
           ...reference,
           fileName: `style-reference-${index + 1}-${reference.fileName}`
@@ -296,13 +326,11 @@ export function createOpenAiImageProvider(
           chromaKey,
           variation: count > 1 ? createVariationSeed(index) : undefined,
           variationIndex: index,
-          variationCount: count
+          variationCount: count,
+          tilesetGeometry
         }),
         n: 1,
-        size:
-          request.settings?.size ??
-          request.asset.settings?.size ??
-          closestImageGenerationSize(dimensions),
+        size: generationSize,
         quality:
           request.settings?.quality ??
           request.asset.settings?.quality ??
@@ -334,19 +362,34 @@ export function createOpenAiImageProvider(
           }
           request.signal?.throwIfAborted();
           const image = Buffer.from(item.b64_json, "base64");
-          const transparencyProcessedImage = postprocessTransparency
-            ? request.asset.kind === "tileset" && request.asset.tileset
-              ? removeTilesetChromaBackground(image, request.asset.tileset, chromaKey)
-              : removeChromaBackground(image, chromaKey)
-            : image;
-          const resizedImage = outputFormat === "png"
-            ? resizePngToDimensions(transparencyProcessedImage, dimensions)
-            : await resizeRasterToDimensions(image, dimensions, outputFormat);
+          const resizedImage = tilesetGeometry
+            ? await cropTilesetSheetFromGeneration(
+                image,
+                tilesetGeometry,
+                outputFormat,
+                tilesetPadding
+              )
+            : outputFormat === "png"
+              ? resizePngToDimensions(
+                  postprocessTransparency
+                    ? removeChromaBackground(image, chromaKey)
+                    : image,
+                  dimensions
+                )
+              : await resizeRasterToDimensions(image, dimensions, outputFormat);
+          const transparencyProcessedImage =
+            tilesetGeometry && postprocessTransparency && request.asset.tileset
+              ? removeTilesetChromaBackground(
+                  resizedImage,
+                  request.asset.tileset,
+                  chromaKey
+                )
+              : resizedImage;
           const processedImage =
             request.asset.kind !== "tileset" &&
             postprocessTransparency && request.asset.frameGrid && frameAlignment === "center"
-              ? alignSpriteSheetFrames(resizedImage, request.asset.frameGrid)
-              : resizedImage;
+              ? alignSpriteSheetFrames(transparencyProcessedImage, request.asset.frameGrid)
+              : transparencyProcessedImage;
 
           const option: GeneratedAssetOption = {
             image: processedImage,
@@ -604,6 +647,7 @@ export function gameAssetPrompt(
     variation?: string;
     variationIndex?: number;
     variationCount?: number;
+    tilesetGeometry?: TilesetSheetGenerationGeometry;
   }
 ): string {
   const dimensions = requireAssetDimensions(request.asset);
@@ -626,12 +670,28 @@ export function gameAssetPrompt(
     ? [
         "Perform a minimal in-place edit of the immutable base tileset reference; do not redraw the sheet.",
         `Asset kind: ${request.asset.kind}.`,
-        `Target canvas: ${dimensions.width}x${dimensions.height}. The output origin and every cell boundary must exactly match Reference 1.`
+        ...(context.tilesetGeometry
+          ? tilesetGenerationGeometryPromptLines(
+              request.asset,
+              context.tilesetGeometry,
+              context.chromaKey,
+              shouldRequestRgbaPng(request, context)
+            )
+          : [
+              `Target canvas: ${dimensions.width}x${dimensions.height}. The output origin and every cell boundary must exactly match Reference 1.`
+            ])
       ]
     : [
         "Create this as a clean 2D game asset sprite.",
         `Asset kind: ${request.asset.kind}.`,
-        `Target canvas: ${dimensions.width}x${dimensions.height}.`
+        ...(context.tilesetGeometry
+          ? tilesetGenerationGeometryPromptLines(
+              request.asset,
+              context.tilesetGeometry,
+              context.chromaKey,
+              shouldRequestRgbaPng(request, context)
+            )
+          : [`Target canvas: ${dimensions.width}x${dimensions.height}.`])
       ]));
 
   if (request.asset.kind === "tileset" && shouldRequestRgbaPng(request, context)) {
@@ -647,6 +707,10 @@ export function gameAssetPrompt(
       "Clean it into a real RGBA PNG: the final game asset needs actual alpha transparency, not white, black, gray, checkerboard, or any matte color.",
       `For local transparency processing, render every background and empty padding pixel as the flat chroma-key color ${hexColor(context.chromaKey)}. Do not use that exact chroma-key color inside the game asset itself.`,
       "Keep the asset edges crisp against the chroma-key background so it can be removed cleanly."
+    );
+  } else if (context.tilesetGeometry) {
+    lines.push(
+      "Make every usable tile cell opaque edge-to-edge as required by its tile instruction. Never extend tile artwork into another cell or into the temporary outer padding."
     );
   } else {
     lines.push(
@@ -727,10 +791,19 @@ export function gameAssetPrompt(
     );
   }
 
-  if (context.variation && request.asset.kind === "tileset") {
+  if (
+    context.variation &&
+    request.asset.kind === "tileset" &&
+    isTilesetAnimation
+  ) {
     lines.push(
       `Variation seed: ${context.variation}. Use it only to choose a coherent motion treatment for this candidate; never vary tile identity, sheet layout, cell alignment, palette, or indices.`,
       variationDirectionPromptLine(context.variationIndex ?? 0)
+    );
+  } else if (context.variation && request.asset.kind === "tileset") {
+    lines.push(
+      `Variation seed: ${context.variation}. Use it only to choose a coherent visual treatment for this complete base tileset candidate; never vary tile identity, sheet layout, cell alignment, scale, or indices.`,
+      tilesetBaseVariationDirectionPromptLine(context.variationIndex ?? 0)
     );
   } else if (context.variation) {
     lines.push(
@@ -740,6 +813,17 @@ export function gameAssetPrompt(
   }
 
   return lines.join("\n");
+}
+
+function tilesetBaseVariationDirectionPromptLine(index: number): string {
+  const variants = [
+    "Base tileset variation direction: explore a distinct cohesive palette nuance and material treatment across all tiles. Never animate a tile, create alternate phases, or place multiple depictions inside one cell.",
+    "Base tileset variation direction: explore a distinct cohesive shape language and detail distribution across all tiles. Never animate a tile, create alternate phases, or place multiple depictions inside one cell.",
+    "Base tileset variation direction: explore a distinct cohesive lighting, shading, and texture treatment across all tiles. Never animate a tile, create alternate phases, or place multiple depictions inside one cell.",
+    "Base tileset variation direction: explore a distinct cohesive pixel treatment and silhouette character across all tiles. Never animate a tile, create alternate phases, or place multiple depictions inside one cell."
+  ];
+
+  return variants[index % variants.length] as string;
 }
 
 export function tilesetBasePrompt(asset: AiAssetDefinition): string {
@@ -781,8 +865,8 @@ function structuredTilesetPromptLines(asset: AiAssetDefinition): string[] {
     : `with ${margin === 0 ? "no outer margin" : `${margin}px outer margin`} and ${spacing === 0 ? "no spacing" : `${spacing}px spacing between tiles`}`;
 
   return [
-    `Create a deterministic hand-authored ${tileset.tileWidth}×${tileset.tileHeight} pixel tileset.`,
-    `Output one ${dimensions.width}×${dimensions.height} image arranged as a ${tileset.columns}-column × ${tileset.rows}-row grid ${gridSpacing}.`,
+    `Create a deterministic hand-authored tileset whose final tile resolution is ${tileset.tileWidth}×${tileset.tileHeight} pixels.`,
+    `The final post-processed asset is one ${dimensions.width}×${dimensions.height} image arranged as a ${tileset.columns}-column × ${tileset.rows}-row grid ${gridSpacing}.`,
     "Read tiles left-to-right, then top-to-bottom.",
     "Use one cohesive visual style, palette, scale, lighting, perspective, and pixel treatment across every tile.",
     `Draw exactly these ${tileCount} tiles in this exact order:`,
@@ -805,17 +889,77 @@ function tilesetContractPromptLines(
   const geometryPrompt = includeStructuredPrompt && structuredPrompt.length
     ? structuredPrompt
     : [
-        `Full-sheet tileset geometry: output exactly one ${dimensions.width}x${dimensions.height} sheet with ${tileset.columns} columns and ${tileset.rows} rows.`,
-        `Every tile cell is exactly ${tileset.tileWidth}x${tileset.tileHeight}, with ${margin}px outer margin and ${spacing}px spacing. The sheet contains ${tileCount} usable tiles in row-major order.`,
-        `Exact usable tile rectangles: ${tilesetTileRectangles(asset)}.`
+        `Logical final-sheet geometry after server crop and downsampling: one ${dimensions.width}x${dimensions.height} sheet with ${tileset.columns} columns and ${tileset.rows} rows.`,
+        `At final game resolution every tile cell is exactly ${tileset.tileWidth}x${tileset.tileHeight}, with ${margin}px outer margin and ${spacing}px spacing. The sheet contains ${tileCount} usable tiles in row-major order.`,
+        `Logical final-resolution usable tile rectangles: ${tilesetTileRectangles(asset)}.`
       ];
 
   return [
     ...geometryPrompt,
-    "Each cell contains exactly one tile at native scale. Do not create animation panels, nested sheets, thumbnails, labels, tile numbers, visible grid lines, gutters beyond the declared spacing, or presentation padding.",
+    "Each usable cell contains exactly one tile filling its declared cell at the scale appropriate to that coordinate space. Do not create animation panels, nested sheets, thumbnails, labels, tile numbers, visible grid lines, gutters beyond the declared spacing, or presentation padding.",
     "Tile indices and cell coordinates are immutable. Keep artwork pixel-aligned to cell boundaries and preserve seamless edge connections between compatible terrain tiles.",
     `If the grid has more than ${tileCount} cells, leave only the trailing unused cells empty while preserving the full declared sheet geometry.`
   ];
+}
+
+function tilesetGenerationGeometryPromptLines(
+  asset: AiAssetDefinition,
+  geometry: TilesetSheetGenerationGeometry,
+  chromaKey: RgbColor,
+  transparentPadding: boolean
+): string[] {
+  const tileset = asset.tileset;
+  if (!tileset) return [];
+
+  const usableCells = geometry.cells.filter((cell) => cell.usable);
+  const unusedCells = geometry.cells.filter((cell) => !cell.usable);
+  const usableRectangles = usableCells.map((cell) => (
+    `Tile ${cell.index + 1} [${tilesetSheetRectLabel(cell)}]`
+  )).join("; ");
+  const unusedRectangles = unusedCells.map((cell) => (
+    `Cell ${cell.index + 1} [${tilesetSheetRectLabel(cell)}]`
+  )).join("; ");
+  const finalPaddingColor = transparentPadding
+    ? chromaKey
+    : OPAQUE_TILESET_PADDING;
+  const margin = tileset.margin ?? 0;
+  const spacing = tileset.spacing ?? 0;
+  const finalPaddingDescription = transparentPadding
+    ? `the exact chroma-key color ${hexColor(finalPaddingColor)}; the server converts it to transparency`
+    : `the exact flat opaque neutral color ${hexColor(finalPaddingColor)}`;
+
+  return [
+    `Actual returned raster canvas: ${geometry.canvas.width}x${geometry.canvas.height} pixels. These are the coordinates you must draw in.`,
+    `Place the one complete tileset sheet only inside the active sheet rectangle [${tilesetSheetRectLabel(geometry.sheet)}]. It represents the final ${geometry.logical.width}x${geometry.logical.height} sheet at one uniform ${formatTilesetScale(geometry.scale)}x scale.`,
+    `Exact generation-canvas usable tile rectangles in immutable row-major order: ${usableRectangles}.`,
+    "The generation-canvas rectangles above are authoritative for the returned raster and supersede the smaller logical final-resolution coordinates stated elsewhere. Do not scale, reinterpret, center, or rearrange them.",
+    "Put exactly one requested tile in each usable rectangle. Keep every visible pixel wholly inside its own rectangle. Edge-to-edge terrain may fill its rectangle; an isolated object may use internal empty padding, but neither may cross a rectangle boundary.",
+    `Fill every pixel outside the active sheet rectangle with the exact flat temporary padding color ${hexColor(chromaKey)} and put no artwork there. The server crops this padding away; it is not part of the final tileset.`,
+    ...(margin > 0 || spacing > 0
+      ? [
+          `Inside the active sheet, fill all declared outer-margin and inter-cell-spacing pixels with ${finalPaddingDescription}. Put no artwork in those pixels.`
+        ]
+      : []),
+    ...(unusedRectangles
+      ? [
+          `Leave these unused generation-canvas cells empty and filled only with ${finalPaddingDescription}: ${unusedRectangles}.`
+        ]
+      : [])
+  ];
+}
+
+function formatTilesetScale(scale: number): string {
+  return Number.isInteger(scale) ? String(scale) : scale.toFixed(4).replace(/0+$/, "");
+}
+
+function tilesetOutputPadding(
+  transparent: boolean,
+  chromaKey: RgbColor
+): TilesetSheetOutputPadding {
+  return {
+    color: transparent ? chromaKey : OPAQUE_TILESET_PADDING,
+    transparent
+  };
 }
 
 function tilesetTileRectangle(asset: AiAssetDefinition, index: number): string {

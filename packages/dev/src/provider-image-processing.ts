@@ -387,10 +387,12 @@ export function removeTilesetChromaBackground(
   const png = PNG.sync.read(Buffer.from(image));
   const tileCapacity = tileset.columns * tileset.rows;
   const tileCount = Math.min(tileset.tileCount ?? tileCapacity, tileCapacity);
+  const cellPixels = new Uint8Array(png.width * png.height);
 
   for (let index = 0; index < tileCapacity; index += 1) {
     const bounds = scaledTilesetCellBounds(png, tileset, index);
     if (!bounds) continue;
+    markPngRect(cellPixels, png.width, bounds.x, bounds.y, bounds.width, bounds.height);
 
     if (index >= tileCount) {
       clearPngRect(png, bounds.x, bounds.y, bounds.width, bounds.height);
@@ -403,7 +405,34 @@ export function removeTilesetChromaBackground(
     }
   }
 
+  clearUnmarkedPngPixels(png, cellPixels);
+
   return PNG.sync.write(png);
+}
+
+function markPngRect(
+  pixels: Uint8Array,
+  imageWidth: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): void {
+  for (let localY = 0; localY < height; localY += 1) {
+    const start = (y + localY) * imageWidth + x;
+    pixels.fill(1, start, start + width);
+  }
+}
+
+function clearUnmarkedPngPixels(png: PNG, markedPixels: Uint8Array): void {
+  for (let index = 0; index < markedPixels.length; index += 1) {
+    if (markedPixels[index]) continue;
+    const offset = index * 4;
+    png.data[offset] = 0;
+    png.data[offset + 1] = 0;
+    png.data[offset + 2] = 0;
+    png.data[offset + 3] = 0;
+  }
 }
 
 function removeDetectedBackground(png: PNG, backgroundRemoval: BackgroundRemoval): void {

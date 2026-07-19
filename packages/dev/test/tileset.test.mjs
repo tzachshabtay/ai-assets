@@ -135,8 +135,8 @@ test("structured tileset prompts bake geometry and preserve exact tile order", (
 
   const basePrompt = tilesetBasePrompt(asset);
   assert.equal(basePrompt, [
-    "Create a deterministic hand-authored 16×16 pixel tileset.",
-    "Output one 32×16 image arranged as a 2-column × 1-row grid with no margin or spacing.",
+    "Create a deterministic hand-authored tileset whose final tile resolution is 16×16 pixels.",
+    "The final post-processed asset is one 32×16 image arranged as a 2-column × 1-row grid with no margin or spacing.",
     "Read tiles left-to-right, then top-to-bottom.",
     "Use one cohesive visual style, palette, scale, lighting, perspective, and pixel treatment across every tile.",
     "Draw exactly these 2 tiles in this exact order:",
@@ -165,6 +165,43 @@ test("structured tileset prompts bake geometry and preserve exact tile order", (
   assert.match(explicitPrompt, /^Use a moonlit blue palette\./);
   assert.ok(explicitPrompt.indexOf(basePrompt) > 0);
   assert.ok(explicitPrompt.indexOf("Tile 1 —") < explicitPrompt.indexOf("Tile 2 —"));
+});
+
+test("base tileset variations never receive animation variation instructions", () => {
+  const asset = tilesetAsset();
+  asset.tileset.tiles = [
+    { prompt: "Seamless mossy grass." },
+    { prompt: "A centered brass key on transparent padding." }
+  ];
+  const context = {
+    prompt: asset.prompt,
+    model: "gpt-image-2",
+    outputFormat: "png",
+    requestedBackground: "transparent",
+    chromaKey: { red: 255, green: 0, blue: 255 },
+    variation: "candidate-two",
+    variationIndex: 1,
+    variationCount: 3
+  };
+
+  const basePrompt = gameAssetPrompt({ asset }, context);
+  assert.match(basePrompt, /complete base tileset candidate/i);
+  assert.match(basePrompt, /Base tileset variation direction/i);
+  assert.match(basePrompt, /Never animate a tile/i);
+  assert.doesNotMatch(basePrompt, /coherent motion treatment/i);
+  assert.doesNotMatch(basePrompt, /pose progression|different timing|secondary motion/i);
+
+  const animationPrompt = gameAssetPrompt({
+    asset,
+    purpose: "tileset-animation",
+    references: [{
+      image: pngImage(32, 16, 12),
+      mimeType: "image/png",
+      fileName: "base.png"
+    }]
+  }, context);
+  assert.match(animationPrompt, /coherent motion treatment/i);
+  assert.doesNotMatch(animationPrompt, /Base tileset variation direction/i);
 });
 
 test("image generation chooses the closest supported aspect ratio by default", () => {
@@ -333,11 +370,11 @@ test("tileset animation generation uses three sequential candidate branches", as
     calls.find((call) => call.references.length === 2).prompt,
     /Reference 1 is the immutable spatial source of truth/
   );
-  assert.match(calls[0].prompt, /Full-sheet tileset geometry: output exactly one 32x16 sheet/);
-  assert.match(calls[0].prompt, /Exact usable tile rectangles: Tile 1 \[x=0-15, y=0-15\]; Tile 2 \[x=16-31, y=0-15\]/);
-  assert.match(calls[0].prompt, /Tile 1 \[x=0-15, y=0-15\]: Tile zero stays perfectly still\./);
-  assert.match(calls[0].prompt, /Tile 2 \[x=16-31, y=0-15\]: Tile one ripples clockwise\./);
-  assert.ok(calls[0].prompt.indexOf("Tile 1 [") < calls[0].prompt.indexOf("Tile 2 ["));
+  assert.match(calls[0].prompt, /Logical final-sheet geometry after server crop and downsampling: one 32x16 sheet/);
+  assert.match(calls[0].prompt, /Logical final-resolution usable tile rectangles: Tile 1 \[x=0-15, y=0-15\]; Tile 2 \[x=16-31, y=0-15\]/);
+  assert.match(calls[0].prompt, /Tile 1: Tile zero stays perfectly still\./);
+  assert.match(calls[0].prompt, /Tile 2: Tile one ripples clockwise\./);
+  assert.ok(calls[0].prompt.indexOf("Tile 1:") < calls[0].prompt.indexOf("Tile 2:"));
   assert.doesNotMatch(calls[0].prompt, /Loop the water\./);
   assert.doesNotMatch(calls[0].prompt, /Draw exactly these/);
   assert.doesNotMatch(calls[0].prompt, /Seamless mossy grass/);

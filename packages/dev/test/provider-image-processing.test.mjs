@@ -142,6 +142,32 @@ test("tileset cleanup removes the declared chroma from any tile that uses it", (
   assert.equal(alphaAt(cleaned, 11, 3), 255);
 });
 
+test("tileset cleanup clears declared margins and spacing", () => {
+  const png = new PNG({ width: 11, height: 6 });
+  fillRect(png, 0, 0, 11, 6, [0, 255, 0, 255]);
+  fillRect(png, 1, 1, 4, 4, [30, 80, 180, 255]);
+  fillRect(png, 6, 1, 4, 4, [210, 40, 30, 255]);
+
+  const cleaned = PNG.sync.read(removeTilesetChromaBackground(
+    PNG.sync.write(png),
+    {
+      tileWidth: 4,
+      tileHeight: 4,
+      columns: 2,
+      rows: 1,
+      margin: 1,
+      spacing: 1
+    },
+    { red: 0, green: 255, blue: 0 }
+  ));
+
+  assert.equal(alphaAt(cleaned, 0, 0), 0);
+  assert.equal(alphaAt(cleaned, 5, 3), 0);
+  assert.equal(alphaAt(cleaned, 10, 5), 0);
+  assert.equal(alphaAt(cleaned, 2, 2), 255);
+  assert.equal(alphaAt(cleaned, 7, 2), 255);
+});
+
 test("tileset prompt lets the model choose transparency using one declared chroma", () => {
   const asset = {
     id: "mixed.tileset",
