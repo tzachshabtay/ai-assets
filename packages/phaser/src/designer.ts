@@ -1228,6 +1228,13 @@ export function installAiAssetDesigner(
         count: 3
       }, (candidate) => {
         if (activeGeneration?.id !== currentGenerationId) return;
+        if (candidate.frames.length !== definition.frameCount) {
+          throw new Error(
+            `Requested ${definition.frameCount} frames, but the generation server returned ` +
+              `${candidate.frames.length} for option ${candidate.index + 1}. ` +
+              "Restart the AI asset dev server and regenerate the options."
+          );
+        }
         const session = displayedTilesetAnimationOptions;
         const generated = [
           ...(session?.assetId === assetId && session.animationKey === animationKey
@@ -1249,6 +1256,16 @@ export function installAiAssetDesigner(
       if (candidates.length !== 3) {
         throw new Error(`Expected 3 tileset animation candidates, received ${candidates.length}.`);
       }
+      const mismatchedCandidate = candidates.find((candidate) => (
+        candidate.frames.length !== definition.frameCount
+      ));
+      if (mismatchedCandidate) {
+        throw new Error(
+          `Requested ${definition.frameCount} frames, but option ` +
+            `${mismatchedCandidate.index + 1} contains ${mismatchedCandidate.frames.length}. ` +
+            "Regenerate the options for the current frame count."
+        );
+      }
       if (!isWorkflowPanelCurrent()) return;
       renderTilesetAnimationOptions(assetId, definition, candidates);
       setStatus(
@@ -1265,6 +1282,12 @@ export function installAiAssetDesigner(
       }
 
       if (isWorkflowPanelCurrent()) {
+        if (
+          displayedTilesetAnimationOptions?.assetId === assetId &&
+          displayedTilesetAnimationOptions.animationKey === animationKey
+        ) {
+          clearGeneratedOptions();
+        }
         setStatus(
           elements,
           `Tileset animation generation failed. ${errorMessage(error)}`,
