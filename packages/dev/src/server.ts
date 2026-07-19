@@ -68,6 +68,8 @@ export type GenerateTilesetAnimationStreamRequest = {
   animationKey: string;
   prompt?: string;
   count?: number;
+  baseDataUrl?: string;
+  styleGuide?: DebugStyleGuide;
 };
 
 export type GeneratedTilesetAnimationStreamOption = {
@@ -253,7 +255,13 @@ async function routeRequest(
 
     const resolved = resolveAiAsset(manifest, asset.id);
     const baseFileName = path.basename(resolved.version.file);
-    const baseReference = {
+    const [providedBaseReference] = body.baseDataUrl
+      ? referencesFromDataUrls([{
+          name: `base-${asset.id}.png`,
+          dataUrl: body.baseDataUrl
+        }])
+      : [];
+    const baseReference = providedBaseReference ?? {
       image: await readFile(path.join(options.assetsDir, baseFileName)),
       mimeType: mimeTypeFromFile(baseFileName),
       fileName: `base-${baseFileName}`
@@ -273,8 +281,12 @@ async function routeRequest(
         prompt: body.prompt,
         count: body.count,
         baseReference,
-        stylePrompt: manifest.styleGuide?.prompt,
-        styleReferences: await getStyleReferenceImages(options, manifest.styleGuide),
+        stylePrompt: body.styleGuide
+          ? body.styleGuide.prompt?.trim() || undefined
+          : manifest.styleGuide?.prompt,
+        styleReferences: body.styleGuide
+          ? referencesFromDataUrls(body.styleGuide.images)
+          : await getStyleReferenceImages(options, manifest.styleGuide),
         signal: generation.signal
       }, (option) => {
         generation.signal.throwIfAborted();

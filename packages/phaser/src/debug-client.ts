@@ -89,6 +89,8 @@ export type GenerateTilesetAnimationRequest = {
   animationKey: string;
   prompt?: string;
   count?: number;
+  baseDataUrl?: string;
+  styleGuide?: DebugStyleGuideDraft;
 };
 
 export type GeneratedTilesetAnimationCandidate = {

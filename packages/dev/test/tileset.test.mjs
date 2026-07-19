@@ -464,8 +464,10 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
   ]);
 
   let generatedColor = 20;
+  const providerRequests = [];
   const provider = {
     async generate(request) {
+      providerRequests.push(request);
       generatedColor += 1;
       return [{
         image: pngImage(32, 16, generatedColor),
@@ -486,12 +488,19 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
   const address = devServer.server.address();
   assert.ok(address && typeof address !== "string");
   const origin = `http://127.0.0.1:${address.port}`;
+  const providedBase = pngImage(32, 16, 99);
 
   try {
     const streamResponse = await fetch(`${origin}/__ai-assets/generate-tileset-animation-stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assetId: "forest", animationKey: "water" })
+      body: JSON.stringify({
+        assetId: "forest",
+        animationKey: "water",
+        count: 1,
+        baseDataUrl: `data:image/png;base64,${providedBase.toString("base64")}`,
+        styleGuide: { prompt: "Hand-painted moonlit forest.", images: [] }
+      })
     });
     assert.equal(streamResponse.status, 200);
     const events = (await streamResponse.text())
@@ -499,16 +508,22 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
       .split("\n")
       .map((line) => JSON.parse(line));
     const branchEvents = events.filter((event) => event.type === "option");
-    assert.equal(branchEvents.length, 3);
+    assert.equal(branchEvents.length, 1);
     assert.deepEqual(
       branchEvents.map((event) => event.option.index).sort(),
-      [0, 1, 2]
+      [0]
     );
     assert.ok(branchEvents.every((event) =>
       event.option.animationKey === "water" &&
       event.option.frames.map((frame) => frame.index).join(",") === "0,1"
     ));
     assert.equal(events.at(-1).type, "done");
+    assert.ok(providerRequests.every((request) =>
+      request.stylePrompt === "Hand-painted moonlit forest."
+    ));
+    assert.ok(providerRequests.every((request) =>
+      Buffer.compare(request.references[0].image, providedBase) === 0
+    ));
 
     const frames = branchEvents[0].option.frames.map((frame) => frame.dataUrl);
     const saveResponse = await fetch(`${origin}/__ai-assets/save-tileset-animation`, {

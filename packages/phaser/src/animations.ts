@@ -13,6 +13,8 @@ export type CreateAiAnimationsFrameTransformHandling = "warn" | "ignore";
 
 export type CreateAiAnimationsOptions = {
   onFrameTransforms?: CreateAiAnimationsFrameTransformHandling;
+  asset?: AiAssetDefinition;
+  textureKey?: string;
 };
 
 export function createAiAnimations(
@@ -30,15 +32,16 @@ export function createAiAnimations(
   const resolved = unresolvedAsset && Object.keys(unresolvedAsset.versions).length === 0
     ? { asset: unresolvedAsset, versionName: "" }
     : resolveAiAsset(manifest, selection);
-  const animations = resolved.asset.animations ?? [];
-  const textureKey = aiTextureKey({
+  const asset = options.asset ?? resolved.asset;
+  const animations = asset.animations ?? [];
+  const textureKey = options.textureKey ?? aiTextureKey({
     assetId: resolved.asset.id,
     versionName: resolved.versionName === resolved.asset.activeVersion
       ? undefined
       : resolved.versionName
   });
 
-  warnIfUnhandledFrameTransforms(resolved.asset, animations, options);
+  warnIfUnhandledFrameTransforms(asset, animations, options);
 
   for (const animation of animations) {
     const frames = scene.anims.generateFrameNumbers(textureKey, {

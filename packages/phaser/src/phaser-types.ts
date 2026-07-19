@@ -55,4 +55,5 @@ export type PhaserSceneLike = {
 
 export type PhaserImageLike = {
   setTexture(key: string, frame?: string | number): unknown;
+  stop?(): unknown;
 };

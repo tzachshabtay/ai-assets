@@ -86,6 +86,12 @@ export type AiAssetDesignerOptions = {
     | Record<string, AiAssetPreviewDisplaySize>
     | ((assetId: string, asset: AiAssetDefinition) => AiAssetPreviewDisplaySize | undefined);
   onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
+  onTilesetAnimationPreview?(
+    assetId: string,
+    animationKey: string,
+    textureKeys: string[],
+    asset: AiAssetDefinition
+  ): void;
   onAssetReady?(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
   onManifestUpdated?(manifest: AiAssetManifest): void;
 };
@@ -170,6 +176,7 @@ export function installAiAssetDesigner(
     option: GeneratedDebugOption;
     inheritAnimations: boolean;
     previewedVersionName?: string;
+    tilesetAnimations?: Record<string, string[]>;
   }>();
   let styleGuideDraft = styleGuideDraftFromManifest(manifest, resolveAssetUrl);
   const formatDrafts = new Map<string, AiAssetFormat>();
@@ -243,18 +250,62 @@ export function installAiAssetDesigner(
   const rememberPendingOption = (
     assetId: string,
     option: GeneratedDebugOption,
-    pending: { inheritAnimations?: boolean; previewedVersionName?: string } = {}
+    pending: {
+      inheritAnimations?: boolean;
+      previewedVersionName?: string;
+      tilesetAnimations?: Record<string, string[]>;
+    } = {}
   ) => {
     pendingOptions.set(assetId, {
       option,
       inheritAnimations: Boolean(pending.inheritAnimations),
-      previewedVersionName: pending.previewedVersionName
+      previewedVersionName: pending.previewedVersionName,
+      tilesetAnimations: pending.tilesetAnimations
     });
     syncPromoteAllButton();
   };
   const forgetPendingOption = (assetId: string) => {
     pendingOptions.delete(assetId);
     syncPromoteAllButton();
+  };
+  const installTilesetAnimationFrameTextures = async (
+    frames: string[],
+    asset: AiAssetDefinition,
+    textureKeyForFrame: (index: number) => string
+  ) => {
+    const tileset = tilesetMetadataForAsset(asset);
+    if (!tileset || !options.scene.textures.addSpriteSheet) return [];
+
+    const images = await Promise.all(frames.map((frame) => loadImageElement(frame)));
+    const textureKeys = images.map((image, index) => {
+      const textureKey = textureKeyForFrame(index);
+      if (options.scene.textures.exists(textureKey)) {
+        options.scene.textures.remove(textureKey);
+      }
+      options.scene.textures.addSpriteSheet?.(textureKey, image, {
+        frameWidth: tileset.tileWidth,
+        frameHeight: tileset.tileHeight,
+        margin: tileset.margin,
+        spacing: tileset.spacing
+      });
+      return textureKey;
+    });
+    return textureKeys;
+  };
+  const previewTilesetAnimationFrames = async (
+    assetId: string,
+    animationKey: string,
+    frames: string[],
+    asset: AiAssetDefinition
+  ) => {
+    const previewId = Date.now();
+    const textureKeys = await installTilesetAnimationFrameTextures(
+      frames,
+      asset,
+      (index) =>
+        `ai-preview:${assetId}:tileset:${encodeURIComponent(animationKey)}:${index}:${previewId}`
+    );
+    options.onTilesetAnimationPreview?.(assetId, animationKey, textureKeys, asset);
   };
 
   const applyOpenState = (isOpen: boolean) => {
@@ -665,7 +716,11 @@ export function installAiAssetDesigner(
         label: readableAssetName(selectedTargetAssetId),
         playback: activeVersion.audioPlayback
       });
-      options.onPreview(selectedTargetAssetId, activeVersionSource, asset);
+      (options.onAssetReady ?? options.onPreview)(
+        selectedTargetAssetId,
+        activeVersionSource,
+        asset
+      );
       setStatus(elements, "Reverted preview to the active version.", "info");
     } else {
       elements.currentAudio.innerHTML = "";
@@ -678,7 +733,7 @@ export function installAiAssetDesigner(
         assetId: selectedTargetAssetId,
         src: activeVersionSource,
         onPreview(assetId, textureKey, previewAsset) {
-          options.onPreview(assetId, textureKey, previewAsset);
+          (options.onAssetReady ?? options.onPreview)(assetId, textureKey, previewAsset);
           setStatus(elements, "Reverted preview to the active version.", "info");
         },
         onError(error) {
@@ -1526,6 +1581,7 @@ export function installAiAssetDesigner(
     syncMixTilesetButton();
     const promotedAssetId = selectedTargetAssetId;
     const promotedOption = selectedOption;
+    const promotedPending = pendingOptions.get(promotedAssetId);
     const promotionPanelRevision = panelRevision;
     const promotionSelectedAssetId = selectedAssetId;
     const promotionTargetId = selectedTargetId;
@@ -1544,6 +1600,8 @@ export function installAiAssetDesigner(
     elements.panel.setAttribute("inert", "");
 
     let saved: Awaited<ReturnType<AiAssetDebugClient["save"]>>;
+    let promotedAsset: AiAssetDefinition;
+    let promotedVersionName: string;
     try {
       saved = await client.save({
         assetId: promotedAssetId,
@@ -1568,6 +1626,31 @@ export function installAiAssetDesigner(
         activate: true,
         notes: "Promoted from the AI asset designer."
       });
+      manifest = saved.manifest;
+      promotedAsset = saved.asset;
+      promotedVersionName = saved.versionName;
+      for (const [animationKey, frames] of Object.entries(
+        promotedPending?.tilesetAnimations ?? {}
+      )) {
+        const animationSaved = await client.saveTilesetAnimation({
+          assetId: promotedAssetId,
+          animationKey,
+          frames,
+          notes: "Regenerated with the asset style during promotion."
+        });
+        manifest = animationSaved.manifest;
+        promotedAsset = animationSaved.asset;
+        promotedVersionName = animationSaved.versionName;
+      }
+      for (const [animationKey, frames] of Object.entries(
+        promotedPending?.tilesetAnimations ?? {}
+      )) {
+        await installTilesetAnimationFrameTextures(
+          frames,
+          promotedAsset,
+          (index) => aiTilesetAnimationTextureKey(promotedAssetId, animationKey, index)
+        );
+      }
     } catch (error) {
       if (activePromotionId === currentPromotionId) {
         activePromotionId = undefined;
@@ -1583,9 +1666,7 @@ export function installAiAssetDesigner(
       return;
     }
 
-    manifest = saved.manifest;
     forgetPendingOption(promotedAssetId);
-    const promotedAsset = saved.asset;
     if (isDesignerTilesetAsset(promotedAsset)) {
       tilesetPromptDrafts.set(
         promotedAssetId,
@@ -1598,9 +1679,9 @@ export function installAiAssetDesigner(
       liveRefreshError ??= error;
     };
 
-    if (promotedAsset.activeVersion !== saved.versionName) {
+    if (promotedAsset.activeVersion !== promotedVersionName) {
       captureLiveRefreshError(new Error(
-        `Saved version "${saved.versionName}" was not returned as the active version.`
+        `Saved version "${promotedVersionName}" was not returned as the active version.`
       ));
     } else if (!isAudioAsset(promotedAsset)) {
       try {
@@ -1669,7 +1750,7 @@ export function installAiAssetDesigner(
           "error"
         );
       } else {
-        setStatus(elements, `Promoted ${promotedAssetId} to ${saved.versionName}.`, "success");
+        setStatus(elements, `Promoted ${promotedAssetId} to ${promotedVersionName}.`, "success");
       }
     }
 
@@ -1742,11 +1823,32 @@ export function installAiAssetDesigner(
           notes: "Promoted from the AI asset designer with Promote all."
         });
         manifest = saved.manifest;
-        const promotedAsset = saved.asset;
+        let promotedAsset = saved.asset;
+        for (const [animationKey, frames] of Object.entries(
+          pending.tilesetAnimations ?? {}
+        )) {
+          const animationSaved = await client.saveTilesetAnimation({
+            assetId,
+            animationKey,
+            frames,
+            notes: "Regenerated with the asset style during Promote all."
+          });
+          manifest = animationSaved.manifest;
+          promotedAsset = animationSaved.asset;
+        }
         if (isDesignerTilesetAsset(promotedAsset)) {
           tilesetPromptDrafts.set(
             assetId,
             promotedAsset.tileset?.tiles?.map((tile) => tile.prompt) ?? []
+          );
+        }
+        for (const [animationKey, frames] of Object.entries(
+          pending.tilesetAnimations ?? {}
+        )) {
+          await installTilesetAnimationFrameTextures(
+            frames,
+            promotedAsset,
+            (frameIndex) => aiTilesetAnimationTextureKey(assetId, animationKey, frameIndex)
           );
         }
 
@@ -1912,6 +2014,26 @@ export function installAiAssetDesigner(
     });
   });
 
+  const previewBulkOption = (
+    assetId: string,
+    option: GeneratedDebugOption
+  ): Promise<AiAssetDefinition> => new Promise((resolve, reject) => {
+    const previewAsset = assetWithGeneratedGeometry(manifest.assets[assetId], option);
+    previewImageSource({
+      scene: options.scene,
+      manifest,
+      assetId,
+      src: option.dataUrl,
+      textureKey: `ai-bulk-preview:${assetId}:${Date.now()}`,
+      assetOverride: previewAsset,
+      onPreview(previewAssetId, textureKey, asset) {
+        options.onPreview(previewAssetId, textureKey, asset);
+        resolve(asset);
+      },
+      onError: reject
+    });
+  });
+
   const regenerateAllGraphicalAssets = async (styleGuide: DebugStyleGuideDraft) => {
     if (activeGeneration || activePromotionId !== undefined) return;
 
@@ -1960,13 +2082,44 @@ export function installAiAssetDesigner(
         }
 
         rememberPendingOption(assetId, option);
-        previewOption({
-          scene: options.scene,
-          manifest,
-          assetId,
-          option,
-          onPreview: options.onPreview
-        });
+        const previewAsset = await previewBulkOption(assetId, option);
+        const generatedTilesetAnimations: Record<string, string[]> = {};
+        for (const animation of previewAsset.tileset?.animations ?? []) {
+          setStatus(
+            elements,
+            `Regenerating ${readableAssetName(assetId)} · ` +
+              `${readableAssetName(animation.key)} (${index + 1}/${assetIds.length})...`,
+            "busy"
+          );
+          const candidates = await client.generateTilesetAnimationStream({
+            assetId,
+            animationKey: animation.key,
+            prompt: animation.prompt,
+            count: 1,
+            baseDataUrl: option.dataUrl,
+            styleGuide
+          }, () => {}, {
+            signal: controller.signal
+          });
+          const candidate = candidates[0];
+          if (!candidate || candidate.frames.length !== animation.frameCount) {
+            throw new Error(
+              `${readableAssetName(animation.key)} did not return its ` +
+                `${animation.frameCount} required frames.`
+            );
+          }
+          const frameDataUrls = candidate.frames.map((frame) => frame.dataUrl);
+          generatedTilesetAnimations[animation.key] = frameDataUrls;
+          rememberPendingOption(assetId, option, {
+            tilesetAnimations: { ...generatedTilesetAnimations }
+          });
+          await previewTilesetAnimationFrames(
+            assetId,
+            animation.key,
+            frameDataUrls,
+            previewAsset
+          );
+        }
         generatedCount += 1;
 
         if (selectedTargetAssetId === assetId) {

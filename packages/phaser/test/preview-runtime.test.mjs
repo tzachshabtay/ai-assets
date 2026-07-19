@@ -246,6 +246,154 @@ test("temporary previews update current and future bindings without replacing th
   ]);
 });
 
+test("a spritesheet preview rebuilds animations against the temporary texture", () => {
+  const asset = {
+    id: "hero",
+    kind: "spritesheet",
+    prompt: "Walking hero.",
+    dimensions: { width: 32, height: 16 },
+    frameGrid: {
+      frameWidth: 16,
+      frameHeight: 16,
+      columns: 2,
+      rows: 1,
+      frameCount: 2
+    },
+    animations: [{ key: "hero.walk", frames: [0, 1], frameRate: 8, repeat: -1 }],
+    activeVersion: "v1",
+    versions: {
+      v1: {
+        name: "v1",
+        file: "/hero.png",
+        prompt: "Walking hero.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+      }
+    }
+  };
+  const manifest = { schemaVersion: 1, assets: { hero: asset } };
+  const removed = [];
+  const generatedFrom = [];
+  const created = [];
+  const scene = {
+    load: { image() {}, spritesheet() {} },
+    textures: { exists: () => true },
+    anims: {
+      exists: () => true,
+      remove(key) {
+        removed.push(key);
+      },
+      generateFrameNumbers(textureKey, config) {
+        generatedFrom.push({ textureKey, frames: config.frames });
+        return config.frames.map((frame) => ({ key: textureKey, frame }));
+      },
+      create(config) {
+        created.push(config);
+      }
+    }
+  };
+  const runtime = new AiAssetRuntime(scene, manifest);
+  const targetCalls = [];
+  runtime.bindTexture({
+    stop() {
+      targetCalls.push({ type: "stop" });
+    },
+    setTexture(key, frame) {
+      targetCalls.push({ type: "texture", key, frame });
+    }
+  }, "hero", { frame: 0, setInitialTexture: false });
+
+  runtime.designerCallbacks().onPreview("hero", "hero-preview", asset);
+
+  assert.deepEqual(removed, ["hero.walk"]);
+  assert.deepEqual(generatedFrom, [{ textureKey: "hero-preview", frames: [0, 1] }]);
+  assert.equal(created.length, 1);
+  assert.deepEqual(targetCalls, [
+    { type: "stop" },
+    { type: "texture", key: "hero-preview", frame: 0 }
+  ]);
+});
+
+test("a tileset preview pauses old animation sheets and active restore resumes them", () => {
+  const asset = tilesetAsset();
+  asset.tileset.animations = [{
+    key: "forest.water",
+    prompt: "Shimmering water.",
+    frameCount: 2,
+    frameRate: 2,
+    repeat: -1
+  }];
+  asset.versions.v1.tilesetAnimations = {
+    "forest.water": { files: ["/water-0.png", "/water-1.png"] }
+  };
+  const manifest = { schemaVersion: 1, assets: { forest: asset } };
+  const animationKeys = new Set();
+  const removed = [];
+  const created = [];
+  const scene = {
+    load: { image() {}, spritesheet() {} },
+    textures: { exists: () => true },
+    anims: {
+      exists(key) {
+        return animationKeys.has(key);
+      },
+      remove(key) {
+        removed.push(key);
+        animationKeys.delete(key);
+      },
+      generateFrameNumbers() {
+        return [];
+      },
+      create(config) {
+        created.push(config);
+        animationKeys.add(config.key);
+      }
+    }
+  };
+  const runtime = new AiAssetRuntime(scene, manifest);
+  const targetCalls = [];
+  const target = {
+    play(key) {
+      targetCalls.push({ type: "play", key });
+    },
+    stop() {
+      targetCalls.push({ type: "stop" });
+    },
+    setTexture(key, frame) {
+      targetCalls.push({ type: "texture", key, frame });
+    }
+  };
+  const playback = runtime.playTilesetAnimation(target, "forest", 1, "forest.water");
+
+  const callbacks = runtime.designerCallbacks();
+  callbacks.onPreview("forest", "forest-preview", asset);
+  assert.deepEqual(targetCalls.slice(-2), [
+    { type: "stop" },
+    { type: "texture", key: "forest-preview", frame: 1 }
+  ]);
+
+  callbacks.onTilesetAnimationPreview(
+    "forest",
+    "forest.water",
+    ["water-preview-0", "water-preview-1"],
+    asset
+  );
+  assert.equal(targetCalls.at(-1).type, "play");
+  assert.deepEqual(created.at(-1).frames, [
+    { key: "water-preview-0", frame: 1, duration: undefined },
+    { key: "water-preview-1", frame: 1, duration: undefined }
+  ]);
+
+  callbacks.onAssetReady("forest", "forest", asset);
+  assert.equal(removed.length, 2);
+  assert.equal(created.length, 3);
+  assert.equal(targetCalls.at(-1).type, "play");
+
+  playback.destroy();
+  const callCount = targetCalls.length;
+  callbacks.onPreview("forest", "another-preview", asset);
+  assert.equal(targetCalls.length, callCount);
+});
+
 test("a promoted tileset install survives transient previews and replaces the canonical texture", async () => {
   const previousImage = globalThis.Image;
   const previousWindow = globalThis.window;

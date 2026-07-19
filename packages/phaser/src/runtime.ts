@@ -20,7 +20,7 @@ import {
   type AiAssetFrameTransformSize,
   type AiAssetFrameTransformTarget
 } from "./frame-transforms.js";
-import { aiTextureKey } from "./keys.js";
+import { aiTextureKey, aiTilesetAnimationKey } from "./keys.js";
 import { aiAssetPlaceholderDataUrl } from "./placeholder.js";
 import type { PhaserImageLike, PhaserSceneLike } from "./phaser-types.js";
 import { createAiTilesetAnimation } from "./tilesets.js";
@@ -87,6 +87,12 @@ export type AiAssetTilesetAnimationPlayback = {
 
 export type AiAssetRuntimeDesignerCallbacks = {
   onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
+  onTilesetAnimationPreview(
+    assetId: string,
+    animationKey: string,
+    textureKeys: string[],
+    asset: AiAssetDefinition
+  ): void;
   onAssetReady(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
   onManifestUpdated(manifest: AiAssetManifest): void;
 };
@@ -95,12 +101,22 @@ type StoredTextureBinding = AiAssetTextureBinding & {
   targetAssetId: string;
 };
 
+type StoredTilesetAnimationBinding = {
+  target: AiAssetAnimationPlaybackTarget;
+  selection: AiAssetSelection | string;
+  targetAssetId: string;
+  tileFrame: number;
+  animationKey: string;
+  options: AiAssetPlayTilesetAnimationOptions;
+};
+
 export class AiAssetRuntime {
   readonly scene: PhaserSceneLike;
   readonly manifest: AiAssetManifest;
   readonly baseUrl?: string;
   readonly targetId?: string;
   private readonly textureBindings = new Set<StoredTextureBinding>();
+  private readonly tilesetAnimationBindings = new Set<StoredTilesetAnimationBinding>();
   private readonly previewTextureKeys = new Map<string, string>();
   private readonly warnedMissingTextureKeys = new Set<string>();
 
@@ -227,6 +243,15 @@ export class AiAssetRuntime {
     const resolvedSelection = this.withTarget(selection);
     const assetId = this.resolveAssetId(resolvedSelection);
     const resolved = resolveAiAsset(this.manifest, resolvedSelection);
+    const binding: StoredTilesetAnimationBinding = {
+      target,
+      selection: resolvedSelection,
+      targetAssetId: assetId,
+      tileFrame,
+      animationKey,
+      options
+    };
+    this.tilesetAnimationBindings.add(binding);
     const created = createAiTilesetAnimation(
       this.scene,
       this.manifest,
@@ -242,7 +267,9 @@ export class AiAssetRuntime {
         assetId,
         tileFrame,
         durationMs: 0,
-        destroy() {}
+        destroy: () => {
+          this.tilesetAnimationBindings.delete(binding);
+        }
       };
     }
 
@@ -259,7 +286,9 @@ export class AiAssetRuntime {
       animationKey: created.animationKey,
       tileFrame,
       durationMs: created.durationMs,
-      destroy() {}
+      destroy: () => {
+        this.tilesetAnimationBindings.delete(binding);
+      }
     };
   }
 
@@ -271,6 +300,7 @@ export class AiAssetRuntime {
         // A tileset binding without an explicit frame may represent any tile.
         // Avoid silently collapsing it to frame zero during preview/promotion.
         if (asset.kind === "tileset" && binding.frame === undefined) continue;
+        binding.target.stop?.();
         binding.target.setTexture(textureKey, binding.frame);
       }
     }
@@ -285,17 +315,27 @@ export class AiAssetRuntime {
     for (const binding of this.textureBindings) {
       binding.targetAssetId = this.resolveAssetId(binding.selection);
     }
+    for (const binding of this.tilesetAnimationBindings) {
+      binding.targetAssetId = this.resolveAssetId(binding.selection);
+    }
   }
 
   designerCallbacks(): AiAssetRuntimeDesignerCallbacks {
     return {
       onPreview: (assetId, textureKey, asset) => {
         this.previewTextureKeys.set(assetId, textureKey);
+        this.refreshAssetAnimations(assetId, textureKey, asset);
         this.applyAssetTexture(assetId, textureKey, asset);
+        this.pauseTilesetAnimations(assetId, textureKey);
+      },
+      onTilesetAnimationPreview: (assetId, animationKey, textureKeys, asset) => {
+        this.previewTilesetAnimation(assetId, animationKey, textureKeys, asset);
       },
       onAssetReady: (assetId, textureKey, asset) => {
         this.previewTextureKeys.delete(assetId);
+        this.refreshAssetAnimations(assetId, textureKey, asset);
         this.applyAssetTexture(assetId, textureKey, asset);
+        this.resumeTilesetAnimations(assetId, asset);
       },
       onManifestUpdated: (manifest) => {
         this.syncManifest(manifest);
@@ -318,6 +358,110 @@ export class AiAssetRuntime {
     }
 
     return `${this.baseUrl.replace(/\/$/, "")}/${resolved.version.file.replace(/^\//, "")}`;
+  }
+
+  private refreshAssetAnimations(
+    assetId: string,
+    textureKey: string,
+    asset: AiAssetDefinition
+  ): void {
+    if (!asset.animations?.length || !this.scene.anims) return;
+
+    for (const animation of asset.animations) {
+      this.scene.anims.remove?.(animation.key);
+    }
+    createAiAnimations(this.scene, this.manifest, assetId, {
+      asset,
+      textureKey,
+      onFrameTransforms: "ignore"
+    });
+  }
+
+  private pauseTilesetAnimations(assetId: string, textureKey: string): void {
+    for (const binding of this.tilesetAnimationBindings) {
+      if (binding.targetAssetId !== assetId) continue;
+      binding.target.stop?.();
+      binding.target.setTexture(textureKey, binding.tileFrame);
+    }
+  }
+
+  private previewTilesetAnimation(
+    assetId: string,
+    animationKey: string,
+    textureKeys: string[],
+    asset: AiAssetDefinition
+  ): void {
+    const animation = asset.tileset?.animations?.find((candidate) => (
+      candidate.key === animationKey
+    ));
+    if (!animation || !this.scene.anims) return;
+
+    for (const binding of this.tilesetAnimationBindings) {
+      if (
+        binding.targetAssetId !== assetId ||
+        binding.animationKey !== animationKey
+      ) continue;
+
+      const key = aiTilesetAnimationKey(assetId, animationKey, binding.tileFrame);
+      const frames = textureKeys.map((textureKey, index) => ({
+        key: textureKey,
+        frame: binding.tileFrame,
+        duration: animation.frameTimings?.[index]?.delayMs
+      }));
+      this.scene.anims.remove?.(key);
+      this.scene.anims.create({
+        key,
+        frames,
+        frameRate: animation.frameRate,
+        repeat: animation.repeat ?? -1
+      });
+      binding.target.stop?.();
+      binding.target.play(
+        binding.options.randomFrame
+          ? { key, randomFrame: true }
+          : key,
+        binding.options.forceRestart ? false : true
+      );
+    }
+  }
+
+  private resumeTilesetAnimations(assetId: string, asset: AiAssetDefinition): void {
+    const previewManifest: AiAssetManifest = {
+      ...this.manifest,
+      assets: {
+        ...this.manifest.assets,
+        [assetId]: asset
+      }
+    };
+
+    for (const binding of this.tilesetAnimationBindings) {
+      if (binding.targetAssetId !== assetId) continue;
+      binding.target.stop?.();
+      const existing = createAiTilesetAnimation(
+        this.scene,
+        previewManifest,
+        binding.selection,
+        binding.tileFrame,
+        binding.animationKey
+      );
+      if (!existing) continue;
+
+      this.scene.anims?.remove?.(existing.animationKey);
+      const refreshed = createAiTilesetAnimation(
+        this.scene,
+        previewManifest,
+        binding.selection,
+        binding.tileFrame,
+        binding.animationKey
+      );
+      if (!refreshed) continue;
+      binding.target.play(
+        binding.options.randomFrame
+          ? { key: refreshed.animationKey, randomFrame: true }
+          : refreshed.animationKey,
+        binding.options.forceRestart ? false : true
+      );
+    }
   }
 
   private withTarget(selection: AiAssetSelection | string): AiAssetSelection {
