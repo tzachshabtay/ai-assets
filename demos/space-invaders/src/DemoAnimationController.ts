@@ -1,9 +1,9 @@
 import Phaser from "phaser";
 import {
   AiAssetRuntime,
-  applyAiAnimationFrameTransform,
   createAiAnimations,
 } from "@ai-game-assets/phaser";
+import type { AiAssetAnimationPlayback } from "@ai-game-assets/phaser";
 import type { AiAssetAnimation, AiAssetDefinition, AiAssetManifest } from "@ai-game-assets/core";
 import {
   invaderAnimationAssetIds,
@@ -17,14 +17,11 @@ import type { LaserSprite } from "./assetConfig.js";
 export class DemoAnimationController {
   private heroAnimationSizes = new Map<string, { width: number; height: number }>();
   private heroAnimations = new Map<string, AiAssetAnimation>();
-  private heroFrameTransformHandler?: (...args: unknown[]) => void;
+  private heroAnimationPlayback?: AiAssetAnimationPlayback;
   private invaderAnimationSizes = new Map<string, { width: number; height: number }>();
   private invaderAnimations = new Map<string, AiAssetAnimation>();
   private invaderAnimationKeys = new WeakMap<Phaser.GameObjects.Sprite, string>();
-  private invaderFrameOffsetHandlers = new WeakMap<
-    Phaser.GameObjects.Sprite,
-    (...args: unknown[]) => void
-  >();
+  private invaderAnimationPlaybacks = new WeakMap<Phaser.GameObjects.Sprite, AiAssetAnimationPlayback>();
 
   currentHeroAnimationKey?: string;
 
@@ -35,15 +32,8 @@ export class DemoAnimationController {
   ) {}
 
   initialize(): void {
-    this.createAnimation("hero.ship.idle");
-    this.createAnimation("hero.ship.moving-left");
-    this.createAnimation("hero.ship.shooting");
-    this.createAnimation("hero.ship.hit");
-    this.createAnimation("hero.ship.explosion");
     for (const assetId of starAnimationAssetIds) this.createAnimation(assetId);
-    for (const assetId of laserAnimationAssetIds) this.createAnimation(assetId);
     for (const assetId of uiAnimationAssetIds) this.createAnimation(assetId);
-    for (const assetId of invaderAnimationAssetIds) this.createAnimation(assetId);
 
     this.registerHeroAnimationSize(this.assetManifest.assets["hero.ship.idle"]);
     this.registerHeroAnimationSize(this.assetManifest.assets["hero.ship.moving-left"]);
@@ -56,49 +46,15 @@ export class DemoAnimationController {
   }
 
   private createAnimation(assetId: string): void {
-    createAiAnimations(this.scene, this.assetManifest, assetId, {
-      onFrameTransforms: "ignore"
-    });
+    createAiAnimations(this.scene, this.assetManifest, assetId);
   }
 
-  recreateHeroAnimations(
-    assetId: string,
-    textureKey: string,
-    asset = this.assetManifest.assets[assetId]
-  ): string[] {
-    const keys = this.recreateAnimations(textureKey, asset);
+  refreshHeroAnimationAsset(asset: AiAssetDefinition | undefined): void {
     this.registerHeroAnimationSize(asset);
-    return keys;
   }
 
-  recreateInvaderAnimations(
-    assetId: string,
-    textureKey: string,
-    asset = this.assetManifest.assets[assetId]
-  ): string[] {
-    const keys = this.recreateAnimations(textureKey, asset);
+  refreshInvaderAnimationAsset(asset: AiAssetDefinition | undefined): void {
     this.registerInvaderAnimationSize(asset);
-    return keys;
-  }
-
-  recreateAnimations(
-    textureKey: string,
-    asset: AiAssetDefinition | undefined
-  ): string[] {
-    const animationKeys: string[] = [];
-
-    for (const animation of asset?.animations ?? []) {
-      this.scene.anims.remove(animation.key);
-      this.scene.anims.create({
-        key: animation.key,
-        frames: this.animationFramesWithTiming(textureKey, animation),
-        frameRate: animation.frameRate,
-        repeat: animation.repeat ?? -1
-      });
-      animationKeys.push(animation.key);
-    }
-
-    return animationKeys;
   }
 
   starAnimationKeys(): string[] {
@@ -114,11 +70,17 @@ export class DemoAnimationController {
   ): void {
     if (!hero || (!forceRestart && this.currentHeroAnimationKey === animationKey)) return;
 
-    this.detachHeroFrameTransformHandler(hero);
+    this.heroAnimationPlayback?.destroy();
     this.currentHeroAnimationKey = animationKey;
-    hero.play(animationKey);
-    this.applyHeroFrameTransform(hero, animationKey, 0);
-    this.attachHeroFrameTransformHandler(hero, animationKey);
+    const size = this.heroAnimationSize(animationKey);
+    hero.setDisplaySize(size.width, size.height);
+    hero.setOrigin(0.5, 0.5);
+    hero.setRotation(0);
+    this.heroAnimationPlayback = this.runtime.playAnimation(hero, animationKey, undefined, {
+      forceRestart,
+      frameTransform: { eventName: Phaser.Animations.Events.ANIMATION_UPDATE },
+      frameTransformSize: size
+    });
   }
 
   playHeroActionAnimation(
@@ -127,28 +89,32 @@ export class DemoAnimationController {
     onComplete: () => void
   ): number {
     if (hero) {
-      this.detachHeroFrameTransformHandler(hero);
+      this.heroAnimationPlayback?.destroy();
       hero.setFlipX(false);
       this.currentHeroAnimationKey = animationKey;
-      hero.play(animationKey, true);
-      this.applyHeroFrameTransform(hero, animationKey, 0);
-      this.attachHeroFrameTransformHandler(hero, animationKey);
+      const size = this.heroAnimationSize(animationKey);
+      hero.setDisplaySize(size.width, size.height);
+      hero.setOrigin(0.5, 0.5);
+      hero.setRotation(0);
+      this.heroAnimationPlayback = this.runtime.playAnimation(hero, animationKey, undefined, {
+        forceRestart: true,
+        frameTransform: { eventName: Phaser.Animations.Events.ANIMATION_UPDATE },
+        frameTransformSize: size
+      });
     }
 
     hero?.once(Phaser.Animations.Events.ANIMATION_COMPLETE, onComplete);
     return this.animationDuration(animationKey);
   }
 
-  detachHeroFrameTransformHandler(hero: Phaser.GameObjects.Sprite | undefined): void {
-    if (hero && this.heroFrameTransformHandler) {
-      hero.off(Phaser.Animations.Events.ANIMATION_UPDATE, this.heroFrameTransformHandler);
-    }
-
-    this.heroFrameTransformHandler = undefined;
+  resetHeroAnimation(): void {
+    this.stopHeroAnimation();
+    this.currentHeroAnimationKey = undefined;
   }
 
-  resetHeroAnimation(): void {
-    this.currentHeroAnimationKey = undefined;
+  stopHeroAnimation(): void {
+    this.heroAnimationPlayback?.destroy();
+    this.heroAnimationPlayback = undefined;
   }
 
   playInvaderAnimation(
@@ -156,29 +122,23 @@ export class DemoAnimationController {
     animationKey: string,
     randomStartFrame = false
   ): void {
-    const existingHandler = this.invaderFrameOffsetHandlers.get(invader);
-
-    if (existingHandler) {
-      invader.off(Phaser.Animations.Events.ANIMATION_UPDATE, existingHandler);
-    }
+    this.invaderAnimationPlaybacks.get(invader)?.destroy();
 
     this.invaderAnimationKeys.set(invader, animationKey);
-    invader.play(randomStartFrame ? { key: animationKey, randomFrame: true } : animationKey);
-    this.applyInvaderAnimationSize(invader, animationKey);
-    const currentFrame = invader.anims.currentFrame as { index?: number } | undefined;
-    this.applyInvaderFrameTransform(
+    const size = this.invaderAnimationSize(animationKey);
+    invader.setDisplaySize(size.width, size.height);
+    invader.setOrigin(0.5, 0.5);
+    invader.setRotation(0);
+    this.invaderAnimationPlaybacks.set(invader, this.runtime.playAnimation(
       invader,
       animationKey,
-      Math.max(0, (currentFrame?.index ?? 1) - 1)
-    );
-
-    const handler = (...args: unknown[]) => {
-      const frame = args[1] as { index?: number } | undefined;
-      this.applyInvaderFrameTransform(invader, animationKey, Math.max(0, (frame?.index ?? 1) - 1));
-    };
-
-    this.invaderFrameOffsetHandlers.set(invader, handler);
-    invader.on(Phaser.Animations.Events.ANIMATION_UPDATE, handler);
+      undefined,
+      {
+        randomFrame: randomStartFrame,
+        frameTransform: { eventName: Phaser.Animations.Events.ANIMATION_UPDATE },
+        frameTransformSize: size
+      }
+    ));
   }
 
   invaderAnimationKey(invader: Phaser.GameObjects.Sprite): string | undefined {
@@ -299,71 +259,14 @@ export class DemoAnimationController {
     }
   }
 
-  private applyHeroFrameTransform(
-    hero: Phaser.GameObjects.Sprite,
-    animationKey: string,
-    frameSlot: number
-  ): void {
-    const size = this.heroAnimationSizes.get(animationKey) ??
+  private heroAnimationSize(animationKey: string): { width: number; height: number } {
+    return this.heroAnimationSizes.get(animationKey) ??
       this.displaySizeForAsset(this.assetManifest.assets[animationKey]);
-    this.applyFrameTransform(hero, animationKey, frameSlot, size);
   }
 
-  private applyInvaderAnimationSize(
-    invader: Phaser.GameObjects.Sprite,
-    animationKey: string
-  ): void {
-    const size = this.invaderAnimationSizes.get(animationKey) ??
+  private invaderAnimationSize(animationKey: string): { width: number; height: number } {
+    return this.invaderAnimationSizes.get(animationKey) ??
       this.displaySizeForAsset(this.assetManifest.assets[animationKey]);
-    invader.setDisplaySize(size.width, size.height);
-    invader.setRotation(0);
-  }
-
-  private applyInvaderFrameTransform(
-    invader: Phaser.GameObjects.Sprite,
-    animationKey: string,
-    frameSlot: number
-  ): void {
-    const size = this.invaderAnimationSizes.get(animationKey) ??
-      this.displaySizeForAsset(this.assetManifest.assets[animationKey]);
-    this.applyFrameTransform(invader, animationKey, frameSlot, size);
-  }
-
-  private applyFrameTransform(
-    sprite: Phaser.GameObjects.Sprite,
-    animationKey: string,
-    frameSlot: number,
-    size: { width: number; height: number }
-  ): void {
-    applyAiAnimationFrameTransform(
-      sprite,
-      this.animationForKey(animationKey),
-      frameSlot,
-      size
-    );
-  }
-
-  private attachHeroFrameTransformHandler(
-    hero: Phaser.GameObjects.Sprite,
-    animationKey: string
-  ): void {
-    this.heroFrameTransformHandler = (...args: unknown[]) => {
-      const frame = args[1] as { index?: number } | undefined;
-      this.applyHeroFrameTransform(hero, animationKey, Math.max(0, (frame?.index ?? 1) - 1));
-    };
-    hero.on(Phaser.Animations.Events.ANIMATION_UPDATE, this.heroFrameTransformHandler);
-  }
-
-  private animationFramesWithTiming(
-    textureKey: string,
-    animation: AiAssetAnimation
-  ): Phaser.Types.Animations.AnimationFrame[] {
-    return this.scene.anims.generateFrameNumbers(textureKey, {
-      frames: animation.frames
-    }).map((frame, index) => ({
-      ...frame,
-      duration: animation.frameTimings?.[index]?.delayMs
-    }));
   }
 
   private animationForKey(animationKey: string): AiAssetAnimation | undefined {

@@ -21,7 +21,6 @@ import {
   invaderWaveSpeedIncrease,
   isRuntimeAudioAsset,
   keepBullet,
-  laserAnimationAssetIds,
   loadMasterVolume,
   maxHeroLives,
   newWaveVoiceLineAssetId,
@@ -168,7 +167,6 @@ export function startGame(
       });
 
       this.applyAssetTexture = (assetId, textureKey, asset) => {
-        designerCallbacks.onPreview(assetId, textureKey, asset);
         this.pixelCollision.invalidateTexture(textureKey);
 
         if (isRuntimeAudioAsset(asset)) {
@@ -186,12 +184,7 @@ export function startGame(
         }
 
         if (starAnimationAssetIds.includes(assetId)) {
-          this.animations?.recreateAnimations(textureKey, asset);
           this.applyStarTexture(assetId, textureKey);
-        }
-
-        if (laserAnimationAssetIds.includes(assetId)) {
-          this.animations?.recreateAnimations(textureKey, asset);
         }
 
         if (assetId === "ui.panel") {
@@ -203,7 +196,6 @@ export function startGame(
         }
 
         if (uiAnimationAssetIds.includes(assetId)) {
-          this.animations?.recreateAnimations(textureKey, asset);
           this.menu?.refreshButtonAnimation(assetId);
         }
 
@@ -215,7 +207,7 @@ export function startGame(
         }
 
         if (assetId.startsWith("hero.ship.")) {
-          this.animations?.recreateHeroAnimations(assetId, textureKey, asset);
+          this.animations?.refreshHeroAnimationAsset(asset);
 
           if (this.animations?.currentHeroAnimationKey === assetId) {
             this.playHeroAnimation(assetId, true);
@@ -223,7 +215,7 @@ export function startGame(
         }
 
         if (invaderAnimationAssetIds.includes(assetId)) {
-          this.animations?.recreateInvaderAnimations(assetId, textureKey, asset);
+          this.animations?.refreshInvaderAnimationAsset(asset);
           for (const invader of this.invaders ?? []) {
             const currentAnimationKey = this.animations?.invaderAnimationKey(invader);
 
@@ -242,9 +234,11 @@ export function startGame(
           options.onManifestUpdated?.(updatedManifest);
         },
         onPreview: (assetId, textureKey, asset) => {
+          designerCallbacks.onPreview(assetId, textureKey, asset);
           this.applyAssetTexture?.(assetId, textureKey, asset);
         },
         onAssetReady: (assetId, textureKey, asset) => {
+          designerCallbacks.onAssetReady(assetId, textureKey, asset);
           this.applyAssetTexture?.(assetId, textureKey, asset);
         }
       });
@@ -523,7 +517,7 @@ export function startGame(
     }
 
     private clearGameplayObjects(): void {
-      this.animations?.detachHeroFrameTransformHandler(this.hero);
+      this.animations?.stopHeroAnimation();
 
       for (const bullet of this.bullets) bullet.destroy();
       for (const bullet of this.invaderBullets) bullet.destroy();
@@ -778,14 +772,14 @@ export function startGame(
       this.gameActive = false;
       this.startInvaderCelebration();
       this.heroLockedUntil = Number.POSITIVE_INFINITY;
-      this.animations?.detachHeroFrameTransformHandler(this.hero);
+      this.animations?.stopHeroAnimation();
       this.hero.setFlipX(false);
       this.audio?.playAudioAsset(heroExplosionSfxAssetId, { volume: 0.7 });
       this.audio?.cutGameMusic();
       this.playGameOverEffectThenShowMenu();
       this.animations?.playHeroAnimation(this.hero, "hero.ship.explosion", true);
       this.hero.once(Phaser.Animations.Events.ANIMATION_COMPLETE, () => {
-        this.animations?.detachHeroFrameTransformHandler(this.hero);
+        this.animations?.stopHeroAnimation();
         this.hero?.setVisible(false);
         this.hero?.setActive(false);
       });

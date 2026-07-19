@@ -313,6 +313,104 @@ test("a spritesheet preview rebuilds animations against the temporary texture", 
   ]);
 });
 
+test("animation playback uses unpromoted preview frame transforms", () => {
+  const baseAsset = {
+    id: "hero",
+    kind: "image",
+    prompt: "Standing hero.",
+    dimensions: { width: 16, height: 16 },
+    activeVersion: "v1",
+    versions: {
+      v1: {
+        name: "v1",
+        file: "/hero-base.png",
+        prompt: "Standing hero.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+      }
+    },
+    linkedAnimationAssets: {
+      "walk-down": { label: "Walk down", assetId: "hero.walk.down" }
+    }
+  };
+  const asset = {
+    id: "hero.walk.down",
+    kind: "spritesheet",
+    prompt: "Walking hero.",
+    dimensions: { width: 32, height: 16 },
+    frameGrid: {
+      frameWidth: 16,
+      frameHeight: 16,
+      columns: 2,
+      rows: 1,
+      frameCount: 2
+    },
+    animations: [{ key: "hero.walk", frames: [0, 1], frameRate: 8, repeat: -1 }],
+    activeVersion: "v1",
+    versions: {
+      v1: {
+        name: "v1",
+        file: "/hero.png",
+        prompt: "Walking hero.",
+        createdAt: "2026-01-01T00:00:00.000Z"
+      }
+    }
+  };
+  const previewAsset = {
+    ...asset,
+    animations: [{
+      ...asset.animations[0],
+      frameTimings: [
+        { delayMs: 125, scaleX: 1.5, scaleY: 1.25 },
+        { delayMs: 125, scaleX: 1.5, scaleY: 1.25 }
+      ]
+    }]
+  };
+  const manifest = {
+    schemaVersion: 1,
+    assets: { hero: baseAsset, "hero.walk.down": asset }
+  };
+  const scene = {
+    load: { image() {}, spritesheet() {} },
+    textures: { exists: () => true },
+    anims: {
+      exists: () => true,
+      remove() {},
+      generateFrameNumbers(textureKey, config) {
+        return config.frames.map((frame) => ({ key: textureKey, frame }));
+      },
+      create() {}
+    }
+  };
+  const runtime = new AiAssetRuntime(scene, manifest);
+  const displaySizes = [];
+  const target = {
+    play() {},
+    setTexture() {},
+    setDisplaySize(width, height) {
+      displaySizes.push({ width, height });
+    },
+    setOrigin() {},
+    setRotation() {},
+    on() {},
+    off() {},
+    once() {}
+  };
+  const callbacks = runtime.designerCallbacks();
+
+  callbacks.onPreview("hero.walk.down", "hero-walk-preview", previewAsset);
+  const previewPlayback = runtime.playAnimation(target, "hero", "walk-down");
+
+  assert.deepEqual(displaySizes.at(-1), { width: 24, height: 20 });
+  assert.strictEqual(manifest.assets["hero.walk.down"], asset);
+
+  previewPlayback.destroy();
+  callbacks.onAssetReady("hero.walk.down", "hero-walk-down", asset);
+  const activePlayback = runtime.playAnimation(target, "hero", "walk-down");
+
+  assert.equal(activePlayback.frameTransforms, undefined);
+  assert.equal(displaySizes.length, 1);
+});
+
 test("a tileset preview pauses old animation sheets and active restore resumes them", () => {
   const asset = tilesetAsset();
   asset.tileset.animations = [{

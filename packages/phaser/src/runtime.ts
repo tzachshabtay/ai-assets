@@ -118,6 +118,7 @@ export class AiAssetRuntime {
   private readonly textureBindings = new Set<StoredTextureBinding>();
   private readonly tilesetAnimationBindings = new Set<StoredTilesetAnimationBinding>();
   private readonly previewTextureKeys = new Map<string, string>();
+  private readonly previewAssets = new Map<string, AiAssetDefinition>();
   private readonly warnedMissingTextureKeys = new Set<string>();
 
   constructor(
@@ -193,7 +194,8 @@ export class AiAssetRuntime {
     options: AiAssetPlayAnimationOptions = {}
   ): AiAssetAnimationPlayback {
     const animationSelection = this.resolveAnimationSelection(selection, stateOrAnimationKey);
-    const asset = this.manifest.assets[animationSelection.assetId];
+    const asset = this.previewAssets.get(animationSelection.assetId)
+      ?? this.manifest.assets[animationSelection.assetId];
     const animation = this.animationForState(asset, stateOrAnimationKey);
 
     if (!animation) {
@@ -324,6 +326,7 @@ export class AiAssetRuntime {
     return {
       onPreview: (assetId, textureKey, asset) => {
         this.previewTextureKeys.set(assetId, textureKey);
+        this.previewAssets.set(assetId, asset);
         this.refreshAssetAnimations(assetId, textureKey, asset);
         this.applyAssetTexture(assetId, textureKey, asset);
         this.pauseTilesetAnimations(assetId, textureKey);
@@ -333,6 +336,7 @@ export class AiAssetRuntime {
       },
       onAssetReady: (assetId, textureKey, asset) => {
         this.previewTextureKeys.delete(assetId);
+        this.previewAssets.delete(assetId);
         this.refreshAssetAnimations(assetId, textureKey, asset);
         this.applyAssetTexture(assetId, textureKey, asset);
         this.resumeTilesetAnimations(assetId, asset);
