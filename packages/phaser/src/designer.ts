@@ -38,6 +38,7 @@ import {
   createMixedTilesetOption,
   isDesignerTilesetAsset,
   openTilesetBaseMixerDialog,
+  openTilesetAnimationEditor,
   openTilesetAnimationMixerDialog,
   openTilesetEditor,
   tilesetAnimationForKey,
@@ -285,6 +286,17 @@ export function installAiAssetDesigner(
   const forgetPendingOption = (assetId: string) => {
     pendingOptions.delete(assetId);
     syncPromoteAllButton();
+  };
+  const hasEditableTilesetAnimationFrames = (
+    assetId: string,
+    animationKey: string
+  ): boolean => {
+    const pendingFrames = pendingOptions.get(assetId)?.tilesetAnimations?.[animationKey];
+    if (pendingFrames?.length) return true;
+
+    const asset = manifest.assets[assetId];
+    const activeVersion = asset?.versions[asset.activeVersion];
+    return Boolean(activeVersion?.tilesetAnimations?.[animationKey]?.files.length);
   };
   const installTilesetAnimationFrameTextures = async (
     frames: string[],
@@ -659,11 +671,15 @@ export function installAiAssetDesigner(
     elements.currentAnimation.hidden = true;
     elements.currentAudio.hidden = !isAudio;
     elements.currentImage.hidden = isAudio;
-    elements.currentAnimationButton.textContent = "Edit...";
+    elements.currentAnimationButton.textContent = isTilesetAnimation
+      ? "Edit animation..."
+      : "Edit...";
     elements.currentTouchUpButton.textContent = isBaseTileset ? "Edit tileset..." : "Touch up...";
     elements.currentRevertButton.hidden = true;
     elements.currentPreview.classList.add("is-selected");
-    elements.currentAnimationButton.hidden = !activeVersion?.file || (!asset.frameGrid && !isAudio);
+    elements.currentAnimationButton.hidden = isTilesetAnimation && selectedTilesetAnimationKey
+      ? !hasEditableTilesetAnimationFrames(assetId, selectedTilesetAnimationKey)
+      : !activeVersion?.file || (!asset.frameGrid && !isAudio);
     elements.currentTouchUpButton.hidden = !activeVersion?.file ||
       Boolean(selectedTilesetAnimationKey) ||
       isAudio ||
@@ -704,6 +720,9 @@ export function installAiAssetDesigner(
     const asset = manifest.assets[selectedTargetAssetId];
     const optionAsset = assetWithGeneratedGeometry(asset, option);
     const isAudio = isAudioAsset(asset);
+    const isTilesetAnimation = Boolean(
+      selectedTilesetAnimationKey && isDesignerTilesetAsset(optionAsset)
+    );
 
     stopCurrentAnimationPreview?.();
     stopCurrentAnimationPreview = undefined;
@@ -715,13 +734,18 @@ export function installAiAssetDesigner(
       `Preview ${label} for ${readableAssetName(selectedTargetAssetId)}`
     );
     elements.currentAnimation.hidden = true;
-    elements.currentAnimationButton.textContent = "Edit...";
-    elements.currentAnimationButton.hidden = !optionAsset.frameGrid && !isAudio;
+    elements.currentAnimationButton.textContent = isTilesetAnimation
+      ? "Edit animation..."
+      : "Edit...";
+    elements.currentAnimationButton.hidden = isTilesetAnimation && selectedTilesetAnimationKey
+      ? !hasEditableTilesetAnimationFrames(selectedTargetAssetId, selectedTilesetAnimationKey)
+      : !optionAsset.frameGrid && !isAudio;
     elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(optionAsset)
       ? "Edit tileset..."
       : "Touch up...";
     elements.currentTouchUpButton.hidden =
       isAudio ||
+      isTilesetAnimation ||
       Boolean(optionAsset.frameGrid) ||
       option.mimeType === "image/svg+xml";
     elements.currentRevertButton.hidden = false;
@@ -1086,19 +1110,30 @@ export function installAiAssetDesigner(
 
     const activeVersionSource = resolveAssetUrl(activeVersion.file);
     const isAudio = isAudioAsset(asset);
+    const isTilesetAnimation = Boolean(
+      selectedTilesetAnimationKey && isDesignerTilesetAsset(asset)
+    );
     elements.currentPreview.classList.add("is-selected");
     elements.currentPreview.setAttribute(
       "aria-label",
       `Preview active ${readableAssetName(selectedTargetAssetId)} version`
     );
     elements.currentAnimation.hidden = true;
-    elements.currentAnimationButton.textContent = "Edit...";
-    elements.currentAnimationButton.hidden = !asset.frameGrid && !isAudio;
+    elements.currentAnimationButton.textContent = isTilesetAnimation
+      ? "Edit animation..."
+      : "Edit...";
+    elements.currentAnimationButton.hidden = isTilesetAnimation && selectedTilesetAnimationKey
+      ? !hasEditableTilesetAnimationFrames(
+          selectedTargetAssetId,
+          selectedTilesetAnimationKey
+        )
+      : !asset.frameGrid && !isAudio;
     elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(asset)
       ? "Edit tileset..."
       : "Touch up...";
     elements.currentTouchUpButton.hidden =
       isAudio ||
+      isTilesetAnimation ||
       Boolean(asset.frameGrid) ||
       normalizeAssetFormat(asset.settings?.format) === "svg" ||
       isSvgSource(activeVersion.file);
@@ -2688,13 +2723,67 @@ export function installAiAssetDesigner(
     });
   });
 
-  elements.currentAnimationButton.addEventListener("click", (event: MouseEvent) => {
+  elements.currentAnimationButton.addEventListener("click", async (event: MouseEvent) => {
     event.stopPropagation();
     const asset = manifest.assets[selectedTargetAssetId];
     const activeVersion = asset.versions[asset.activeVersion];
     const sourceOption = editedCurrentOption;
 
     if (!sourceOption && !activeVersion?.file) return;
+
+    if (selectedTilesetAnimationKey && isDesignerTilesetAsset(asset)) {
+      const assetId = selectedTargetAssetId;
+      const animationKey = selectedTilesetAnimationKey;
+      const definition = promptOnlyTilesetAnimationDefinition(assetId, animationKey);
+      if (!definition) {
+        setStatus(
+          elements,
+          "Add an animation prompt for every tile before editing the animation.",
+          "error"
+        );
+        return;
+      }
+
+      try {
+        const pendingFrames = pendingOptions.get(assetId)?.tilesetAnimations?.[animationKey];
+        const frames = pendingFrames ?? await activeTilesetAnimationFrames(assetId, animationKey);
+        if (frames.length !== definition.frameCount) {
+          throw new Error(
+            `${readableAssetName(animationKey)} has ${frames.length} current frames, but ` +
+              `${definition.frameCount} are configured. Generate new frames before editing.`
+          );
+        }
+
+        const editorAsset = assetWithTilesetAnimationDefinition(asset, definition);
+        await openTilesetAnimationEditor({
+          root: elements.root,
+          asset: editorAsset,
+          assetId,
+          animationKey,
+          frames,
+          onConfirm: async ({ frames: editedFrames, animation }) => {
+            const currentPrompts = tilesetAnimationPromptDefinitions(assetId, animationKey);
+            const editedDefinition = currentPrompts
+              ? { ...animation, tiles: currentPrompts }
+              : animation;
+            await selectTilesetAnimationFrames(assetId, editedDefinition, editedFrames);
+            elements.currentRevertButton.hidden = false;
+            setStatus(
+              elements,
+              "Tileset animation edits applied. Promote to save them to code.",
+              "success"
+            );
+          }
+        });
+      } catch (error) {
+        setStatus(
+          elements,
+          `Could not edit tileset animation. ${errorMessage(error)}`,
+          "error"
+        );
+      }
+      return;
+    }
 
     if (isAudioAsset(asset)) {
       void openAudioEditor({

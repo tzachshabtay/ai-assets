@@ -23,7 +23,10 @@ import {
 import { aiTextureKey, aiTilesetAnimationKey } from "./keys.js";
 import { aiAssetPlaceholderDataUrl } from "./placeholder.js";
 import type { PhaserImageLike, PhaserSceneLike } from "./phaser-types.js";
-import { createAiTilesetAnimation } from "./tilesets.js";
+import {
+  createAiTilesetAnimation,
+  tilesetAnimationDurationMs
+} from "./tilesets.js";
 
 export type AiAssetRuntimeOptions = {
   baseUrl?: string;
@@ -110,6 +113,13 @@ type StoredTilesetAnimationBinding = {
   options: AiAssetPlayTilesetAnimationOptions;
 };
 
+type StoredTilesetAnimationPreview = {
+  animationKey: string;
+  textureKeys: string[];
+  asset: AiAssetDefinition;
+  installedAnimationKeys: Set<string>;
+};
+
 export class AiAssetRuntime {
   readonly scene: PhaserSceneLike;
   readonly manifest: AiAssetManifest;
@@ -117,6 +127,7 @@ export class AiAssetRuntime {
   readonly targetId?: string;
   private readonly textureBindings = new Set<StoredTextureBinding>();
   private readonly tilesetAnimationBindings = new Set<StoredTilesetAnimationBinding>();
+  private readonly previewTilesetAnimations = new Map<string, StoredTilesetAnimationPreview>();
   private readonly previewTextureKeys = new Map<string, string>();
   private readonly previewAssets = new Map<string, AiAssetDefinition>();
   private readonly warnedMissingTextureKeys = new Set<string>();
@@ -254,6 +265,22 @@ export class AiAssetRuntime {
       options
     };
     this.tilesetAnimationBindings.add(binding);
+    const preview = this.previewTilesetAnimations.get(
+      this.tilesetAnimationPreviewKey(assetId, animationKey)
+    );
+    const previewPlayback = preview
+      ? this.applyTilesetAnimationPreview(assetId, preview, [binding], false)
+      : undefined;
+
+    if (previewPlayback) {
+      return {
+        ...previewPlayback,
+        destroy: () => {
+          this.tilesetAnimationBindings.delete(binding);
+        }
+      };
+    }
+
     const created = createAiTilesetAnimation(
       this.scene,
       this.manifest,
@@ -337,6 +364,7 @@ export class AiAssetRuntime {
       onAssetReady: (assetId, textureKey, asset) => {
         this.previewTextureKeys.delete(assetId);
         this.previewAssets.delete(assetId);
+        this.clearTilesetAnimationPreviews(assetId);
         this.refreshAssetAnimations(assetId, textureKey, asset);
         this.applyAssetTexture(assetId, textureKey, asset);
         this.resumeTilesetAnimations(assetId, asset);
@@ -395,38 +423,115 @@ export class AiAssetRuntime {
     textureKeys: string[],
     asset: AiAssetDefinition
   ): void {
-    const animation = asset.tileset?.animations?.find((candidate) => (
-      candidate.key === animationKey
+    const previewKey = this.tilesetAnimationPreviewKey(assetId, animationKey);
+    const previous = this.previewTilesetAnimations.get(previewKey);
+    if (previous) this.removeTilesetAnimationPreviewAnimations(previous);
+
+    const preview = {
+      animationKey,
+      textureKeys: [...textureKeys],
+      asset,
+      installedAnimationKeys: new Set<string>()
+    };
+    this.previewTilesetAnimations.set(previewKey, preview);
+    this.applyTilesetAnimationPreview(
+      assetId,
+      preview,
+      [...this.tilesetAnimationBindings],
+      true
+    );
+  }
+
+  private applyTilesetAnimationPreview(
+    assetId: string,
+    preview: StoredTilesetAnimationPreview,
+    bindings: StoredTilesetAnimationBinding[],
+    replaceAnimations: boolean
+  ): Omit<AiAssetTilesetAnimationPlayback, "destroy"> | undefined {
+    const animation = preview.asset.tileset?.animations?.find((candidate) => (
+      candidate.key === preview.animationKey
     ));
-    if (!animation || !this.scene.anims) return;
+    if (!animation || !this.scene.anims || preview.textureKeys.length === 0) return undefined;
 
-    for (const binding of this.tilesetAnimationBindings) {
-      if (
-        binding.targetAssetId !== assetId ||
-        binding.animationKey !== animationKey
-      ) continue;
-
-      const key = aiTilesetAnimationKey(assetId, animationKey, binding.tileFrame);
-      const frames = textureKeys.map((textureKey, index) => ({
-        key: textureKey,
-        frame: binding.tileFrame,
-        duration: animation.frameTimings?.[index]?.delayMs
-      }));
-      this.scene.anims.remove?.(key);
-      this.scene.anims.create({
-        key,
-        frames,
-        frameRate: animation.frameRate,
-        repeat: animation.repeat ?? -1
-      });
-      binding.target.stop?.();
-      binding.target.play(
-        binding.options.randomFrame
-          ? { key, randomFrame: true }
-          : key,
-        binding.options.forceRestart ? false : true
-      );
+    const matching = bindings.filter((binding) => (
+      binding.targetAssetId === assetId &&
+      binding.animationKey === preview.animationKey
+    ));
+    const bindingsByFrame = new Map<number, StoredTilesetAnimationBinding[]>();
+    for (const binding of matching) {
+      const frameBindings = bindingsByFrame.get(binding.tileFrame) ?? [];
+      frameBindings.push(binding);
+      bindingsByFrame.set(binding.tileFrame, frameBindings);
     }
+
+    for (const [tileFrame, frameBindings] of bindingsByFrame) {
+      const key = aiTilesetAnimationKey(assetId, preview.animationKey, tileFrame);
+      const animationExists = this.scene.anims.exists?.(key);
+      if (
+        replaceAnimations ||
+        !preview.installedAnimationKeys.has(key) ||
+        animationExists === false
+      ) {
+        if (animationExists !== false) this.scene.anims.remove?.(key);
+        this.scene.anims.create({
+          key,
+          frames: preview.textureKeys.map((textureKey, index) => ({
+            key: textureKey,
+            frame: tileFrame,
+            duration: animation.frameTimings?.[index]?.delayMs
+          })),
+          frameRate: animation.frameRate,
+          repeat: animation.repeat ?? -1
+        });
+        preview.installedAnimationKeys.add(key);
+      }
+
+      for (const binding of frameBindings) {
+        binding.target.stop?.();
+        binding.target.play(
+          binding.options.randomFrame
+            ? { key, randomFrame: true }
+            : key,
+          binding.options.forceRestart ? false : true
+        );
+      }
+    }
+
+    const firstBinding = matching[0];
+    if (!firstBinding) return undefined;
+    return {
+      assetId,
+      animation,
+      animationKey: aiTilesetAnimationKey(
+        assetId,
+        preview.animationKey,
+        firstBinding.tileFrame
+      ),
+      tileFrame: firstBinding.tileFrame,
+      durationMs: tilesetAnimationDurationMs(animation)
+    };
+  }
+
+  private tilesetAnimationPreviewKey(assetId: string, animationKey: string): string {
+    return `${assetId}\u0000${animationKey}`;
+  }
+
+  private clearTilesetAnimationPreviews(assetId: string): void {
+    const prefix = `${assetId}\u0000`;
+    for (const [key, preview] of this.previewTilesetAnimations) {
+      if (!key.startsWith(prefix)) continue;
+      this.removeTilesetAnimationPreviewAnimations(preview);
+      this.previewTilesetAnimations.delete(key);
+    }
+  }
+
+  private removeTilesetAnimationPreviewAnimations(
+    preview: StoredTilesetAnimationPreview
+  ): void {
+    for (const key of preview.installedAnimationKeys) {
+      this.scene.anims?.remove?.(key);
+    }
+    preview.installedAnimationKeys.clear();
   }
 
   private resumeTilesetAnimations(assetId: string, asset: AiAssetDefinition): void {
@@ -438,19 +543,21 @@ export class AiAssetRuntime {
       }
     };
 
+    const bindingGroups = new Map<string, StoredTilesetAnimationBinding[]>();
     for (const binding of this.tilesetAnimationBindings) {
       if (binding.targetAssetId !== assetId) continue;
-      binding.target.stop?.();
-      const existing = createAiTilesetAnimation(
-        this.scene,
-        previewManifest,
-        binding.selection,
-        binding.tileFrame,
-        binding.animationKey
-      );
-      if (!existing) continue;
+      const groupKey = this.canonicalTilesetAnimationKey(previewManifest, binding);
+      const group = bindingGroups.get(groupKey) ?? [];
+      group.push(binding);
+      bindingGroups.set(groupKey, group);
+    }
 
-      this.scene.anims?.remove?.(existing.animationKey);
+    for (const [animationKey, bindings] of bindingGroups) {
+      const binding = bindings[0]!;
+      for (const groupedBinding of bindings) groupedBinding.target.stop?.();
+      if (this.scene.anims?.exists?.(animationKey) !== false) {
+        this.scene.anims?.remove?.(animationKey);
+      }
       const refreshed = createAiTilesetAnimation(
         this.scene,
         previewManifest,
@@ -459,13 +566,26 @@ export class AiAssetRuntime {
         binding.animationKey
       );
       if (!refreshed) continue;
-      binding.target.play(
-        binding.options.randomFrame
-          ? { key: refreshed.animationKey, randomFrame: true }
-          : refreshed.animationKey,
-        binding.options.forceRestart ? false : true
-      );
+      for (const groupedBinding of bindings) {
+        groupedBinding.target.play(
+          groupedBinding.options.randomFrame
+            ? { key: refreshed.animationKey, randomFrame: true }
+            : refreshed.animationKey,
+          groupedBinding.options.forceRestart ? false : true
+        );
+      }
     }
+  }
+
+  private canonicalTilesetAnimationKey(
+    manifest: AiAssetManifest,
+    binding: StoredTilesetAnimationBinding
+  ): string {
+    const resolved = resolveAiAsset(manifest, this.withTarget(binding.selection));
+    const selection = resolved.versionName === resolved.asset.activeVersion
+      ? resolved.asset.id
+      : { assetId: resolved.asset.id, versionName: resolved.versionName };
+    return aiTilesetAnimationKey(selection, binding.animationKey, binding.tileFrame);
   }
 
   private withTarget(selection: AiAssetSelection | string): AiAssetSelection {

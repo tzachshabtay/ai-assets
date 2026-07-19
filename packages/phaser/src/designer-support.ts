@@ -4761,6 +4761,9 @@ export function ensureDesignerStyles(): void {
 .ai-game-assets-designer__frame-thumb.is-selected::after {
   border-color: #6ed3ff;
 }
+.ai-game-assets-designer__frame-thumb.is-previewing::after {
+  box-shadow: inset 0 -3px 0 #facc15;
+}
 .ai-game-assets-designer__frame-fields {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

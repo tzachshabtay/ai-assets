@@ -90,6 +90,7 @@ export type {
   DesignerTilesetMetadata,
   TilesetBaseMixPlan,
   TilesetBaseMixResult,
+  TilesetAnimationEditorResult,
   TilesetEditorResult,
   TilesetMixSelection,
   TilesetAnimationMixResult
@@ -99,6 +100,7 @@ export {
   createMixedTilesetOption,
   isDesignerTilesetAsset,
   openTilesetBaseMixerDialog,
+  openTilesetAnimationEditor,
   openTilesetAnimationMixerDialog,
   openTilesetEditor,
   planTilesetBaseMix,

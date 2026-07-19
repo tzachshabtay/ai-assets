@@ -6,6 +6,7 @@ import {
   createMixedTilesetOption,
   planTilesetBaseMix,
   resolveTilesetBaseMixCurrent,
+  tilesetAnimationWithFrameDelays,
   tilesetTileGenerationOverride,
   tilesetTilePrompt
 } from "../dist/tileset-dialog.js";
@@ -34,6 +35,36 @@ const asset = {
     }
   }
 };
+
+test("tileset animation editor materializes one normalized delay per temporal frame", () => {
+  const animation = {
+    key: "water",
+    frameCount: 3,
+    frameRate: 4,
+    repeat: -1,
+    tiles: [
+      { prompt: "Ripple gently." },
+      { prompt: "Stay still." }
+    ],
+    frameTimings: [{ delayMs: 80 }]
+  };
+
+  assert.deepEqual(
+    tilesetAnimationWithFrameDelays(animation, [80, 0, 320.9]),
+    {
+      ...animation,
+      frameTimings: [
+        { delayMs: 80 },
+        { delayMs: 1 },
+        { delayMs: 320 }
+      ]
+    }
+  );
+  assert.throws(
+    () => tilesetAnimationWithFrameDelays(animation, [80, 250]),
+    /requires 3 frame delays, received 2/
+  );
+});
 
 test("tileset uploads retain selected tile geometry when the sheet size matches", () => {
   assert.deepEqual(

@@ -481,15 +481,167 @@ test("a tileset preview pauses old animation sheets and active restore resumes t
     { key: "water-preview-1", frame: 1, duration: undefined }
   ]);
 
+  const lateTargetCalls = [];
+  const lateTarget = {
+    play(key) {
+      lateTargetCalls.push({ type: "play", key });
+    },
+    stop() {
+      lateTargetCalls.push({ type: "stop" });
+    },
+    setTexture(key, frame) {
+      lateTargetCalls.push({ type: "texture", key, frame });
+    }
+  };
+  const latePlayback = runtime.playTilesetAnimation(
+    lateTarget,
+    "forest",
+    0,
+    "forest.water"
+  );
+  assert.equal(lateTargetCalls.at(-1).type, "play");
+  assert.deepEqual(created.at(-1).frames, [
+    { key: "water-preview-0", frame: 0, duration: undefined },
+    { key: "water-preview-1", frame: 0, duration: undefined }
+  ]);
+
+  const sameFrameTargetCalls = [];
+  const sameFramePlayback = runtime.playTilesetAnimation({
+    play(key, ignoreIfPlaying) {
+      sameFrameTargetCalls.push({ type: "play", key, ignoreIfPlaying });
+    },
+    stop() {
+      sameFrameTargetCalls.push({ type: "stop" });
+    },
+    setTexture(key, frame) {
+      sameFrameTargetCalls.push({ type: "texture", key, frame });
+    }
+  }, "forest", 0, "forest.water", {
+    randomFrame: true,
+    forceRestart: true
+  });
+  assert.deepEqual(sameFrameTargetCalls.at(-1), {
+    type: "play",
+    key: { key: "forest::tile-animation:forest.water:0", randomFrame: true },
+    ignoreIfPlaying: false
+  });
+  assert.equal(created.length, 3, "same-frame preview bindings reuse one animation");
+
   callbacks.onAssetReady("forest", "forest", asset);
-  assert.equal(removed.length, 2);
-  assert.equal(created.length, 3);
+  assert.equal(removed.length, 3);
+  assert.equal(created.length, 5, "canonical restore creates one animation per tile frame");
   assert.equal(targetCalls.at(-1).type, "play");
+  assert.equal(lateTargetCalls.at(-1).type, "play");
+  assert.deepEqual(sameFrameTargetCalls.at(-1), {
+    type: "play",
+    key: { key: "forest::tile-animation:forest.water:0", randomFrame: true },
+    ignoreIfPlaying: false
+  });
+  assert.deepEqual(created.at(-1).frames, [
+    { key: "forest::tileset:forest.water:0", frame: 0, duration: undefined },
+    { key: "forest::tileset:forest.water:1", frame: 0, duration: undefined }
+  ]);
+
+  const restoredTargetCalls = [];
+  const restoredPlayback = runtime.playTilesetAnimation({
+    play(key) {
+      restoredTargetCalls.push({ type: "play", key });
+    },
+    stop() {
+      restoredTargetCalls.push({ type: "stop" });
+    },
+    setTexture(key, frame) {
+      restoredTargetCalls.push({ type: "texture", key, frame });
+    }
+  }, "forest", 0, "forest.water");
+  assert.equal(restoredTargetCalls.at(-1).type, "play");
+  assert.equal(created.length, 5, "restored playback reuses the canonical animation");
 
   playback.destroy();
+  latePlayback.destroy();
+  sameFramePlayback.destroy();
+  restoredPlayback.destroy();
   const callCount = targetCalls.length;
   callbacks.onPreview("forest", "another-preview", asset);
   assert.equal(targetCalls.length, callCount);
+});
+
+test("a late tileset binding replaces a pre-existing canonical animation with the stored preview", () => {
+  const asset = tilesetAsset();
+  asset.tileset.animations = [{
+    key: "forest.water",
+    prompt: "Shimmering water.",
+    frameCount: 2,
+    frameRate: 2,
+    repeat: -1
+  }];
+  asset.versions.v1.tilesetAnimations = {
+    "forest.water": { files: ["/water-0.png", "/water-1.png"] }
+  };
+  const manifest = { schemaVersion: 1, assets: { forest: asset } };
+  const animationKeys = new Set();
+  const removed = [];
+  const created = [];
+  const scene = {
+    load: { image() {}, spritesheet() {} },
+    textures: { exists: () => true },
+    anims: {
+      exists(key) {
+        return animationKeys.has(key);
+      },
+      remove(key) {
+        removed.push(key);
+        animationKeys.delete(key);
+      },
+      generateFrameNumbers() {
+        return [];
+      },
+      create(config) {
+        created.push(config);
+        animationKeys.add(config.key);
+      }
+    }
+  };
+  const runtime = new AiAssetRuntime(scene, manifest);
+  const canonicalPlayback = runtime.playTilesetAnimation({
+    play() {},
+    stop() {},
+    setTexture() {}
+  }, "forest", 1, "forest.water");
+  canonicalPlayback.destroy();
+  assert.deepEqual(created.at(-1).frames, [
+    { key: "forest::tileset:forest.water:0", frame: 1, duration: undefined },
+    { key: "forest::tileset:forest.water:1", frame: 1, duration: undefined }
+  ]);
+
+  runtime.designerCallbacks().onTilesetAnimationPreview(
+    "forest",
+    "forest.water",
+    ["water-preview-0", "water-preview-1"],
+    asset
+  );
+  assert.equal(created.length, 1, "a preview without bindings is retained without installation");
+
+  const targetCalls = [];
+  const previewPlayback = runtime.playTilesetAnimation({
+    play(key) {
+      targetCalls.push({ type: "play", key });
+    },
+    stop() {
+      targetCalls.push({ type: "stop" });
+    },
+    setTexture(key, frame) {
+      targetCalls.push({ type: "texture", key, frame });
+    }
+  }, "forest", 1, "forest.water");
+
+  assert.equal(targetCalls.at(-1).type, "play");
+  assert.deepEqual(removed, ["forest::tile-animation:forest.water:1"]);
+  assert.deepEqual(created.at(-1).frames, [
+    { key: "water-preview-0", frame: 1, duration: undefined },
+    { key: "water-preview-1", frame: 1, duration: undefined }
+  ]);
+  previewPlayback.destroy();
 });
 
 test("a promoted tileset install survives transient previews and replaces the canonical texture", async () => {

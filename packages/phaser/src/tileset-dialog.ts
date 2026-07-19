@@ -12,6 +12,8 @@ import {
   assetWithGeneratedGeometry,
   loadImageElement,
   openFrameTouchUpEditor,
+  positiveIntegerInput,
+  positiveIntegerValue,
   readableAssetName,
   replaceSpriteSheetFrames,
   setFrameBackground
@@ -50,6 +52,11 @@ export type TilesetBaseMixCurrent = {
 
 export type TilesetEditorResult = {
   dataUrl: string;
+};
+
+export type TilesetAnimationEditorResult = {
+  frames: string[];
+  animation: AiTilesetAnimation;
 };
 
 export type TilesetTileGenerationOverride = Pick<
@@ -183,6 +190,26 @@ export function tilesetTilePrompt(
 ): string | undefined {
   const prompt = tileset?.tiles?.[tile]?.prompt?.trim();
   return prompt || undefined;
+}
+
+export function tilesetAnimationWithFrameDelays(
+  animation: AiTilesetAnimation,
+  frameDelays: number[]
+): AiTilesetAnimation {
+  if (frameDelays.length !== animation.frameCount) {
+    throw new Error(
+      `Tileset animation "${animation.key}" requires ${animation.frameCount} frame delays, ` +
+        `received ${frameDelays.length}.`
+    );
+  }
+
+  const fallbackDelayMs = Math.round(1000 / Math.max(1, animation.frameRate));
+  return {
+    ...animation,
+    frameTimings: frameDelays.map((delayMs) => ({
+      delayMs: positiveIntegerValue(delayMs, fallbackDelayMs)
+    }))
+  };
 }
 
 /**
@@ -509,6 +536,335 @@ export async function openTilesetEditor(options: {
       close();
     } catch (error) {
       setFeedback(`Could not apply tileset edits: ${tilesetErrorMessage(error)}`, "error");
+      busy = false;
+      syncButtons();
+    }
+  });
+
+  window.addEventListener("keydown", keyHandler, true);
+  render();
+  tileButtons[0]?.focus();
+}
+
+export async function openTilesetAnimationEditor(options: {
+  root: HTMLElement;
+  asset: AiAssetDefinition;
+  assetId: string;
+  animationKey: string;
+  frames: string[];
+  onConfirm(result: TilesetAnimationEditorResult): void | Promise<void>;
+}): Promise<void> {
+  const tileset = tilesetMetadataForAsset(options.asset);
+  const animation = tilesetAnimationForKey(options.asset, options.animationKey);
+  if (!tileset || !animation) return;
+  if (options.frames.length !== animation.frameCount) {
+    throw new Error(
+      `${readableAssetName(animation.key)} requires ${animation.frameCount} frames, ` +
+        `but ${options.frames.length} are available.`
+    );
+  }
+
+  const tileCount = tilesetTileCount(tileset);
+  const frameGrid = tilesetFrameGrid(tileset);
+  const touchUpScale = Math.min(224 / tileset.tileWidth, 224 / tileset.tileHeight);
+  const touchUpDisplaySize = {
+    width: Math.max(1, Math.round(tileset.tileWidth * touchUpScale)),
+    height: Math.max(1, Math.round(tileset.tileHeight * touchUpScale))
+  };
+  const defaultDelayMs = Math.round(1000 / Math.max(1, animation.frameRate));
+  const frameDelays = Array.from(
+    { length: animation.frameCount },
+    (_, frameSlot) => positiveIntegerValue(
+      animation.frameTimings?.[frameSlot]?.delayMs,
+      defaultDelayMs
+    )
+  );
+  const frames = [...options.frames];
+
+  const dialog = document.createElement("div");
+  dialog.className = "ai-game-assets-designer__modal ai-game-assets-designer__tileset-animation-editor";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute(
+    "aria-label",
+    `Edit ${readableAssetName(options.assetId)} ${readableAssetName(animation.key)} animation`
+  );
+
+  const card = document.createElement("div");
+  card.className = "ai-game-assets-designer__modal-card ai-game-assets-designer__tileset-mixer-card";
+  const title = document.createElement("div");
+  title.className = "ai-game-assets-designer__modal-title";
+  title.textContent =
+    `Edit ${readableAssetName(options.assetId)} · ${readableAssetName(animation.key)}`;
+
+  const body = document.createElement("div");
+  body.className = "ai-game-assets-designer__tileset-mixer-body";
+  const navigatorPanel = document.createElement("section");
+  navigatorPanel.className = "ai-game-assets-designer__tileset-navigator-panel";
+  const navigatorTitle = document.createElement("div");
+  navigatorTitle.className = "ai-game-assets-designer__tileset-section-title";
+  navigatorTitle.textContent = "Tiles";
+  const navigator = document.createElement("div");
+  navigator.className = "ai-game-assets-designer__tileset-navigator";
+  navigatorPanel.append(navigatorTitle, navigator);
+
+  const previewPanel = document.createElement("section");
+  previewPanel.className = "ai-game-assets-designer__tileset-preview-panel";
+  const previewTitle = document.createElement("div");
+  previewTitle.className = "ai-game-assets-designer__tileset-section-title";
+  const stage = document.createElement("div");
+  stage.className =
+    "ai-game-assets-designer__modal-stage ai-game-assets-designer__tileset-editor-stage";
+  const prompt = document.createElement("div");
+  prompt.className = "ai-game-assets-designer__tileset-tile-prompt";
+  const strip = document.createElement("div");
+  strip.className = "ai-game-assets-designer__frame-strip ai-game-assets-designer__tileset-editor-strip";
+
+  const delayInput = document.createElement("input");
+  delayInput.type = "number";
+  delayInput.min = "1";
+  delayInput.step = "1";
+  delayInput.inputMode = "numeric";
+  const delayField = document.createElement("label");
+  delayField.className = "ai-game-assets-designer__field";
+  const delayLabel = document.createElement("span");
+  delayLabel.textContent = "Delay ms";
+  delayField.append(delayLabel, delayInput);
+  const fields = document.createElement("div");
+  fields.className = "ai-game-assets-designer__frame-fields";
+  fields.append(delayField);
+
+  previewPanel.append(previewTitle, stage, prompt, strip, fields);
+  body.append(navigatorPanel, previewPanel);
+
+  const feedback = document.createElement("div");
+  feedback.className = "ai-game-assets-designer__modal-feedback";
+  feedback.hidden = true;
+  const touchUpButton = modalButton("Touch up...");
+  const cancelButton = modalButton("Cancel");
+  const confirmButton = modalButton("Confirm");
+  const actions = document.createElement("div");
+  actions.className = "ai-game-assets-designer__modal-actions";
+  actions.append(touchUpButton, cancelButton, confirmButton);
+
+  card.append(title, body, feedback, actions);
+  dialog.append(card);
+  options.root.append(dialog);
+
+  let selectedTile = 0;
+  let selectedFrameSlot = 0;
+  let previewFrameSlot = 0;
+  let previewTimeout: number | undefined;
+  let busy = false;
+  let closed = false;
+  const tileButtons: HTMLButtonElement[] = [];
+  const frameButtons: HTMLButtonElement[] = [];
+
+  const setFeedback = (
+    message: string,
+    kind: "idle" | "busy" | "error" | "success" = "idle"
+  ) => {
+    feedback.textContent = message;
+    feedback.dataset.kind = kind;
+    feedback.hidden = message.length === 0;
+  };
+
+  const syncButtons = () => {
+    touchUpButton.disabled = busy;
+    cancelButton.disabled = busy;
+    confirmButton.disabled = busy;
+    delayInput.disabled = busy;
+    tileButtons.forEach((button) => {
+      button.disabled = busy;
+    });
+    frameButtons.forEach((button) => {
+      button.disabled = busy;
+    });
+  };
+
+  const stopPreview = () => {
+    if (previewTimeout !== undefined) {
+      window.clearTimeout(previewTimeout);
+      previewTimeout = undefined;
+    }
+  };
+
+  const showPreviewFrame = (frameSlot: number) => {
+    const src = frames[frameSlot];
+    if (!src) return;
+    setFrameBackground(stage, {
+      src,
+      frame: selectedTile,
+      frameGrid,
+      displaySize: { width: 224, height: 224 }
+    });
+    tileButtons.forEach((button, tile) => {
+      setFrameBackground(button, {
+        src,
+        frame: tile,
+        frameGrid,
+        displaySize: { width: 56, height: 56 }
+      });
+    });
+    frameButtons.forEach((button, index) => {
+      button.classList.toggle("is-previewing", index === frameSlot);
+      button.setAttribute("aria-current", index === frameSlot ? "true" : "false");
+    });
+  };
+
+  const schedulePreview = (startFrameSlot = previewFrameSlot) => {
+    stopPreview();
+    previewFrameSlot = startFrameSlot % frames.length;
+    const step = () => {
+      if (closed || frames.length === 0) return;
+      const frameSlot = previewFrameSlot;
+      showPreviewFrame(frameSlot);
+      previewFrameSlot = (frameSlot + 1) % frames.length;
+      previewTimeout = window.setTimeout(step, frameDelays[frameSlot] ?? defaultDelayMs);
+    };
+    step();
+  };
+
+  const render = () => {
+    previewTitle.textContent =
+      `Tile ${selectedTile + 1} · Frame ${selectedFrameSlot + 1}`;
+    const tilePrompt = animation.tiles?.[selectedTile]?.prompt?.trim();
+    prompt.textContent = tilePrompt
+      ? `Tile ${selectedTile + 1}: ${tilePrompt}`
+      : `Tile ${selectedTile + 1}`;
+    delayInput.value = String(frameDelays[selectedFrameSlot] ?? defaultDelayMs);
+
+    tileButtons.forEach((button, tile) => {
+      button.classList.toggle("is-selected", tile === selectedTile);
+      button.setAttribute("aria-pressed", String(tile === selectedTile));
+    });
+    frameButtons.forEach((button, frameSlot) => {
+      button.classList.toggle("is-selected", frameSlot === selectedFrameSlot);
+      button.setAttribute("aria-pressed", String(frameSlot === selectedFrameSlot));
+      setFrameBackground(button, {
+        src: frames[frameSlot]!,
+        frame: selectedTile,
+        frameGrid,
+        displaySize: { width: 48, height: 48 }
+      });
+    });
+    syncButtons();
+    schedulePreview(selectedFrameSlot);
+  };
+
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    stopPreview();
+    window.removeEventListener("keydown", keyHandler, true);
+    dialog.remove();
+  };
+
+  const keyHandler = (event: KeyboardEvent) => {
+    if (event.key !== "Escape" || busy) return;
+    event.preventDefault();
+    close();
+  };
+
+  for (let tile = 0; tile < tileCount; tile += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ai-game-assets-designer__tileset-tile";
+    button.dataset.source = String(tile + 1);
+    button.setAttribute("aria-label", `Tile ${tile + 1}`);
+    button.addEventListener("click", () => {
+      selectedTile = tile;
+      setFeedback("");
+      render();
+    });
+    tileButtons.push(button);
+    navigator.append(button);
+  }
+
+  for (let frameSlot = 0; frameSlot < frames.length; frameSlot += 1) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "ai-game-assets-designer__frame-thumb";
+    button.setAttribute("aria-label", `Frame ${frameSlot + 1}`);
+    button.addEventListener("click", () => {
+      selectedFrameSlot = frameSlot;
+      setFeedback("");
+      render();
+    });
+    frameButtons.push(button);
+    strip.append(button);
+  }
+
+  delayInput.addEventListener("input", () => {
+    frameDelays[selectedFrameSlot] = positiveIntegerInput(
+      delayInput,
+      frameDelays[selectedFrameSlot] ?? defaultDelayMs
+    );
+    schedulePreview(selectedFrameSlot);
+  });
+
+  touchUpButton.addEventListener("click", async () => {
+    if (busy) return;
+    const tile = selectedTile;
+    const frameSlot = selectedFrameSlot;
+    busy = true;
+    syncButtons();
+    setFeedback(
+      `Opening touch-up for tile ${tile + 1}, frame ${frameSlot + 1}...`,
+      "busy"
+    );
+    try {
+      const tileSrc = await extractTilesetTileDataUrl(frames[frameSlot]!, tileset, tile);
+      await openFrameTouchUpEditor({
+        root: options.root,
+        asset: options.asset,
+        title:
+          `${readableAssetName(options.assetId)} ${readableAssetName(animation.key)} ` +
+            `tile ${tile + 1}, frame ${frameSlot + 1}`,
+        frameSrc: tileSrc,
+        displaySize: touchUpDisplaySize,
+        onSave: async (editedTileSrc) => {
+          frames[frameSlot] = await replaceSpriteSheetFrames({
+            src: frames[frameSlot]!,
+            uploadSrc: editedTileSrc,
+            frameGrid,
+            frames: [tile]
+          });
+          selectedTile = tile;
+          selectedFrameSlot = frameSlot;
+          render();
+          setFeedback(
+            `Touched up tile ${tile + 1}, frame ${frameSlot + 1}.`,
+            "success"
+          );
+        }
+      });
+      setFeedback("");
+    } catch (error) {
+      setFeedback(`Could not open tile touch-up: ${tilesetErrorMessage(error)}`, "error");
+    } finally {
+      busy = false;
+      syncButtons();
+    }
+  });
+
+  cancelButton.addEventListener("click", close);
+  confirmButton.addEventListener("click", async () => {
+    if (busy) return;
+    busy = true;
+    syncButtons();
+    setFeedback("Applying tileset animation edits...", "busy");
+    try {
+      await options.onConfirm({
+        frames: [...frames],
+        animation: tilesetAnimationWithFrameDelays(animation, frameDelays)
+      });
+      close();
+    } catch (error) {
+      setFeedback(
+        `Could not apply tileset animation edits: ${tilesetErrorMessage(error)}`,
+        "error"
+      );
       busy = false;
       syncButtons();
     }
