@@ -16,15 +16,6 @@ export {
   tilesetAnimationFramePrompt
 } from "./provider.js";
 
-export {
-  composeTilesetGeneratedOption,
-  extractTilesetCellImage,
-  extractTilesetCellReference,
-  generateAssetWithIsolatedTilesetCells,
-  tilesetCellAsset,
-  tilesetCellBounds
-} from "./tileset-generation.js";
-
 export type {
   AiAudioProvider,
   ElevenLabsAudioProviderOptions,
