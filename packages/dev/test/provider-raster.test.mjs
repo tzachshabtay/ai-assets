@@ -34,14 +34,14 @@ function propsTilesetAsset() {
       rows: 1,
       tileCount: 4,
       tiles: [
-        { prompt: "A centered wooden crate." },
-        { prompt: "A centered clay pot." },
-        { prompt: "A centered brass key." },
-        { prompt: "A centered green herb." }
+        { prompt: "A centered wooden crate on a transparent background." },
+        { prompt: "A centered clay pot on a transparent background." },
+        { prompt: "A centered brass key on a transparent background." },
+        { prompt: "A centered green herb on a transparent background." }
       ]
     },
     settings: {
-      background: "opaque",
+      background: "auto",
       format: "png"
     },
     activeVersion: "draft",
@@ -174,16 +174,21 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
       assert.equal(body.n, 1);
       assert.equal(body.size, "1536x1024");
       assert.match(body.prompt, /Actual returned raster canvas: 1536x1024 pixels/);
+      assert.match(body.prompt, /generation-only staging canvas packs the tiles as 2 columns by 2 rows/i);
       assert.match(body.prompt, new RegExp(`Tile 1 \\[${rectLabel(geometry.cells[0])}\\]`));
       assert.match(body.prompt, new RegExp(`Tile 4 \\[${rectLabel(geometry.cells[3])}\\]`));
       assert.match(body.prompt, /hard temporary gutters/i);
+      assert.match(body.prompt, /safe-content rectangle/i);
+      assert.match(body.prompt, /complete silhouette must not touch or cross/i);
+      assert.match(body.prompt, /transparent terrain, connector, wall, corner, or overlay/i);
+      assert.doesNotMatch(body.prompt, /isolated square slot/i);
       assert.match(body.prompt, /extracts each tile rectangle independently/i);
       assert.match(body.prompt, /outside its rectangle is irretrievably discarded/i);
       assert.match(body.prompt, /not inside a usable tile rectangle.*hard-gutter color/i);
       assert.doesNotMatch(body.prompt, /assigned to the neighboring tile/i);
       assert.doesNotMatch(
         body.prompt,
-        /Target canvas: 128x32|Output one 128×32|final post-processed asset is one 128×32|Logical final-sheet geometry|Logical final-resolution usable tile rectangles|Single-image asset contract|exactly one complete sprite/i
+        /Target canvas: 128x32|Output one 128×32|final post-processed asset is one 128×32|Logical final-sheet geometry|Logical final-resolution usable tile rectangles|arranged as 4 columns by 1 row|Single-image asset contract|exactly one complete sprite/i
       );
     }
 
@@ -229,10 +234,10 @@ test("OpenAI provider stages full-sheet tileset edit references in generation sp
       assert.match(String(url), /\/v1\/images\/edits$/);
       assert.ok(init.body instanceof FormData);
       assert.equal(init.body.get("size"), "1536x1024");
-      assert.match(
-        String(init.body.get("prompt")),
-        /Actual returned raster canvas: 1536x1024 pixels/
-      );
+      const prompt = String(init.body.get("prompt"));
+      assert.match(prompt, /Actual returned raster canvas: 1536x1024 pixels/);
+      assert.match(prompt, /preserve referenced artwork at its existing scale and position/i);
+      assert.doesNotMatch(prompt, /safe-content rectangle/i);
 
       const images = init.body.getAll("image[]");
       assert.equal(images.length, 1);

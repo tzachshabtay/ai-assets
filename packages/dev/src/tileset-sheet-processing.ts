@@ -20,6 +20,10 @@ export type TilesetSheetCell = TilesetSheetRect & {
   logical: TilesetSheetRect;
 };
 
+export type TilesetSheetUnusedSlot = TilesetSheetRect & {
+  index: number;
+};
+
 export type TilesetSheetOuterPadding = {
   left: number;
   top: number;
@@ -32,6 +36,9 @@ export type TilesetSheetGenerationGeometry = {
   logical: AiAssetDimensions;
   sheet: TilesetSheetRect;
   cells: TilesetSheetCell[];
+  unusedSlots: TilesetSheetUnusedSlot[];
+  generationColumns: number;
+  generationRows: number;
   scale: number;
   gutter: number;
   outerPadding: TilesetSheetOuterPadding;
@@ -75,18 +82,26 @@ export function tilesetSheetGenerationGeometry(
   const spacing = tileset.spacing ?? 0;
   const capacity = tileset.columns * tileset.rows;
   const tileCount = Math.min(tileset.tileCount ?? capacity, capacity);
-  // Give the model a substantial visual separation between adjacent tile slots.
-  // These gutters exist only while generating; the final sheet is reconstructed
-  // from the isolated cells, so spending a quarter tile on separation cannot
-  // change the logical asset geometry.
+  // The generation grid is intentionally independent of the final sheet grid.
+  // Packing a very wide logical sheet (for example, four props in one row) into
+  // a layout that fills the model canvas gives every tile enough vertical room.
+  // The final logical order is restored during per-cell composition.
   const gutterUnit = Math.max(
     1,
-    Math.ceil(Math.min(tileset.tileWidth, tileset.tileHeight) / 4)
+    Math.ceil(Math.min(tileset.tileWidth, tileset.tileHeight) / 8)
   );
+  const packing = selectTilesetGenerationPacking({
+    canvas,
+    tileCount,
+    tileWidth: tileset.tileWidth,
+    tileHeight: tileset.tileHeight,
+    gutterUnit,
+    logicalColumns: tileset.columns
+  });
   const paddedLayoutWidth =
-    tileset.columns * tileset.tileWidth + (tileset.columns + 1) * gutterUnit;
+    packing.columns * tileset.tileWidth + (packing.columns + 1) * gutterUnit;
   const paddedLayoutHeight =
-    tileset.rows * tileset.tileHeight + (tileset.rows + 1) * gutterUnit;
+    packing.rows * tileset.tileHeight + (packing.rows + 1) * gutterUnit;
   const maximumScale = Math.min(
     canvas.width / paddedLayoutWidth,
     canvas.height / paddedLayoutHeight
@@ -99,8 +114,8 @@ export function tilesetSheetGenerationGeometry(
   const cellWidth = Math.max(1, Math.floor(tileset.tileWidth * scale));
   const cellHeight = Math.max(1, Math.floor(tileset.tileHeight * scale));
   const gutter = Math.max(1, Math.floor(gutterUnit * scale));
-  const layoutWidth = tileset.columns * cellWidth + (tileset.columns - 1) * gutter;
-  const layoutHeight = tileset.rows * cellHeight + (tileset.rows - 1) * gutter;
+  const layoutWidth = packing.columns * cellWidth + (packing.columns - 1) * gutter;
+  const layoutHeight = packing.rows * cellHeight + (packing.rows - 1) * gutter;
 
   if (layoutWidth > canvas.width || layoutHeight > canvas.height) {
     throw new Error(
@@ -114,7 +129,7 @@ export function tilesetSheetGenerationGeometry(
     width: layoutWidth,
     height: layoutHeight
   };
-  const cells = Array.from({ length: capacity }, (_, index) => {
+  const logicalCells = Array.from({ length: capacity }, (_, index) => {
     const column = index % tileset.columns;
     const row = Math.floor(index / tileset.columns);
     const logicalX = margin + column * (tileset.tileWidth + spacing);
@@ -137,22 +152,34 @@ export function tilesetSheetGenerationGeometry(
       );
     }
 
+    return logicalRect;
+  });
+  const slots = Array.from({ length: packing.columns * packing.rows }, (_, index) => {
+    const column = index % packing.columns;
+    const row = Math.floor(index / packing.columns);
     return {
       index,
-      usable: index < tileCount,
       x: sheet.x + column * (cellWidth + gutter),
       y: sheet.y + row * (cellHeight + gutter),
       width: cellWidth,
-      height: cellHeight,
-      logical: logicalRect
+      height: cellHeight
     };
   });
+  const cells = slots.slice(0, tileCount).map((slot, index) => ({
+    ...slot,
+    usable: true,
+    logical: logicalCells[index]!
+  }));
+  const unusedSlots = slots.slice(tileCount);
 
   return {
     canvas,
     logical,
     sheet,
     cells,
+    unusedSlots,
+    generationColumns: packing.columns,
+    generationRows: packing.rows,
     scale,
     gutter,
     outerPadding: {
@@ -163,6 +190,93 @@ export function tilesetSheetGenerationGeometry(
     },
     size: `${canvas.width}x${canvas.height}`
   };
+}
+
+function selectTilesetGenerationPacking(options: {
+  canvas: AiAssetDimensions;
+  tileCount: number;
+  tileWidth: number;
+  tileHeight: number;
+  gutterUnit: number;
+  logicalColumns: number;
+}): { columns: number; rows: number } {
+  if (options.tileCount <= 0) {
+    throw new Error("A tileset generation layout requires at least one usable tile.");
+  }
+
+  let best: {
+    columns: number;
+    rows: number;
+    scale: number;
+    unused: number;
+    aspectDelta: number;
+    packingScore: number;
+    logicalColumnDelta: number;
+  } | undefined;
+  const canvasAspect = options.canvas.width / options.canvas.height;
+
+  for (let columns = 1; columns <= options.tileCount; columns += 1) {
+    const rows = Math.ceil(options.tileCount / columns);
+    const paddedWidth =
+      columns * options.tileWidth + (columns + 1) * options.gutterUnit;
+    const paddedHeight =
+      rows * options.tileHeight + (rows + 1) * options.gutterUnit;
+    const maximumScale = Math.min(
+      options.canvas.width / paddedWidth,
+      options.canvas.height / paddedHeight
+    );
+    const scale = maximumScale >= 1 ? Math.floor(maximumScale) : maximumScale;
+    const cellWidth = Math.max(1, Math.floor(options.tileWidth * scale));
+    const cellHeight = Math.max(1, Math.floor(options.tileHeight * scale));
+    const gutter = Math.max(1, Math.floor(options.gutterUnit * scale));
+    const layoutWidth = columns * cellWidth + (columns - 1) * gutter;
+    const layoutHeight = rows * cellHeight + (rows - 1) * gutter;
+    if (layoutWidth > options.canvas.width || layoutHeight > options.canvas.height) continue;
+
+    const unused = columns * rows - options.tileCount;
+    const aspectDelta = Math.abs(Math.log((layoutWidth / layoutHeight) / canvasAspect));
+    // Prefer a canvas-shaped staging layout, while charging enough for empty
+    // slots that four tiles still use a clean 2x2 grid instead of a sparse 3x2.
+    const candidate = {
+      columns,
+      rows,
+      scale,
+      unused,
+      aspectDelta,
+      packingScore: aspectDelta + 0.8 * (unused / options.tileCount),
+      logicalColumnDelta: Math.abs(columns - options.logicalColumns)
+    };
+    if (!best || isBetterTilesetPacking(candidate, best)) best = candidate;
+  }
+
+  if (!best) {
+    throw new Error("The tileset cells cannot fit on the requested generation canvas.");
+  }
+  return { columns: best.columns, rows: best.rows };
+}
+
+function isBetterTilesetPacking(
+  candidate: {
+    scale: number;
+    unused: number;
+    aspectDelta: number;
+    packingScore: number;
+    logicalColumnDelta: number;
+  },
+  current: {
+    scale: number;
+    unused: number;
+    aspectDelta: number;
+    packingScore: number;
+    logicalColumnDelta: number;
+  }
+): boolean {
+  if (candidate.scale !== current.scale) return candidate.scale > current.scale;
+  if (candidate.packingScore !== current.packingScore) {
+    return candidate.packingScore < current.packingScore;
+  }
+  if (candidate.unused !== current.unused) return candidate.unused < current.unused;
+  return candidate.logicalColumnDelta < current.logicalColumnDelta;
 }
 
 export async function stageTilesetSheetReference(

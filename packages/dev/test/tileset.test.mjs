@@ -392,6 +392,7 @@ test("tileset animation generation uses three sequential candidate branches", as
   assert.match(finalProviderPrompt, /Actual returned raster canvas: 1536x1024 pixels/);
   assert.match(finalProviderPrompt, /hard temporary gutters/i);
   assert.match(finalProviderPrompt, /extracts each tile rectangle independently/i);
+  assert.doesNotMatch(finalProviderPrompt, /safe-content rectangle/i);
   assert.match(finalProviderPrompt, /outside its rectangle is irretrievably discarded/i);
   assert.doesNotMatch(finalProviderPrompt, /assigned to the neighboring tile/i);
   assert.doesNotMatch(

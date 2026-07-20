@@ -676,7 +676,8 @@ export function gameAssetPrompt(
               request.asset,
               context.tilesetGeometry,
               context.chromaKey,
-              shouldRequestRgbaPng(request, context)
+              shouldRequestRgbaPng(request, context),
+              !isTilesetAnimation && !request.references?.length
             )
           : [
               `Target canvas: ${dimensions.width}x${dimensions.height}. The output origin and every cell boundary must exactly match Reference 1.`
@@ -690,7 +691,8 @@ export function gameAssetPrompt(
               request.asset,
               context.tilesetGeometry,
               context.chromaKey,
-              shouldRequestRgbaPng(request, context)
+              shouldRequestRgbaPng(request, context),
+              !isTilesetAnimation && !request.references?.length
             )
           : [`Target canvas: ${dimensions.width}x${dimensions.height}.`])
       ]));
@@ -700,7 +702,7 @@ export function gameAssetPrompt(
       "Decide independently for each tile whether its artwork should be opaque edge-to-edge or should contain transparent pixels, based on what that tile depicts.",
       `For any tile that needs transparency, encode every transparent or empty pixel with the exact flat chroma-key color ${hexColor(context.chromaKey)}. This color is the transparency marker and will be removed after generation.`,
       `Never use any other matte, background, checkerboard, or substitute transparency color. Do not use ${hexColor(context.chromaKey)} in visible tile artwork.`,
-      "For a tile that does not need transparency, fill the cell edge-to-edge and do not use the chroma-key color. Do not add labels, borders, shadows outside tiles, or a centered presentation layout."
+      "For a tile that does not need transparency, fill the cell edge-to-edge and do not use the chroma-key color. Do not add labels, borders, or shadows outside tiles, and do not treat the entire multi-tile canvas as one centered presentation card."
     );
   } else if (shouldRequestRgbaPng(request, context)) {
     lines.push(
@@ -924,34 +926,50 @@ function tilesetGenerationGeometryPromptLines(
   asset: AiAssetDefinition,
   geometry: TilesetSheetGenerationGeometry,
   chromaKey: RgbColor,
-  transparentPadding: boolean
+  transparentPadding: boolean,
+  requireSafeContentInset: boolean
 ): string[] {
   const tileset = asset.tileset;
   if (!tileset) return [];
 
   const usableCells = geometry.cells.filter((cell) => cell.usable);
-  const unusedCells = geometry.cells.filter((cell) => !cell.usable);
+  const unusedCells = geometry.unusedSlots;
   const usableRectangles = usableCells.map((cell) => (
     `Tile ${cell.index + 1} [${tilesetSheetRectLabel(cell)}]`
   )).join("; ");
+  const safeRectangles = usableCells.map((cell) => {
+    const insetX = safeTilesetContentInset(cell.width);
+    const insetY = safeTilesetContentInset(cell.height);
+    return `Tile ${cell.index + 1} [${tilesetSheetRectLabel({
+      x: cell.x + insetX,
+      y: cell.y + insetY,
+      width: cell.width - insetX * 2,
+      height: cell.height - insetY * 2
+    })}]`;
+  }).join("; ");
   const unusedRectangles = unusedCells.map((cell) => (
-    `Cell ${cell.index + 1} [${tilesetSheetRectLabel(cell)}]`
+    `Packing slot ${cell.index + 1} [${tilesetSheetRectLabel(cell)}]`
   )).join("; ");
-  const rowLabel = tileset.rows === 1 ? "row" : "rows";
-  const columnLabel = tileset.columns === 1 ? "column" : "columns";
+  const rowLabel = geometry.generationRows === 1 ? "row" : "rows";
+  const columnLabel = geometry.generationColumns === 1 ? "column" : "columns";
 
   return [
     `Actual returned raster canvas: ${geometry.canvas.width}x${geometry.canvas.height} pixels. These are the coordinates you must draw in.`,
-    `This generation canvas contains one tileset arranged as ${tileset.columns} ${columnLabel} by ${tileset.rows} ${rowLabel}. Each tile occupies one isolated slot; the slots are separated by hard temporary gutters.`,
+    `This generation-only staging canvas packs the tiles as ${geometry.generationColumns} ${columnLabel} by ${geometry.generationRows} ${rowLabel}. This temporary packing may differ from the final game sheet; follow tile numbers and the rectangles below, and do not recreate the final logical layout.`,
+    "Each tile occupies one isolated slot; the slots are separated by hard temporary gutters.",
     `Exact generation-canvas usable tile rectangles in immutable row-major order: ${usableRectangles}.`,
     "These generation-canvas rectangles are the only tile coordinates for this raster request. Do not infer, draw, or reproduce a second smaller logical sheet or any alternate coordinate system.",
-    "Put exactly one requested tile in each usable rectangle. Keep every visible pixel wholly inside its own rectangle. Edge-to-edge terrain must fill only its own rectangle; an isolated object may use internal empty padding. Never bridge two slots or continue artwork through a gutter.",
+    requireSafeContentInset
+      ? "Put exactly one requested tile in each usable rectangle. Keep every visible pixel wholly inside its own rectangle. Edge-to-edge opaque terrain must fill only its own rectangle. Every isolated object that uses transparency must be complete, centered, and surrounded by empty padding. Never bridge two slots or continue artwork through a gutter."
+      : "Put exactly one requested tile in each usable rectangle and preserve referenced artwork at its existing scale and position. Keep every visible pixel wholly inside its own rectangle. Never bridge two slots or continue artwork through a gutter.",
     `Fill every pixel that is not inside a usable tile rectangle with the exact flat hard-gutter color ${hexColor(chromaKey)}. This includes every inter-slot gutter and all outer canvas padding. Put no artwork, shadow, outline, texture, or antialiasing in a gutter.`,
     "The server extracts each tile rectangle independently and composes the final game sheet in row-major order. Any pixel drawn outside its rectangle is irretrievably discarded with the temporary gutter, so keep every tile complete and entirely within its own rectangle.",
     "Compatible terrain tiles must match edge colors and connectors conceptually while remaining physically isolated by the temporary gutters. The gutters are discarded during composition and are not part of the game tiles.",
-    ...(transparentPadding
+    ...(transparentPadding && requireSafeContentInset
       ? [
-          `Within a tile slot that needs transparency, use only the exact chroma-key color ${hexColor(chromaKey)} for its internal empty pixels; the server converts it to transparency.`
+          `For any tile that both needs transparency and depicts an isolated, non-connecting object or cutout, keep every visible pixel strictly inside its centered safe-content rectangle: ${safeRectangles}. The complete silhouette must not touch or cross the safe-content rectangle edge.`,
+          "A transparent terrain, connector, wall, corner, or overlay that is explicitly meant to meet a tile edge is exempt from the safe-content inset on that required edge, but it must never cross its outer tile rectangle.",
+          `Within an isolated transparent object or cutout tile, fill every pixel outside the visible silhouette—including the entire band between its safe-content rectangle and its outer tile rectangle—with only the exact chroma-key color ${hexColor(chromaKey)}; the server converts it to transparency.`
         ]
       : []),
     ...(unusedRectangles
@@ -960,6 +978,10 @@ function tilesetGenerationGeometryPromptLines(
         ]
       : [])
   ];
+}
+
+function safeTilesetContentInset(size: number): number {
+  return Math.min(Math.max(1, Math.floor(size / 8)), Math.max(0, Math.floor((size - 1) / 2)));
 }
 
 function tilesetOutputPadding(

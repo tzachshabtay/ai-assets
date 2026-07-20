@@ -30,19 +30,23 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
   });
   const propsGeometry = tilesetSheetGenerationGeometry(props, "1536x1024");
 
+  assert.deepEqual(
+    { columns: propsGeometry.generationColumns, rows: propsGeometry.generationRows },
+    { columns: 2, rows: 2 }
+  );
   assert.deepEqual(propsGeometry.sheet, {
-    x: 84,
-    y: 368,
-    width: 1368,
-    height: 288
+    x: 326,
+    y: 70,
+    width: 884,
+    height: 884
   });
-  assert.equal(propsGeometry.scale, 9);
-  assert.equal(propsGeometry.gutter, 72);
+  assert.equal(propsGeometry.scale, 13);
+  assert.equal(propsGeometry.gutter, 52);
   assert.deepEqual(propsGeometry.outerPadding, {
-    left: 84,
-    top: 368,
-    right: 84,
-    bottom: 368
+    left: 326,
+    top: 70,
+    right: 326,
+    bottom: 70
   });
   assert.deepEqual(
     propsGeometry.cells.map(({ x, y, width, height, logical }) => ({
@@ -53,10 +57,10 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
       logical
     })),
     Array.from({ length: 4 }, (_, index) => ({
-      x: 84 + index * 360,
-      y: 368,
-      width: 288,
-      height: 288,
+      x: 326 + (index % 2) * 468,
+      y: 70 + Math.floor(index / 2) * 468,
+      width: 416,
+      height: 416,
       logical: { x: index * 32, y: 0, width: 32, height: 32 }
     }))
   );
@@ -71,32 +75,119 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
   });
   const forestGeometry = tilesetSheetGenerationGeometry(forest, "1536x1024");
 
+  assert.deepEqual(
+    { columns: forestGeometry.generationColumns, rows: forestGeometry.generationRows },
+    { columns: 4, rows: 3 }
+  );
   assert.deepEqual(forestGeometry.sheet, {
-    x: 160,
-    y: 64,
-    width: 1216,
-    height: 896
+    x: 138,
+    y: 44,
+    width: 1260,
+    height: 936
   });
-  assert.equal(forestGeometry.scale, 8);
-  assert.equal(forestGeometry.gutter, 64);
+  assert.equal(forestGeometry.scale, 9);
+  assert.equal(forestGeometry.gutter, 36);
   assert.deepEqual(forestGeometry.cells[0], {
     index: 0,
     usable: true,
-    x: 160,
-    y: 64,
-    width: 256,
-    height: 256,
+    x: 138,
+    y: 44,
+    width: 288,
+    height: 288,
     logical: { x: 0, y: 0, width: 32, height: 32 }
   });
   assert.deepEqual(forestGeometry.cells[11], {
     index: 11,
     usable: true,
-    x: 1120,
-    y: 704,
-    width: 256,
-    height: 256,
+    x: 1110,
+    y: 692,
+    width: 288,
+    height: 288,
     logical: { x: 96, y: 64, width: 32, height: 32 }
   });
+
+  const partial = tilesetAsset({
+    dimensions: { width: 128, height: 64 },
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 4,
+    rows: 2,
+    tileCount: 5
+  });
+  const partialGeometry = tilesetSheetGenerationGeometry(partial, "1536x1024");
+
+  assert.deepEqual(
+    { columns: partialGeometry.generationColumns, rows: partialGeometry.generationRows },
+    { columns: 3, rows: 2 }
+  );
+  assert.equal(partialGeometry.cells.length, 5);
+  assert.deepEqual(partialGeometry.cells[4], {
+    index: 4,
+    usable: true,
+    x: 560,
+    y: 538,
+    width: 416,
+    height: 416,
+    logical: { x: 0, y: 32, width: 32, height: 32 }
+  });
+  assert.deepEqual(partialGeometry.unusedSlots, [{
+    index: 5,
+    x: 1028,
+    y: 538,
+    width: 416,
+    height: 416
+  }]);
+
+  const threeTiles = tilesetAsset({
+    dimensions: { width: 96, height: 32 },
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 3,
+    rows: 1,
+    tileCount: 3
+  });
+  const threeTileGeometry = tilesetSheetGenerationGeometry(threeTiles, "1536x1024");
+  assert.deepEqual(
+    { columns: threeTileGeometry.generationColumns, rows: threeTileGeometry.generationRows },
+    { columns: 2, rows: 2 }
+  );
+
+  const nineTiles = tilesetAsset({
+    dimensions: { width: 128, height: 96 },
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 4,
+    rows: 3,
+    tileCount: 9
+  });
+  const nineTileGeometry = tilesetSheetGenerationGeometry(nineTiles, "1536x1024");
+  assert.deepEqual(
+    { columns: nineTileGeometry.generationColumns, rows: nineTileGeometry.generationRows },
+    { columns: 4, rows: 3 }
+  );
+  assert.equal(nineTileGeometry.cells.length, 9);
+  assert.equal(nineTileGeometry.unusedSlots.length, 3);
+
+  const rectangularTiles = tilesetAsset({
+    dimensions: { width: 64, height: 32 },
+    tileWidth: 16,
+    tileHeight: 32,
+    columns: 4,
+    rows: 1,
+    tileCount: 4
+  });
+  const rectangularGeometry = tilesetSheetGenerationGeometry(
+    rectangularTiles,
+    "1536x1024"
+  );
+  assert.deepEqual(
+    { columns: rectangularGeometry.generationColumns, rows: rectangularGeometry.generationRows },
+    { columns: 4, rows: 1 }
+  );
+  assert.deepEqual(
+    { width: rectangularGeometry.cells[0].width, height: rectangularGeometry.cells[0].height },
+    { width: 320, height: 640 }
+  );
 });
 
 test("per-cell extraction drops generation gutters and preserves cell ownership", async () => {
@@ -116,10 +207,10 @@ test("per-cell extraction drops generation gutters and preserves cell ownership"
   }
   fillRect(
     raw,
-    geometry.cells[1].x + geometry.cells[1].width,
-    geometry.cells[1].y,
+    geometry.cells[0].x + geometry.cells[0].width,
+    geometry.cells[0].y,
     geometry.gutter,
-    geometry.cells[1].height,
+    geometry.cells[0].height,
     [250, 250, 0, 255]
   );
 
