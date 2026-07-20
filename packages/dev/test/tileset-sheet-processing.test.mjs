@@ -15,10 +15,11 @@ const CHROMA = [255, 0, 255, 255];
 const TILE_COLORS = [
   [200, 10, 10, 255],
   [10, 200, 10, 255],
-  [10, 10, 200, 255]
+  [10, 10, 200, 255],
+  [200, 120, 10, 255]
 ];
 
-test("tileset geometry reserves the largest centered integer-scaled logical sheet", () => {
+test("tileset geometry reserves isolated cells with centered generation-only gutters", () => {
   const props = tilesetAsset({
     dimensions: { width: 128, height: 32 },
     tileWidth: 32,
@@ -30,19 +31,33 @@ test("tileset geometry reserves the largest centered integer-scaled logical shee
   const propsGeometry = tilesetSheetGenerationGeometry(props, "1536x1024");
 
   assert.deepEqual(propsGeometry.sheet, {
-    x: 0,
-    y: 320,
-    width: 1536,
-    height: 384
+    x: 84,
+    y: 368,
+    width: 1368,
+    height: 288
   });
-  assert.equal(propsGeometry.scale, 12);
+  assert.equal(propsGeometry.scale, 9);
+  assert.equal(propsGeometry.gutter, 72);
+  assert.deepEqual(propsGeometry.outerPadding, {
+    left: 84,
+    top: 368,
+    right: 84,
+    bottom: 368
+  });
   assert.deepEqual(
-    propsGeometry.cells.map(({ x, y, width, height }) => ({ x, y, width, height })),
+    propsGeometry.cells.map(({ x, y, width, height, logical }) => ({
+      x,
+      y,
+      width,
+      height,
+      logical
+    })),
     Array.from({ length: 4 }, (_, index) => ({
-      x: index * 384,
-      y: 320,
-      width: 384,
-      height: 384
+      x: 84 + index * 360,
+      y: 368,
+      width: 288,
+      height: 288,
+      logical: { x: index * 32, y: 0, width: 32, height: 32 }
     }))
   );
 
@@ -57,38 +72,41 @@ test("tileset geometry reserves the largest centered integer-scaled logical shee
   const forestGeometry = tilesetSheetGenerationGeometry(forest, "1536x1024");
 
   assert.deepEqual(forestGeometry.sheet, {
-    x: 128,
-    y: 32,
-    width: 1280,
-    height: 960
+    x: 160,
+    y: 64,
+    width: 1216,
+    height: 896
   });
-  assert.equal(forestGeometry.scale, 10);
+  assert.equal(forestGeometry.scale, 8);
+  assert.equal(forestGeometry.gutter, 64);
   assert.deepEqual(forestGeometry.cells[0], {
     index: 0,
     usable: true,
-    x: 128,
-    y: 32,
-    width: 320,
-    height: 320
+    x: 160,
+    y: 64,
+    width: 256,
+    height: 256,
+    logical: { x: 0, y: 0, width: 32, height: 32 }
   });
   assert.deepEqual(forestGeometry.cells[11], {
     index: 11,
     usable: true,
-    x: 1088,
-    y: 672,
-    width: 320,
-    height: 320
+    x: 1120,
+    y: 704,
+    width: 256,
+    height: 256,
+    logical: { x: 96, y: 64, width: 32, height: 32 }
   });
 });
 
-test("crop then resize then cleanup preserves cell ownership at fractional canvas boundaries", async () => {
+test("per-cell extraction drops generation gutters and preserves cell ownership", async () => {
   const asset = tilesetAsset({
     dimensions: { width: 96, height: 32 },
     tileWidth: 32,
     tileHeight: 32,
     columns: 3,
     rows: 1,
-    tileCount: 2
+    tileCount: 3
   });
   const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
   const raw = solidPng(geometry.canvas.width, geometry.canvas.height, CHROMA);
@@ -96,6 +114,14 @@ test("crop then resize then cleanup preserves cell ownership at fractional canva
   for (const cell of geometry.cells) {
     fillRect(raw, cell.x, cell.y, cell.width, cell.height, TILE_COLORS[cell.index]);
   }
+  fillRect(
+    raw,
+    geometry.cells[1].x + geometry.cells[1].width,
+    geometry.cells[1].y,
+    geometry.gutter,
+    geometry.cells[1].height,
+    [250, 250, 0, 255]
+  );
 
   const cropped = await cropTilesetSheetFromGeneration(
     PNG.sync.write(raw),
@@ -111,10 +137,63 @@ test("crop then resize then cleanup preserves cell ownership at fractional canva
   assert.deepEqual({ width: cleaned.width, height: cleaned.height }, asset.dimensions);
   assertCellColor(cleaned, 0, TILE_COLORS[0]);
   assertCellColor(cleaned, 1, TILE_COLORS[1]);
-  assert.equal(visiblePixelCount(cleaned, 64, 0, 32, 32), 0);
+  assertCellColor(cleaned, 2, TILE_COLORS[2]);
+  assert.equal(countColor(cleaned, [250, 250, 0, 255]), 0);
 });
 
-test("staged tileset references use the same active-sheet rectangle as generated output", async () => {
+test("per-cell extraction preserves rows when the returned raster is scaled", async () => {
+  const asset = tilesetAsset({
+    dimensions: { width: 64, height: 64 },
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 2,
+    rows: 2,
+    tileCount: 4
+  });
+  const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
+  const actualCanvas = { width: 512, height: 512 };
+  const raw = solidPng(actualCanvas.width, actualCanvas.height, CHROMA);
+  const cells = geometry.cells.map((cell) => ({
+    x: cell.x / 2,
+    y: cell.y / 2,
+    width: cell.width / 2,
+    height: cell.height / 2
+  }));
+
+  for (const [index, cell] of cells.entries()) {
+    fillRect(raw, cell.x, cell.y, cell.width, cell.height, TILE_COLORS[index]);
+  }
+  fillRect(
+    raw,
+    cells[0].x + cells[0].width,
+    cells[0].y,
+    geometry.gutter / 2,
+    cells[0].height,
+    [250, 250, 0, 255]
+  );
+  fillRect(
+    raw,
+    cells[0].x,
+    cells[0].y + cells[0].height,
+    cells[0].width,
+    geometry.gutter / 2,
+    [250, 250, 0, 255]
+  );
+
+  const cropped = PNG.sync.read(await cropTilesetSheetFromGeneration(
+    PNG.sync.write(raw),
+    geometry,
+    "png"
+  ));
+
+  assert.deepEqual({ width: cropped.width, height: cropped.height }, asset.dimensions);
+  for (let index = 0; index < 4; index += 1) {
+    assertGridCellColor(cropped, index, 2, TILE_COLORS[index]);
+  }
+  assert.equal(countColor(cropped, [250, 250, 0, 255]), 0);
+});
+
+test("staged tileset references split logical cells into matching isolated rectangles", async () => {
   const asset = tilesetAsset({
     dimensions: { width: 96, height: 32 },
     tileWidth: 32,
@@ -148,10 +227,60 @@ test("staged tileset references use the same active-sheet rectangle as generated
     TILE_COLORS[1]
   );
   assert.deepEqual(
-    rgbaAt(staged, geometry.sheet.x + geometry.sheet.width - 1, geometry.sheet.y),
+    rgbaAt(
+      staged,
+      geometry.cells[2].x + geometry.cells[2].width - 1,
+      geometry.cells[2].y
+    ),
     TILE_COLORS[2]
   );
+  assert.deepEqual(
+    rgbaAt(
+      staged,
+      geometry.cells[0].x + geometry.cells[0].width,
+      geometry.cells[0].y
+    ),
+    CHROMA
+  );
   assert.match(stagedReference.fileName, /\.staged\.png$/);
+});
+
+test("per-cell composition preserves declared logical margin and spacing", async () => {
+  const asset = tilesetAsset({
+    dimensions: { width: 80, height: 36 },
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 2,
+    rows: 1,
+    tileCount: 2,
+    margin: 2,
+    spacing: 12
+  });
+  const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
+  const raw = solidPng(geometry.canvas.width, geometry.canvas.height, [250, 250, 0, 255]);
+  for (const cell of geometry.cells) {
+    fillRect(raw, cell.x, cell.y, cell.width, cell.height, TILE_COLORS[cell.index]);
+  }
+
+  const processed = PNG.sync.read(await cropTilesetSheetFromGeneration(
+    PNG.sync.write(raw),
+    geometry,
+    "png",
+    {
+      color: { red: 0, green: 0, blue: 0 },
+      transparent: false
+    }
+  ));
+
+  assert.deepEqual(geometry.cells.map((cell) => cell.logical), [
+    { x: 2, y: 2, width: 32, height: 32 },
+    { x: 46, y: 2, width: 32, height: 32 }
+  ]);
+  assert.deepEqual(rgbaAt(processed, 2, 2), TILE_COLORS[0]);
+  assert.deepEqual(rgbaAt(processed, 46, 2), TILE_COLORS[1]);
+  assert.deepEqual(rgbaAt(processed, 0, 0), [0, 0, 0, 255]);
+  assert.deepEqual(rgbaAt(processed, 40, 16), [0, 0, 0, 255]);
+  assert.deepEqual(rgbaAt(processed, 79, 35), [0, 0, 0, 255]);
 });
 
 test("crop processing replaces unused cells with format-safe opaque padding", async () => {
@@ -185,6 +314,18 @@ test("crop processing replaces unused cells with format-safe opaque padding", as
       .toBuffer({ resolveWithObject: true });
 
     assert.deepEqual({ width: info.width, height: info.height }, asset.dimensions);
+    assertApproxColor(
+      rgbaFromRaw(data, info.channels, info.width, 16, 16),
+      TILE_COLORS[0],
+      format === "jpeg" ? 12 : 2,
+      format
+    );
+    assertApproxColor(
+      rgbaFromRaw(data, info.channels, info.width, 48, 16),
+      TILE_COLORS[1],
+      format === "jpeg" ? 12 : 2,
+      format
+    );
     const padding = rgbaFromRaw(data, info.channels, info.width, 80, 16);
     assert.ok(padding[0] < 12 && padding[1] < 12 && padding[2] < 12, format);
     assert.equal(padding[3], 255, format);
@@ -197,7 +338,9 @@ function tilesetAsset({
   tileHeight,
   columns,
   rows,
-  tileCount
+  tileCount,
+  margin,
+  spacing
 }) {
   return {
     id: "test.tileset",
@@ -210,6 +353,8 @@ function tilesetAsset({
       columns,
       rows,
       tileCount,
+      ...(margin === undefined ? {} : { margin }),
+      ...(spacing === undefined ? {} : { spacing }),
       tiles: Array.from({ length: tileCount }, (_, index) => ({
         prompt: `Tile ${index + 1}.`
       }))
@@ -246,11 +391,23 @@ function assertCellColor(png, cell, color) {
   }
 }
 
-function visiblePixelCount(png, x, y, width, height) {
+function assertGridCellColor(png, cell, columns, color) {
+  const originX = (cell % columns) * 32;
+  const originY = Math.floor(cell / columns) * 32;
+  for (let y = originY; y < originY + 32; y += 1) {
+    for (let x = originX; x < originX + 32; x += 1) {
+      assert.deepEqual(rgbaAt(png, x, y), color);
+    }
+  }
+}
+
+function countColor(png, color) {
   let count = 0;
-  for (let localY = 0; localY < height; localY += 1) {
-    for (let localX = 0; localX < width; localX += 1) {
-      if (rgbaAt(png, x + localX, y + localY)[3] > 0) count += 1;
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      if (rgbaAt(png, x, y).every((channel, index) => channel === color[index])) {
+        count += 1;
+      }
     }
   }
   return count;
@@ -264,4 +421,13 @@ function rgbaAt(png, x, y) {
 function rgbaFromRaw(data, channels, width, x, y) {
   const offset = (y * width + x) * channels;
   return Array.from(data.subarray(offset, offset + 4));
+}
+
+function assertApproxColor(actual, expected, tolerance, message) {
+  for (let channel = 0; channel < 4; channel += 1) {
+    assert.ok(
+      Math.abs(actual[channel] - expected[channel]) <= tolerance,
+      `${message}: channel ${channel} expected ${expected[channel]}±${tolerance}, got ${actual[channel]}`
+    );
+  }
 }

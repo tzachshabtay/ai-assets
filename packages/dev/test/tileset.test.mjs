@@ -16,6 +16,7 @@ import {
   gameAssetPrompt,
   tilesetBasePrompt
 } from "../dist/provider.js";
+import { tilesetSheetGenerationGeometry } from "../dist/tileset-sheet-processing.js";
 import {
   deleteAssetVersion,
   ensureTargetVariant,
@@ -370,8 +371,7 @@ test("tileset animation generation uses three sequential candidate branches", as
     calls.find((call) => call.references.length === 2).prompt,
     /Reference 1 is the immutable spatial source of truth/
   );
-  assert.match(calls[0].prompt, /Logical final-sheet geometry after server crop and downsampling: one 32x16 sheet/);
-  assert.match(calls[0].prompt, /Logical final-resolution usable tile rectangles: Tile 1 \[x=0-15, y=0-15\]; Tile 2 \[x=16-31, y=0-15\]/);
+  assert.doesNotMatch(calls[0].prompt, /Logical final-sheet geometry|Logical final-resolution usable tile rectangles/);
   assert.match(calls[0].prompt, /Tile 1: Tile zero stays perfectly still\./);
   assert.match(calls[0].prompt, /Tile 2: Tile one ripples clockwise\./);
   assert.ok(calls[0].prompt.indexOf("Tile 1:") < calls[0].prompt.indexOf("Tile 2:"));
@@ -384,10 +384,20 @@ test("tileset animation generation uses three sequential candidate branches", as
     model: "gpt-image-2",
     outputFormat: "png",
     requestedBackground: "opaque",
-    chromaKey: { red: 255, green: 0, blue: 255 }
+    chromaKey: { red: 255, green: 0, blue: 255 },
+    tilesetGeometry: tilesetSheetGenerationGeometry(asset, "1536x1024")
   });
   assert.match(finalProviderPrompt, /Perform a minimal in-place edit/);
   assert.match(finalProviderPrompt, /Reference 1 always controls sheet geometry/);
+  assert.match(finalProviderPrompt, /Actual returned raster canvas: 1536x1024 pixels/);
+  assert.match(finalProviderPrompt, /hard temporary gutters/i);
+  assert.match(finalProviderPrompt, /extracts each tile rectangle independently/i);
+  assert.match(finalProviderPrompt, /outside its rectangle is irretrievably discarded/i);
+  assert.doesNotMatch(finalProviderPrompt, /assigned to the neighboring tile/i);
+  assert.doesNotMatch(
+    finalProviderPrompt,
+    /Logical final-sheet geometry|Logical final-resolution usable tile rectangles|Single-image asset contract|exactly one complete sprite/i
+  );
   assert.doesNotMatch(finalProviderPrompt, /Draw exactly these/);
   assert.doesNotMatch(finalProviderPrompt, /Seamless mossy grass/);
 

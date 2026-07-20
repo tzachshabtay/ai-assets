@@ -224,7 +224,6 @@ export function tilesetAnimationFramePrompt(
     priorReferenceDescription,
     "Do not redraw or re-lay out the sheet. Preserve every tile at exactly the same index and pixel coordinates; do not shift the canvas or add, remove, reorder, resize, crop, relight, restyle, or redesign tiles.",
     "Only change pixels explicitly required by a tile's animation instruction. Copy every other pixel from Reference 1 unchanged.",
-    ...tilesetContractPromptLines(asset, false),
     ...(tileInstructions.length
       ? [
           "Follow these tile instructions in exact row-major sheet order. Match each tile number to the authoritative generation-canvas rectangle supplied later in the complete model prompt:",
@@ -659,7 +658,9 @@ export function gameAssetPrompt(
   }
   const structuredTilesetPrompt = isTilesetAnimation
     ? []
-    : structuredTilesetPromptLines(request.asset);
+    : context.tilesetGeometry
+      ? modelTilesetArtworkPromptLines(request.asset)
+      : structuredTilesetPromptLines(request.asset);
   if (
     structuredTilesetPrompt.length &&
     !brief?.includes(structuredTilesetPrompt.join("\n"))
@@ -718,8 +719,10 @@ export function gameAssetPrompt(
     );
   }
 
-  if (request.asset.kind === "tileset" && !isTilesetAnimation) {
-    lines.push(...tilesetContractPromptLines(request.asset, false));
+  if (request.asset.kind === "tileset") {
+    if (!isTilesetAnimation && !context.tilesetGeometry) {
+      lines.push(...tilesetContractPromptLines(request.asset, false));
+    }
   } else if (request.asset.frameGrid) {
     const frameCount =
       request.asset.frameGrid.frameCount ??
@@ -874,6 +877,21 @@ function structuredTilesetPromptLines(asset: AiAssetDefinition): string[] {
   ];
 }
 
+function modelTilesetArtworkPromptLines(asset: AiAssetDefinition): string[] {
+  const tileset = asset.tileset;
+  if (!tileset?.tiles) return [];
+
+  const tileCount = tileset.tileCount ?? tileset.columns * tileset.rows;
+
+  return [
+    "Create one deterministic hand-authored tileset in the isolated generation-canvas tile slots declared below.",
+    "Read tile slots left-to-right, then top-to-bottom.",
+    "Use one cohesive visual style, palette, scale, lighting, perspective, and pixel treatment across every tile.",
+    `Draw exactly these ${tileCount} tiles in this exact order:`,
+    ...tileset.tiles.map((tile, index) => `Tile ${index + 1} — ${tile.prompt.trim()}`)
+  ];
+}
+
 function tilesetContractPromptLines(
   asset: AiAssetDefinition,
   includeStructuredPrompt = true
@@ -919,37 +937,29 @@ function tilesetGenerationGeometryPromptLines(
   const unusedRectangles = unusedCells.map((cell) => (
     `Cell ${cell.index + 1} [${tilesetSheetRectLabel(cell)}]`
   )).join("; ");
-  const finalPaddingColor = transparentPadding
-    ? chromaKey
-    : OPAQUE_TILESET_PADDING;
-  const margin = tileset.margin ?? 0;
-  const spacing = tileset.spacing ?? 0;
-  const finalPaddingDescription = transparentPadding
-    ? `the exact chroma-key color ${hexColor(finalPaddingColor)}; the server converts it to transparency`
-    : `the exact flat opaque neutral color ${hexColor(finalPaddingColor)}`;
+  const rowLabel = tileset.rows === 1 ? "row" : "rows";
+  const columnLabel = tileset.columns === 1 ? "column" : "columns";
 
   return [
     `Actual returned raster canvas: ${geometry.canvas.width}x${geometry.canvas.height} pixels. These are the coordinates you must draw in.`,
-    `Place the one complete tileset sheet only inside the active sheet rectangle [${tilesetSheetRectLabel(geometry.sheet)}]. It represents the final ${geometry.logical.width}x${geometry.logical.height} sheet at one uniform ${formatTilesetScale(geometry.scale)}x scale.`,
+    `This generation canvas contains one tileset arranged as ${tileset.columns} ${columnLabel} by ${tileset.rows} ${rowLabel}. Each tile occupies one isolated slot; the slots are separated by hard temporary gutters.`,
     `Exact generation-canvas usable tile rectangles in immutable row-major order: ${usableRectangles}.`,
-    "The generation-canvas rectangles above are authoritative for the returned raster and supersede the smaller logical final-resolution coordinates stated elsewhere. Do not scale, reinterpret, center, or rearrange them.",
-    "Put exactly one requested tile in each usable rectangle. Keep every visible pixel wholly inside its own rectangle. Edge-to-edge terrain may fill its rectangle; an isolated object may use internal empty padding, but neither may cross a rectangle boundary.",
-    `Fill every pixel outside the active sheet rectangle with the exact flat temporary padding color ${hexColor(chromaKey)} and put no artwork there. The server crops this padding away; it is not part of the final tileset.`,
-    ...(margin > 0 || spacing > 0
+    "These generation-canvas rectangles are the only tile coordinates for this raster request. Do not infer, draw, or reproduce a second smaller logical sheet or any alternate coordinate system.",
+    "Put exactly one requested tile in each usable rectangle. Keep every visible pixel wholly inside its own rectangle. Edge-to-edge terrain must fill only its own rectangle; an isolated object may use internal empty padding. Never bridge two slots or continue artwork through a gutter.",
+    `Fill every pixel that is not inside a usable tile rectangle with the exact flat hard-gutter color ${hexColor(chromaKey)}. This includes every inter-slot gutter and all outer canvas padding. Put no artwork, shadow, outline, texture, or antialiasing in a gutter.`,
+    "The server extracts each tile rectangle independently and composes the final game sheet in row-major order. Any pixel drawn outside its rectangle is irretrievably discarded with the temporary gutter, so keep every tile complete and entirely within its own rectangle.",
+    "Compatible terrain tiles must match edge colors and connectors conceptually while remaining physically isolated by the temporary gutters. The gutters are discarded during composition and are not part of the game tiles.",
+    ...(transparentPadding
       ? [
-          `Inside the active sheet, fill all declared outer-margin and inter-cell-spacing pixels with ${finalPaddingDescription}. Put no artwork in those pixels.`
+          `Within a tile slot that needs transparency, use only the exact chroma-key color ${hexColor(chromaKey)} for its internal empty pixels; the server converts it to transparency.`
         ]
       : []),
     ...(unusedRectangles
       ? [
-          `Leave these unused generation-canvas cells empty and filled only with ${finalPaddingDescription}: ${unusedRectangles}.`
+          `Leave these unused generation-canvas slots empty and filled only with the hard-gutter color ${hexColor(chromaKey)}: ${unusedRectangles}.`
         ]
       : [])
   ];
-}
-
-function formatTilesetScale(scale: number): string {
-  return Number.isInteger(scale) ? String(scale) : scale.toFixed(4).replace(/0+$/, "");
 }
 
 function tilesetOutputPadding(

@@ -4,6 +4,7 @@ import test from "node:test";
 import sharp from "sharp";
 
 import { createOpenAiImageProvider } from "../dist/provider.js";
+import { tilesetSheetGenerationGeometry } from "../dist/tileset-sheet-processing.js";
 
 function imageAsset(dimensions, settings = {}) {
   return {
@@ -134,13 +135,16 @@ test("OpenAI provider chooses the closest output aspect ratio unless size is exp
 
 test("OpenAI provider keeps full-sheet tileset generation to one request per candidate", async () => {
   const originalFetch = globalThis.fetch;
+  const asset = propsTilesetAsset();
+  const geometry = tilesetSheetGenerationGeometry(asset, "1536x1024");
+  const tileColors = ["#c81414", "#14c814", "#1414c8", "#c8c814"];
   const generated = await sharp(Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024">
       <rect width="1536" height="1024" fill="#ff00ff"/>
-      <rect x="0" y="320" width="384" height="384" fill="#c81414"/>
-      <rect x="384" y="320" width="384" height="384" fill="#14c814"/>
-      <rect x="768" y="320" width="384" height="384" fill="#1414c8"/>
-      <rect x="1152" y="320" width="384" height="384" fill="#c8c814"/>
+      ${geometry.cells.map((cell, index) => (
+        `<rect x="${cell.x}" y="${cell.y}" width="${cell.width}" ` +
+          `height="${cell.height}" fill="${tileColors[index]}"/>`
+      )).join("\n")}
     </svg>
   `)).png().toBuffer();
   const requestBodies = [];
@@ -160,7 +164,7 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
 
     const provider = createOpenAiImageProvider({ apiKey: "test-key" });
     const options = await provider.generate({
-      asset: propsTilesetAsset(),
+      asset,
       count: 3
     });
 
@@ -170,10 +174,17 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
       assert.equal(body.n, 1);
       assert.equal(body.size, "1536x1024");
       assert.match(body.prompt, /Actual returned raster canvas: 1536x1024 pixels/);
-      assert.match(body.prompt, /active sheet rectangle \[x=0-1535, y=320-703\]/);
-      assert.match(body.prompt, /Tile 1 \[x=0-383, y=320-703\]/);
-      assert.match(body.prompt, /Tile 4 \[x=1152-1535, y=320-703\]/);
-      assert.doesNotMatch(body.prompt, /Target canvas: 128x32|Output one 128×32/);
+      assert.match(body.prompt, new RegExp(`Tile 1 \\[${rectLabel(geometry.cells[0])}\\]`));
+      assert.match(body.prompt, new RegExp(`Tile 4 \\[${rectLabel(geometry.cells[3])}\\]`));
+      assert.match(body.prompt, /hard temporary gutters/i);
+      assert.match(body.prompt, /extracts each tile rectangle independently/i);
+      assert.match(body.prompt, /outside its rectangle is irretrievably discarded/i);
+      assert.match(body.prompt, /not inside a usable tile rectangle.*hard-gutter color/i);
+      assert.doesNotMatch(body.prompt, /assigned to the neighboring tile/i);
+      assert.doesNotMatch(
+        body.prompt,
+        /Target canvas: 128x32|Output one 128×32|final post-processed asset is one 128×32|Logical final-sheet geometry|Logical final-resolution usable tile rectangles|Single-image asset contract|exactly one complete sprite/i
+      );
     }
 
     const { data, info } = await sharp(options[0].image)
@@ -191,10 +202,15 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
 
 test("OpenAI provider stages full-sheet tileset edit references in generation space", async () => {
   const originalFetch = globalThis.fetch;
+  const asset = propsTilesetAsset();
+  const geometry = tilesetSheetGenerationGeometry(asset, "1536x1024");
   const generated = await sharp(Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024">
       <rect width="1536" height="1024" fill="#ff00ff"/>
-      <rect x="0" y="320" width="1536" height="384" fill="#c81414"/>
+      ${geometry.cells.map((cell) => (
+        `<rect x="${cell.x}" y="${cell.y}" width="${cell.width}" ` +
+          `height="${cell.height}" fill="#c81414"/>`
+      )).join("\n")}
     </svg>
   `)).png().toBuffer();
   const reference = await sharp({
@@ -229,8 +245,17 @@ test("OpenAI provider stages full-sheet tileset edit references in generation sp
       );
       const { data, info } = await staged.raw().toBuffer({ resolveWithObject: true });
       const padding = rgbAt(data, info.width, 0, 0);
-      assert.deepEqual(rgbAt(data, info.width, 0, 320), [200, 20, 20]);
-      assert.deepEqual(rgbAt(data, info.width, 1535, 703), [200, 20, 20]);
+      for (const cell of geometry.cells) {
+        assert.deepEqual(rgbAt(data, info.width, cell.x, cell.y), [200, 20, 20]);
+        assert.deepEqual(
+          rgbAt(data, info.width, cell.x + cell.width - 1, cell.y + cell.height - 1),
+          [200, 20, 20]
+        );
+      }
+      const first = geometry.cells[0];
+      const second = geometry.cells[1];
+      const gutterX = Math.floor((first.x + first.width + second.x) / 2);
+      assert.deepEqual(rgbAt(data, info.width, gutterX, first.y), padding);
       assert.deepEqual(rgbAt(data, info.width, 1535, 1023), padding);
       assert.notDeepEqual(padding, [200, 20, 20]);
 
@@ -244,7 +269,7 @@ test("OpenAI provider stages full-sheet tileset edit references in generation sp
 
     const provider = createOpenAiImageProvider({ apiKey: "test-key" });
     const [option] = await provider.generate({
-      asset: propsTilesetAsset(),
+      asset,
       purpose: "tileset-animation",
       references: [{
         image: reference,
@@ -356,4 +381,8 @@ test("OpenAI provider forwards AbortSignal to the active fetch", async () => {
 function rgbAt(data, width, x, y) {
   const offset = (y * width + x) * 4;
   return Array.from(data.subarray(offset, offset + 3));
+}
+
+function rectLabel(rect) {
+  return `x=${rect.x}-${rect.x + rect.width - 1}, y=${rect.y}-${rect.y + rect.height - 1}`;
 }
