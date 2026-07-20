@@ -40,6 +40,7 @@ export type TilesetSheetGenerationGeometry = {
   generationColumns: number;
   generationRows: number;
   scale: number;
+  /** Smallest blank band between a tile rectangle and a neighbor or canvas edge. */
   gutter: number;
   outerPadding: TilesetSheetOuterPadding;
   size: string;
@@ -113,22 +114,6 @@ export function tilesetSheetGenerationGeometry(
   const scale = maximumScale >= 1 ? Math.floor(maximumScale) : maximumScale;
   const cellWidth = Math.max(1, Math.floor(tileset.tileWidth * scale));
   const cellHeight = Math.max(1, Math.floor(tileset.tileHeight * scale));
-  const gutter = Math.max(1, Math.floor(gutterUnit * scale));
-  const layoutWidth = packing.columns * cellWidth + (packing.columns - 1) * gutter;
-  const layoutHeight = packing.rows * cellHeight + (packing.rows - 1) * gutter;
-
-  if (layoutWidth > canvas.width || layoutHeight > canvas.height) {
-    throw new Error(
-      `Tileset "${asset.id}" has too many cells to isolate on a ${requestedSize} generation canvas.`
-    );
-  }
-
-  const sheet = {
-    x: Math.floor((canvas.width - layoutWidth) / 2),
-    y: Math.floor((canvas.height - layoutHeight) / 2),
-    width: layoutWidth,
-    height: layoutHeight
-  };
   const logicalCells = Array.from({ length: capacity }, (_, index) => {
     const column = index % tileset.columns;
     const row = Math.floor(index / tileset.columns);
@@ -159,12 +144,36 @@ export function tilesetSheetGenerationGeometry(
     const row = Math.floor(index / packing.columns);
     return {
       index,
-      x: sheet.x + column * (cellWidth + gutter),
-      y: sheet.y + row * (cellHeight + gutter),
+      // Image models naturally compose a requested grid around equal full-canvas
+      // region centers. Keep the extraction rectangle centered on that same point;
+      // compacting the rectangles as one centered block shifts the outer columns
+      // inward and deterministically assigns part of each tile to its neighbor.
+      x: Math.round(
+        ((column + 0.5) / packing.columns) * canvas.width - cellWidth / 2
+      ),
+      y: Math.round(
+        ((row + 0.5) / packing.rows) * canvas.height - cellHeight / 2
+      ),
       width: cellWidth,
       height: cellHeight
     };
   });
+  const sheetLeft = Math.min(...slots.map((slot) => slot.x));
+  const sheetTop = Math.min(...slots.map((slot) => slot.y));
+  const sheetRight = Math.max(...slots.map((slot) => slot.x + slot.width));
+  const sheetBottom = Math.max(...slots.map((slot) => slot.y + slot.height));
+  const sheet = {
+    x: sheetLeft,
+    y: sheetTop,
+    width: sheetRight - sheetLeft,
+    height: sheetBottom - sheetTop
+  };
+  const gutter = tilesetGenerationMinimumGutter(
+    slots,
+    packing.columns,
+    packing.rows,
+    canvas
+  );
   const cells = slots.slice(0, tileCount).map((slot, index) => ({
     ...slot,
     usable: true,
@@ -253,6 +262,38 @@ function selectTilesetGenerationPacking(options: {
     throw new Error("The tileset cells cannot fit on the requested generation canvas.");
   }
   return { columns: best.columns, rows: best.rows };
+}
+
+function tilesetGenerationMinimumGutter(
+  slots: TilesetSheetUnusedSlot[],
+  columns: number,
+  rows: number,
+  canvas: AiAssetDimensions
+): number {
+  const gaps = [
+    ...slots.map((slot) => slot.x),
+    ...slots.map((slot) => canvas.width - slot.x - slot.width),
+    ...slots.map((slot) => slot.y),
+    ...slots.map((slot) => canvas.height - slot.y - slot.height)
+  ];
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns - 1; column += 1) {
+      const current = slots[row * columns + column]!;
+      const next = slots[row * columns + column + 1]!;
+      gaps.push(next.x - current.x - current.width);
+    }
+  }
+  for (let row = 0; row < rows - 1; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const current = slots[row * columns + column]!;
+      const next = slots[(row + 1) * columns + column]!;
+      gaps.push(next.y - current.y - current.height);
+    }
+  }
+
+  const positiveGaps = gaps.filter((gap) => gap > 0);
+  return positiveGaps.length > 0 ? Math.max(1, Math.min(...positiveGaps)) : 0;
 }
 
 function isBetterTilesetPacking(

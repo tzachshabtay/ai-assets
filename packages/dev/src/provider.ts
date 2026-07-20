@@ -952,17 +952,46 @@ function tilesetGenerationGeometryPromptLines(
   )).join("; ");
   const rowLabel = geometry.generationRows === 1 ? "row" : "rows";
   const columnLabel = geometry.generationColumns === 1 ? "column" : "columns";
+  const placementRegions = Array.from(
+    { length: geometry.generationColumns * geometry.generationRows },
+    (_, index) => {
+      const column = index % geometry.generationColumns;
+      const row = Math.floor(index / geometry.generationColumns);
+      const left = Math.floor(
+        (column / geometry.generationColumns) * geometry.canvas.width
+      );
+      const top = Math.floor(
+        (row / geometry.generationRows) * geometry.canvas.height
+      );
+      const right = Math.floor(
+        ((column + 1) / geometry.generationColumns) * geometry.canvas.width
+      );
+      const bottom = Math.floor(
+        ((row + 1) / geometry.generationRows) * geometry.canvas.height
+      );
+
+      return `Placement region ${index + 1} [${tilesetSheetRectLabel({
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top
+      })}]`;
+    }
+  ).join("; ");
 
   return [
     `Actual returned raster canvas: ${geometry.canvas.width}x${geometry.canvas.height} pixels. These are the coordinates you must draw in.`,
-    `This generation-only staging canvas packs the tiles as ${geometry.generationColumns} ${columnLabel} by ${geometry.generationRows} ${rowLabel}. This temporary packing may differ from the final game sheet; follow tile numbers and the rectangles below, and do not recreate the final logical layout.`,
-    "Each tile occupies one isolated slot; the slots are separated by hard temporary gutters.",
-    `Exact generation-canvas usable tile rectangles in immutable row-major order: ${usableRectangles}.`,
-    "These generation-canvas rectangles are the only tile coordinates for this raster request. Do not infer, draw, or reproduce a second smaller logical sheet or any alternate coordinate system.",
+    `Temporary full-canvas placement grid: divide the entire raster into ${geometry.generationColumns} equal ${columnLabel} by ${geometry.generationRows} equal ${rowLabel}, covering the canvas edge-to-edge with no area outside the grid.`,
+    `Exact equal placement regions in immutable row-major order: ${placementRegions}.`,
+    "Placement regions are spatial guides only. They are not tile bounds, are not extracted by the server, and are not the final game-sheet layout. Do not scale artwork to fill a placement region.",
+    "Assign each numbered tile to the placement region with the same number. Center that tile's actual extracted rectangle inside its assigned equal placement region.",
+    `Exact actual extracted tile rectangles in immutable row-major order: ${usableRectangles}.`,
+    "The actual extracted tile rectangles remain separated from one another by hard temporary gutters inside the placement grid.",
+    "Only the actual extracted tile rectangles are drawable tile bounds. These rectangles are the only tile coordinates for this raster request; do not infer, draw, or reproduce a second smaller logical sheet or any alternate coordinate system.",
     requireSafeContentInset
       ? "Put exactly one requested tile in each usable rectangle. Keep every visible pixel wholly inside its own rectangle. Edge-to-edge opaque terrain must fill only its own rectangle. Every isolated object that uses transparency must be complete, centered, and surrounded by empty padding. Never bridge two slots or continue artwork through a gutter."
       : "Put exactly one requested tile in each usable rectangle and preserve referenced artwork at its existing scale and position. Keep every visible pixel wholly inside its own rectangle. Never bridge two slots or continue artwork through a gutter.",
-    `Fill every pixel that is not inside a usable tile rectangle with the exact flat hard-gutter color ${hexColor(chromaKey)}. This includes every inter-slot gutter and all outer canvas padding. Put no artwork, shadow, outline, texture, or antialiasing in a gutter.`,
+    `Fill every pixel that is not inside an actual usable extracted tile rectangle with the exact flat hard-gutter color ${hexColor(chromaKey)}. This explicitly includes the remainder of every equal placement region, every inter-tile gap, and all outer padding around extracted rectangles. Put no artwork, shadow, outline, texture, or antialiasing there.`,
     "The server extracts each tile rectangle independently and composes the final game sheet in row-major order. Any pixel drawn outside its rectangle is irretrievably discarded with the temporary gutter, so keep every tile complete and entirely within its own rectangle.",
     "Compatible terrain tiles must match edge colors and connectors conceptually while remaining physically isolated by the temporary gutters. The gutters are discarded during composition and are not part of the game tiles.",
     ...(transparentPadding && requireSafeContentInset

@@ -35,18 +35,18 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
     { columns: 2, rows: 2 }
   );
   assert.deepEqual(propsGeometry.sheet, {
-    x: 326,
-    y: 70,
-    width: 884,
-    height: 884
+    x: 176,
+    y: 48,
+    width: 1184,
+    height: 928
   });
   assert.equal(propsGeometry.scale, 13);
-  assert.equal(propsGeometry.gutter, 52);
+  assert.equal(propsGeometry.gutter, 48);
   assert.deepEqual(propsGeometry.outerPadding, {
-    left: 326,
-    top: 70,
-    right: 326,
-    bottom: 70
+    left: 176,
+    top: 48,
+    right: 176,
+    bottom: 48
   });
   assert.deepEqual(
     propsGeometry.cells.map(({ x, y, width, height, logical }) => ({
@@ -56,13 +56,24 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
       height,
       logical
     })),
-    Array.from({ length: 4 }, (_, index) => ({
-      x: 326 + (index % 2) * 468,
-      y: 70 + Math.floor(index / 2) * 468,
-      width: 416,
-      height: 416,
-      logical: { x: index * 32, y: 0, width: 32, height: 32 }
-    }))
+    [
+      { x: 176, y: 48, width: 416, height: 416, logical: { x: 0, y: 0, width: 32, height: 32 } },
+      { x: 944, y: 48, width: 416, height: 416, logical: { x: 32, y: 0, width: 32, height: 32 } },
+      { x: 176, y: 560, width: 416, height: 416, logical: { x: 64, y: 0, width: 32, height: 32 } },
+      { x: 944, y: 560, width: 416, height: 416, logical: { x: 96, y: 0, width: 32, height: 32 } }
+    ]
+  );
+  assert.deepEqual(
+    propsGeometry.cells.map((cell) => ({
+      x: cell.x + cell.width / 2,
+      y: cell.y + cell.height / 2
+    })),
+    [
+      { x: 384, y: 256 },
+      { x: 1152, y: 256 },
+      { x: 384, y: 768 },
+      { x: 1152, y: 768 }
+    ]
   );
 
   const forest = tilesetAsset({
@@ -80,18 +91,18 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
     { columns: 4, rows: 3 }
   );
   assert.deepEqual(forestGeometry.sheet, {
-    x: 138,
-    y: 44,
-    width: 1260,
-    height: 936
+    x: 48,
+    y: 27,
+    width: 1440,
+    height: 970
   });
   assert.equal(forestGeometry.scale, 9);
-  assert.equal(forestGeometry.gutter, 36);
+  assert.equal(forestGeometry.gutter, 27);
   assert.deepEqual(forestGeometry.cells[0], {
     index: 0,
     usable: true,
-    x: 138,
-    y: 44,
+    x: 48,
+    y: 27,
     width: 288,
     height: 288,
     logical: { x: 0, y: 0, width: 32, height: 32 }
@@ -99,8 +110,8 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
   assert.deepEqual(forestGeometry.cells[11], {
     index: 11,
     usable: true,
-    x: 1110,
-    y: 692,
+    x: 1200,
+    y: 709,
     width: 288,
     height: 288,
     logical: { x: 96, y: 64, width: 32, height: 32 }
@@ -125,15 +136,15 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
     index: 4,
     usable: true,
     x: 560,
-    y: 538,
+    y: 560,
     width: 416,
     height: 416,
     logical: { x: 0, y: 32, width: 32, height: 32 }
   });
   assert.deepEqual(partialGeometry.unusedSlots, [{
     index: 5,
-    x: 1028,
-    y: 538,
+    x: 1072,
+    y: 560,
     width: 416,
     height: 416
   }]);
@@ -188,6 +199,40 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
     { width: rectangularGeometry.cells[0].width, height: rectangularGeometry.cells[0].height },
     { width: 320, height: 640 }
   );
+});
+
+test("region-centered props cells recompose into the logical one-row sheet", async () => {
+  const asset = tilesetAsset({
+    dimensions: { width: 128, height: 32 },
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 4,
+    rows: 1,
+    tileCount: 4
+  });
+  const geometry = tilesetSheetGenerationGeometry(asset, "1536x1024");
+  const raw = solidPng(1536, 1024, CHROMA);
+  const expectedGenerationRects = [
+    { x: 176, y: 48, width: 416, height: 416 },
+    { x: 944, y: 48, width: 416, height: 416 },
+    { x: 176, y: 560, width: 416, height: 416 },
+    { x: 944, y: 560, width: 416, height: 416 }
+  ];
+
+  expectedGenerationRects.forEach((rect, index) => {
+    fillRect(raw, rect.x, rect.y, rect.width, rect.height, TILE_COLORS[index]);
+  });
+
+  const processed = PNG.sync.read(await cropTilesetSheetFromGeneration(
+    PNG.sync.write(raw),
+    geometry,
+    "png"
+  ));
+
+  assert.deepEqual({ width: processed.width, height: processed.height }, asset.dimensions);
+  for (let index = 0; index < TILE_COLORS.length; index += 1) {
+    assertCellColor(processed, index, TILE_COLORS[index]);
+  }
 });
 
 test("per-cell extraction drops generation gutters and preserves cell ownership", async () => {
