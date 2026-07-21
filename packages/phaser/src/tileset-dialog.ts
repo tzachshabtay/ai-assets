@@ -10,13 +10,20 @@ import type {
 } from "./debug-client.js";
 import {
   assetWithGeneratedGeometry,
+  decimalInput,
+  integerInput,
+  integerValue,
+  labelWrap,
   loadImageElement,
+  numberInput,
+  numberValue,
   openFrameTouchUpEditor,
   positiveIntegerInput,
   positiveIntegerValue,
   readableAssetName,
   replaceSpriteSheetFrames,
-  setFrameBackground
+  setFrameBackground,
+  signedNumberInput
 } from "./designer-support.js";
 
 export type DesignerTilesetAnimation = AiTilesetAnimation;
@@ -53,6 +60,76 @@ export type TilesetBaseMixCurrent = {
 export type TilesetEditorResult = {
   dataUrl: string;
 };
+
+export type TilesetTileTransform = {
+  offsetX: number;
+  offsetY: number;
+  scaleX: number;
+  scaleY: number;
+};
+
+export type TilesetTileTransformDrawPlan = {
+  source: { x: number; y: number; width: number; height: number };
+  clip: { x: number; y: number; width: number; height: number };
+  destination: { x: number; y: number; width: number; height: number };
+};
+
+type TilesetEditorTileDraft = {
+  source: {
+    src: string;
+    tile: number;
+    tileset: DesignerTilesetMetadata;
+  };
+  transform: TilesetTileTransform;
+};
+
+const identityTilesetTileTransform = (): TilesetTileTransform => ({
+  offsetX: 0,
+  offsetY: 0,
+  scaleX: 1,
+  scaleY: 1
+});
+
+const minimumTilesetTileScale = 0.05;
+
+export function normalizeTilesetTileTransform(
+  transform: Partial<TilesetTileTransform> | undefined
+): TilesetTileTransform {
+  const scaleX = numberValue(transform?.scaleX, 1);
+  const scaleY = numberValue(transform?.scaleY, 1);
+  return {
+    offsetX: integerValue(transform?.offsetX, 0),
+    offsetY: integerValue(transform?.offsetY, 0),
+    scaleX: Math.max(minimumTilesetTileScale, scaleX),
+    scaleY: Math.max(minimumTilesetTileScale, scaleY)
+  };
+}
+
+/**
+ * Builds the source, clipping, and destination rectangles used to render one
+ * transformed tile. Scaling is centered on the tile before its pixel offset is
+ * applied, and clipping always stays fixed to the tile cell.
+ */
+export function tilesetTileTransformDrawPlan(
+  tileset: DesignerTilesetMetadata,
+  tile: number,
+  transform: Partial<TilesetTileTransform> | undefined
+): TilesetTileTransformDrawPlan {
+  const source = tileRect(tileset, tile);
+  const normalized = normalizeTilesetTileTransform(transform);
+  const width = source.width * normalized.scaleX;
+  const height = source.height * normalized.scaleY;
+  return {
+    source,
+    clip: { ...source },
+    destination: {
+      x: source.x + ((source.width - width) / 2) + normalized.offsetX,
+      y: source.y + ((source.height - height) / 2) + normalized.offsetY,
+      width,
+      height
+    }
+  };
+}
 
 export type TilesetAnimationEditorResult = {
   frames: string[];
@@ -284,7 +361,6 @@ export async function openTilesetEditor(options: {
   if (!tileset) return;
 
   const tileCount = tilesetTileCount(tileset);
-  const frameGrid = tilesetFrameGrid(tileset);
   const touchUpScale = Math.min(224 / tileset.tileWidth, 224 / tileset.tileHeight);
   const touchUpDisplaySize = {
     width: Math.max(1, Math.round(tileset.tileWidth * touchUpScale)),
@@ -303,6 +379,32 @@ export async function openTilesetEditor(options: {
   title.textContent = `Edit ${readableAssetName(options.assetId)} tileset`;
   const stage = document.createElement("div");
   stage.className = "ai-game-assets-designer__modal-stage ai-game-assets-designer__tileset-editor-stage";
+  const offsetXInput = signedNumberInput();
+  const offsetYInput = signedNumberInput();
+  const scaleXInput = decimalInput();
+  const scaleYInput = decimalInput();
+  scaleXInput.min = String(minimumTilesetTileScale);
+  scaleYInput.min = String(minimumTilesetTileScale);
+  scaleXInput.step = "0.05";
+  scaleYInput.step = "0.05";
+  const transformFields = document.createElement("div");
+  transformFields.className =
+    "ai-game-assets-designer__frame-fields ai-game-assets-designer__tileset-transform-fields";
+  transformFields.append(
+    labelWrap("Offset X", offsetXInput),
+    labelWrap("Offset Y", offsetYInput),
+    labelWrap("Scale X", scaleXInput),
+    labelWrap("Scale Y", scaleYInput)
+  );
+  const transformHint = document.createElement("div");
+  transformHint.id = "ai-game-assets-tileset-transform-hint";
+  transformHint.className = "ai-game-assets-designer__tileset-transform-hint";
+  transformHint.textContent =
+    "Offsets use tile pixels. Scaling is centered (1 = 100%). The tile cell clips overflow; " +
+      "source pixels stay intact while this editor is open.";
+  for (const input of [offsetXInput, offsetYInput, scaleXInput, scaleYInput]) {
+    input.setAttribute("aria-describedby", transformHint.id);
+  }
   const prompt = document.createElement("div");
   prompt.className = "ai-game-assets-designer__tileset-tile-prompt";
   const strip = document.createElement("div");
@@ -328,17 +430,28 @@ export async function openTilesetEditor(options: {
     confirmButton
   );
 
-  card.append(title, stage, prompt, strip, feedback, actions);
+  card.append(title, stage, prompt, transformFields, transformHint, strip, feedback, actions);
   dialog.append(card);
   options.root.append(dialog);
 
   let selectedTile = 0;
-  let sheetSrc = options.src;
-  let editedSheetSrc: string | undefined;
-  let copiedTileSrc: string | undefined;
+  const tileDrafts: TilesetEditorTileDraft[] = Array.from(
+    { length: tileCount },
+    (_, tile) => ({
+      source: {
+        src: options.src,
+        tile,
+        tileset
+      },
+      transform: identityTilesetTileTransform()
+    })
+  );
+  let copiedTile: TilesetEditorTileDraft | undefined;
   let busy = false;
+  let childModalOpen = false;
   let closed = false;
   const tileButtons: HTMLButtonElement[] = [];
+  const tilePreviewElements: HTMLSpanElement[] = [];
 
   const setFeedback = (
     message: string,
@@ -353,46 +466,116 @@ export async function openTilesetEditor(options: {
     touchUpButton.disabled = busy;
     regenerateButton.disabled = busy || !tilesetTilePrompt(tileset, selectedTile);
     copyButton.disabled = busy;
-    pasteButton.disabled = busy || !copiedTileSrc;
+    pasteButton.disabled = busy || !copiedTile;
     cancelButton.disabled = busy;
     confirmButton.disabled = busy;
+    offsetXInput.disabled = busy;
+    offsetYInput.disabled = busy;
+    scaleXInput.disabled = busy;
+    scaleYInput.disabled = busy;
     tileButtons.forEach((button) => {
       button.disabled = busy;
     });
   };
 
-  const render = () => {
+  const previewTiming = (
+    transform: TilesetTileTransform,
+    displaySize: { width: number; height: number }
+  ) => {
+    const displayScale = Math.min(
+      displaySize.width / tileset.tileWidth,
+      displaySize.height / tileset.tileHeight
+    );
+    return {
+      offsetX: transform.offsetX * displayScale,
+      offsetY: transform.offsetY * displayScale,
+      scaleX: transform.scaleX,
+      scaleY: transform.scaleY
+    };
+  };
+
+  const thumbnailScale = Math.min(48 / tileset.tileWidth, 48 / tileset.tileHeight);
+  const thumbnailDisplaySize = {
+    width: Math.max(1, Math.round(tileset.tileWidth * thumbnailScale)),
+    height: Math.max(1, Math.round(tileset.tileHeight * thumbnailScale))
+  };
+
+  const renderSelectedPreview = () => {
+    const selectedDraft = tileDrafts[selectedTile]!;
     setFrameBackground(stage, {
-      src: sheetSrc,
-      frame: selectedTile,
-      frameGrid,
-      displaySize: { width: 224, height: 224 }
+      src: selectedDraft.source.src,
+      frame: selectedDraft.source.tile,
+      frameGrid: tilesetFrameGrid(selectedDraft.source.tileset),
+      displaySize: touchUpDisplaySize,
+      timing: previewTiming(selectedDraft.transform, touchUpDisplaySize)
     });
+    const selectedThumbnail = tilePreviewElements[selectedTile];
+    if (selectedThumbnail) {
+      setFrameBackground(selectedThumbnail, {
+        src: selectedDraft.source.src,
+        frame: selectedDraft.source.tile,
+        frameGrid: tilesetFrameGrid(selectedDraft.source.tileset),
+        displaySize: thumbnailDisplaySize,
+        timing: previewTiming(selectedDraft.transform, thumbnailDisplaySize)
+      });
+    }
+  };
+
+  const renderPreviews = () => {
+    renderSelectedPreview();
+    tileButtons.forEach((button, tile) => {
+      const draft = tileDrafts[tile]!;
+      button.classList.toggle("is-selected", tile === selectedTile);
+      button.setAttribute("aria-pressed", String(tile === selectedTile));
+      setFrameBackground(tilePreviewElements[tile]!, {
+        src: draft.source.src,
+        frame: draft.source.tile,
+        frameGrid: tilesetFrameGrid(draft.source.tileset),
+        displaySize: thumbnailDisplaySize,
+        timing: previewTiming(draft.transform, thumbnailDisplaySize)
+      });
+    });
+  };
+
+  const syncTransformInputs = () => {
+    const transform = tileDrafts[selectedTile]!.transform;
+    offsetXInput.value = String(transform.offsetX);
+    offsetYInput.value = String(transform.offsetY);
+    scaleXInput.value = String(transform.scaleX);
+    scaleYInput.value = String(transform.scaleY);
+  };
+
+  const render = () => {
+    renderPreviews();
+    syncTransformInputs();
     const tilePrompt = tilesetTilePrompt(tileset, selectedTile);
     prompt.textContent = tilePrompt
       ? `Tile ${selectedTile + 1}: ${tilePrompt}`
       : `Tile ${selectedTile + 1}`;
-    tileButtons.forEach((button, tile) => {
-      button.classList.toggle("is-selected", tile === selectedTile);
-      button.setAttribute("aria-pressed", String(tile === selectedTile));
-      setFrameBackground(button, {
-        src: sheetSrc,
-        frame: tile,
-        frameGrid,
-        displaySize: { width: 48, height: 48 }
-      });
-    });
     syncButtons();
   };
 
-  const replaceTile = async (tileSrc: string) => {
-    sheetSrc = await replaceSpriteSheetFrames({
-      src: sheetSrc,
-      uploadSrc: tileSrc,
-      frameGrid,
-      frames: [selectedTile]
-    });
-    editedSheetSrc = sheetSrc;
+  const replaceTileSource = (
+    tile: number,
+    source: TilesetEditorTileDraft["source"],
+    transform?: TilesetTileTransform
+  ) => {
+    if (
+      source.tileset.tileWidth !== tileset.tileWidth ||
+      source.tileset.tileHeight !== tileset.tileHeight
+    ) {
+      throw new Error(
+        `Tile ${tile + 1} source must use ${tileset.tileWidth}x${tileset.tileHeight}px tiles.`
+      );
+    }
+    if (source.tile < 0 || source.tile >= tilesetTileCount(source.tileset)) {
+      throw new Error(`Tile ${tile + 1} does not have a valid source tile.`);
+    }
+    tileDrafts[tile] = {
+      source: { ...source },
+      transform: transform ? { ...transform } : tileDrafts[tile]!.transform
+    };
+    selectedTile = tile;
     render();
   };
 
@@ -404,7 +587,7 @@ export async function openTilesetEditor(options: {
   };
 
   const keyHandler = (event: KeyboardEvent) => {
-    if (event.key !== "Escape" || busy) return;
+    if (event.key !== "Escape" || busy || childModalOpen) return;
     event.preventDefault();
     close();
   };
@@ -412,25 +595,63 @@ export async function openTilesetEditor(options: {
   for (let tile = 0; tile < tileCount; tile += 1) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "ai-game-assets-designer__frame-thumb";
+    button.className =
+      "ai-game-assets-designer__frame-thumb ai-game-assets-designer__tileset-transform-thumb";
     button.setAttribute("aria-label", `Tile ${tile + 1}`);
+    const viewport = document.createElement("span");
+    viewport.className = "ai-game-assets-designer__tileset-transform-thumb-viewport";
+    button.append(viewport);
     button.addEventListener("click", () => {
       selectedTile = tile;
       setFeedback("");
       render();
     });
     tileButtons.push(button);
+    tilePreviewElements.push(viewport);
     strip.append(button);
   }
 
+  const updateSelectedTransform = () => {
+    const current = tileDrafts[selectedTile]!.transform;
+    tileDrafts[selectedTile]!.transform = normalizeTilesetTileTransform({
+      offsetX: integerInput(offsetXInput, current.offsetX),
+      offsetY: integerInput(offsetYInput, current.offsetY),
+      scaleX: numberInput(scaleXInput, current.scaleX),
+      scaleY: numberInput(scaleYInput, current.scaleY)
+    });
+    renderSelectedPreview();
+  };
+  offsetXInput.addEventListener("input", updateSelectedTransform);
+  offsetYInput.addEventListener("input", updateSelectedTransform);
+  scaleXInput.addEventListener("input", updateSelectedTransform);
+  scaleYInput.addEventListener("input", updateSelectedTransform);
+  const commitSelectedTransform = () => {
+    updateSelectedTransform();
+    syncTransformInputs();
+  };
+  offsetXInput.addEventListener("change", commitSelectedTransform);
+  offsetYInput.addEventListener("change", commitSelectedTransform);
+  scaleXInput.addEventListener("change", commitSelectedTransform);
+  scaleYInput.addEventListener("change", commitSelectedTransform);
+  offsetXInput.addEventListener("blur", commitSelectedTransform);
+  offsetYInput.addEventListener("blur", commitSelectedTransform);
+  scaleXInput.addEventListener("blur", commitSelectedTransform);
+  scaleYInput.addEventListener("blur", commitSelectedTransform);
+
   touchUpButton.addEventListener("click", async () => {
     if (busy) return;
+    const tile = selectedTile;
     busy = true;
     syncButtons();
-    setFeedback(`Opening touch-up for tile ${selectedTile + 1}...`, "busy");
+    setFeedback(`Opening touch-up for tile ${tile + 1}...`, "busy");
     try {
-      const tile = selectedTile;
-      const tileSrc = await extractTilesetTileDataUrl(sheetSrc, tileset, tile);
+      const draft = tileDrafts[tile]!;
+      const tileSrc = await extractTilesetTileDataUrl(
+        draft.source.src,
+        draft.source.tileset,
+        draft.source.tile
+      );
+      childModalOpen = true;
       await openFrameTouchUpEditor({
         root: options.root,
         asset: options.asset,
@@ -438,13 +659,21 @@ export async function openTilesetEditor(options: {
         frameSrc: tileSrc,
         displaySize: touchUpDisplaySize,
         onSave: async (editedTileSrc) => {
-          selectedTile = tile;
-          await replaceTile(editedTileSrc);
+          if (closed) return;
+          replaceTileSource(tile, {
+            src: editedTileSrc,
+            tile: 0,
+            tileset: singleTileTilesetMetadata(tileset, tile)
+          });
           setFeedback(`Touched up tile ${tile + 1}.`, "success");
+        },
+        onClose: () => {
+          childModalOpen = false;
         }
       });
       setFeedback("");
     } catch (error) {
+      childModalOpen = false;
       setFeedback(`Could not open tile touch-up: ${tilesetErrorMessage(error)}`, "error");
     } finally {
       busy = false;
@@ -459,7 +688,12 @@ export async function openTilesetEditor(options: {
     syncButtons();
     setFeedback(`Generating 3 new options for tile ${tile + 1}...`, "busy");
     try {
-      const currentTileSrc = await extractTilesetTileDataUrl(sheetSrc, tileset, tile);
+      const draft = tileDrafts[tile]!;
+      const currentTileSrc = await extractTilesetTileDataUrl(
+        draft.source.src,
+        draft.source.tileset,
+        draft.source.tile
+      );
       const generated = [...await options.regenerateTile(
         tile,
         tilesetTileGenerationOverride(tileset, tile),
@@ -477,8 +711,11 @@ export async function openTilesetEditor(options: {
         candidates: generated
       });
       if (selected) {
-        selectedTile = tile;
-        await replaceTile(selected.dataUrl);
+        replaceTileSource(tile, {
+          src: selected.dataUrl,
+          tile: 0,
+          tileset: selected.tileset ?? singleTileTilesetMetadata(tileset, tile)
+        });
         setFeedback(`Replaced tile ${tile + 1}.`, "success");
       } else {
         setFeedback(`Kept tile ${tile + 1}.`, "idle");
@@ -491,40 +728,28 @@ export async function openTilesetEditor(options: {
     }
   });
 
-  copyButton.addEventListener("click", async () => {
+  copyButton.addEventListener("click", () => {
     if (busy) return;
-    busy = true;
+    const draft = tileDrafts[selectedTile]!;
+    copiedTile = {
+      source: { ...draft.source },
+      transform: { ...draft.transform }
+    };
+    setFeedback(`Copied tile ${selectedTile + 1}. Select another tile and paste.`, "success");
     syncButtons();
-    try {
-      copiedTileSrc = await extractTilesetTileDataUrl(sheetSrc, tileset, selectedTile);
-      setFeedback(`Copied tile ${selectedTile + 1}. Select another tile and paste.`, "success");
-    } catch (error) {
-      setFeedback(`Could not copy tile: ${tilesetErrorMessage(error)}`, "error");
-    } finally {
-      busy = false;
-      syncButtons();
-    }
   });
 
-  pasteButton.addEventListener("click", async () => {
-    if (busy || !copiedTileSrc) return;
-    busy = true;
-    syncButtons();
-    try {
-      await replaceTile(copiedTileSrc);
-      setFeedback(`Pasted into tile ${selectedTile + 1}.`, "success");
-    } catch (error) {
-      setFeedback(`Could not paste tile: ${tilesetErrorMessage(error)}`, "error");
-    } finally {
-      busy = false;
-      syncButtons();
-    }
+  pasteButton.addEventListener("click", () => {
+    if (busy || !copiedTile) return;
+    const tile = selectedTile;
+    replaceTileSource(tile, copiedTile.source, copiedTile.transform);
+    setFeedback(`Pasted into tile ${tile + 1}.`, "success");
   });
 
   cancelButton.addEventListener("click", close);
   confirmButton.addEventListener("click", async () => {
     if (busy) return;
-    if (!editedSheetSrc) {
+    if (!tilesetEditorHasChanges(tileDrafts, options.src, tileset)) {
       close();
       return;
     }
@@ -532,7 +757,12 @@ export async function openTilesetEditor(options: {
     syncButtons();
     setFeedback("Applying tileset edits...", "busy");
     try {
-      await options.onConfirm({ dataUrl: editedSheetSrc });
+      const dataUrl = await composeTilesetEditorSheet({
+        originalSheetSrc: options.src,
+        tileset,
+        tileDrafts
+      });
+      await options.onConfirm({ dataUrl });
       close();
     } catch (error) {
       setFeedback(`Could not apply tileset edits: ${tilesetErrorMessage(error)}`, "error");
@@ -1554,6 +1784,119 @@ function openTilesetMixerDialog(
     schedulePreview();
     navigatorButtons[0]?.focus();
   });
+}
+
+function singleTileTilesetMetadata(
+  tileset: DesignerTilesetMetadata,
+  tile: number
+): DesignerTilesetMetadata {
+  const prompt = tilesetTilePrompt(tileset, tile);
+  return {
+    tileWidth: tileset.tileWidth,
+    tileHeight: tileset.tileHeight,
+    columns: 1,
+    rows: 1,
+    tileCount: 1,
+    ...(prompt ? { tiles: [{ prompt }] } : {})
+  };
+}
+
+function tilesetEditorHasChanges(
+  tileDrafts: TilesetEditorTileDraft[],
+  originalSheetSrc: string,
+  tileset: DesignerTilesetMetadata
+): boolean {
+  return tileDrafts.some((draft, tile) => (
+    draft.source.src !== originalSheetSrc ||
+    draft.source.tile !== tile ||
+    !sameTilesetGrid(draft.source.tileset, tileset) ||
+    !isIdentityTilesetTileTransform(draft.transform)
+  ));
+}
+
+function isIdentityTilesetTileTransform(transform: TilesetTileTransform): boolean {
+  const normalized = normalizeTilesetTileTransform(transform);
+  return normalized.offsetX === 0 &&
+    normalized.offsetY === 0 &&
+    normalized.scaleX === 1 &&
+    normalized.scaleY === 1;
+}
+
+async function composeTilesetEditorSheet(options: {
+  originalSheetSrc: string;
+  tileset: DesignerTilesetMetadata;
+  tileDrafts: TilesetEditorTileDraft[];
+}): Promise<string> {
+  const sourceEntries = [
+    { src: options.originalSheetSrc, tileset: options.tileset, label: "Current tileset" },
+    ...options.tileDrafts.map((draft, tile) => ({
+      src: draft.source.src,
+      tileset: draft.source.tileset,
+      label: `Tile ${tile + 1} source`
+    }))
+  ];
+  const loadedEntries = await Promise.all(
+    [...new Set(sourceEntries.map((entry) => entry.src))].map(async (src) => (
+      [src, await loadImageElement(src)] as const
+    ))
+  );
+  const images = new Map(loadedEntries);
+
+  for (const entry of sourceEntries) {
+    const image = images.get(entry.src);
+    const required = tilesetDimensions(entry.tileset);
+    if (!image || image.naturalWidth !== required.width || image.naturalHeight !== required.height) {
+      throw new Error(
+        `${entry.label} must be exactly ${required.width}x${required.height}px ` +
+          "for its declared tile grid."
+      );
+    }
+  }
+
+  const dimensions = tilesetDimensions(options.tileset);
+  const canvas = document.createElement("canvas");
+  canvas.width = dimensions.width;
+  canvas.height = dimensions.height;
+  const context = canvas.getContext("2d");
+  const originalImage = images.get(options.originalSheetSrc);
+  if (!context || !originalImage) {
+    throw new Error("Could not create a canvas for the edited tileset.");
+  }
+
+  context.imageSmoothingEnabled = false;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+
+  for (const [tile, draft] of options.tileDrafts.entries()) {
+    if (draft.source.tile < 0 || draft.source.tile >= tilesetTileCount(draft.source.tileset)) {
+      throw new Error(`Tile ${tile + 1} does not have a valid source tile.`);
+    }
+    const image = images.get(draft.source.src);
+    if (!image) throw new Error(`Tile ${tile + 1} source could not be loaded.`);
+
+    const source = tileRect(draft.source.tileset, draft.source.tile);
+    const plan = tilesetTileTransformDrawPlan(options.tileset, tile, draft.transform);
+    context.clearRect(plan.clip.x, plan.clip.y, plan.clip.width, plan.clip.height);
+    context.save();
+    context.beginPath();
+    context.rect(plan.clip.x, plan.clip.y, plan.clip.width, plan.clip.height);
+    context.clip();
+    context.imageSmoothingEnabled = false;
+    context.drawImage(
+      image,
+      source.x,
+      source.y,
+      source.width,
+      source.height,
+      plan.destination.x,
+      plan.destination.y,
+      plan.destination.width,
+      plan.destination.height
+    );
+    context.restore();
+  }
+
+  return canvas.toDataURL("image/png");
 }
 
 async function composeTilesetSheets(options: {

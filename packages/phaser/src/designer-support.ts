@@ -1047,6 +1047,7 @@ export async function openFrameTouchUpEditor(options: {
   frame?: number;
   displaySize: AiAssetPreviewDisplaySize;
   onSave(dataUrl: string): void | Promise<void>;
+  onClose?(): void;
 }): Promise<void> {
   const sourceImage = await loadImageElement(options.frameSrc);
   const dialog = document.createElement("div");
@@ -1774,6 +1775,7 @@ export async function openFrameTouchUpEditor(options: {
   };
 
   const close = () => {
+    if (disposed) return;
     disposed = true;
     if (animationTimeout !== undefined) window.clearTimeout(animationTimeout);
     window.removeEventListener("keydown", keyHandler, true);
@@ -1782,6 +1784,7 @@ export async function openFrameTouchUpEditor(options: {
     window.removeEventListener("blur", cancelDrawing);
     document.removeEventListener("pointerdown", closeBrushMenuOnOutsidePointer);
     dialog.remove();
+    options.onClose?.();
   };
 
   const requestClose = () => {
@@ -4508,6 +4511,33 @@ export function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__tileset-editor-strip {
   margin-top: 8px;
+}
+.ai-game-assets-designer__tileset-transform-fields {
+  margin-bottom: 6px;
+}
+.ai-game-assets-designer__tileset-transform-hint {
+  margin: 0 0 10px;
+  color: #aeb8c8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ai-game-assets-designer__tileset-transform-thumb {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+}
+.ai-game-assets-designer__tileset-transform-thumb-viewport {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 3px;
+  pointer-events: none;
+}
+@media (max-width: 520px) {
+  .ai-game-assets-designer__tileset-transform-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .ai-game-assets-designer__tileset-regenerate-card {
   width: min(620px, calc(100vw - 36px));

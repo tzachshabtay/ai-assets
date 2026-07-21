@@ -4,10 +4,12 @@ import test from "node:test";
 import { uploadedImageGeometry } from "../dist/designer-support.js";
 import {
   createMixedTilesetOption,
+  normalizeTilesetTileTransform,
   planTilesetBaseMix,
   resolveTilesetBaseMixCurrent,
   tilesetAnimationWithFrameDelays,
   tilesetTileGenerationOverride,
+  tilesetTileTransformDrawPlan,
   tilesetTilePrompt
 } from "../dist/tileset-dialog.js";
 
@@ -35,6 +37,66 @@ const asset = {
     }
   }
 };
+
+test("tileset tile transforms default invalid values without permitting collapsed scales", () => {
+  assert.deepEqual(
+    normalizeTilesetTileTransform({
+      offsetX: 3.9,
+      offsetY: Number.NaN,
+      scaleX: 0,
+      scaleY: -2
+    }),
+    {
+      offsetX: 3,
+      offsetY: 0,
+      scaleX: 0.05,
+      scaleY: 0.05
+    }
+  );
+  assert.deepEqual(normalizeTilesetTileTransform(undefined), {
+    offsetX: 0,
+    offsetY: 0,
+    scaleX: 1,
+    scaleY: 1
+  });
+});
+
+test("tileset tile transform plans scale around each tile center and keep its clip fixed", () => {
+  const tileset = {
+    tileWidth: 10,
+    tileHeight: 20,
+    columns: 2,
+    rows: 2,
+    tileCount: 4,
+    margin: 2,
+    spacing: 3
+  };
+
+  assert.deepEqual(
+    tilesetTileTransformDrawPlan(tileset, 3, {
+      offsetX: 2,
+      offsetY: -3,
+      scaleX: 1.5,
+      scaleY: 0.5
+    }),
+    {
+      source: { x: 15, y: 25, width: 10, height: 20 },
+      clip: { x: 15, y: 25, width: 10, height: 20 },
+      destination: { x: 14.5, y: 27, width: 15, height: 10 }
+    }
+  );
+});
+
+test("identity tile transform draws back into the exact source cell", () => {
+  assert.deepEqual(
+    tilesetTileTransformDrawPlan(asset.tileset, 1, undefined),
+    {
+      source: { x: 17, y: 1, width: 16, height: 16 },
+      clip: { x: 17, y: 1, width: 16, height: 16 },
+      destination: { x: 17, y: 1, width: 16, height: 16 }
+    }
+  );
+});
 
 test("tileset animation editor materializes one normalized delay per temporal frame", () => {
   const animation = {
