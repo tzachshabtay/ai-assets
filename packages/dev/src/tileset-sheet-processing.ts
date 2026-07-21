@@ -4,8 +4,14 @@ import type {
 } from "@ai-game-assets/core";
 import sharp from "sharp";
 
+import { OPENAI_IMAGE_GENERATION_SIZES } from "./image-generation-sizes.js";
 import type { GenerateAssetReference } from "./provider.js";
 import type { RgbColor } from "./provider-image-processing.js";
+
+// Every tile owns one region of the model canvas. Keeping a small, symmetric
+// guard band inside each region makes the ownership boundary unambiguous while
+// leaving most of the available pixels for the tile itself.
+const TILESET_GENERATION_REGION_EDGE_GUARD = 1 / 16;
 
 export type TilesetSheetRect = {
   x: number;
@@ -35,6 +41,7 @@ export type TilesetSheetGenerationGeometry = {
   canvas: AiAssetDimensions;
   logical: AiAssetDimensions;
   sheet: TilesetSheetRect;
+  placementRegions: TilesetSheetUnusedSlot[];
   cells: TilesetSheetCell[];
   unusedSlots: TilesetSheetUnusedSlot[];
   generationColumns: number;
@@ -68,47 +75,135 @@ export function tilesetSheetGenerationGeometry(
   asset: AiAssetDefinition,
   requestedSize: string
 ): TilesetSheetGenerationGeometry {
-  if (asset.kind !== "tileset" || !asset.tileset || !asset.dimensions) {
-    throw new Error(`AI asset "${asset.id}" is not a dimensioned tileset.`);
-  }
-
   const canvas = parseImageGenerationSize(requestedSize);
   if (!canvas) {
     throw new Error(`Tileset generation size "${requestedSize}" must use WIDTHxHEIGHT pixels.`);
   }
+  return selectTilesetGenerationPlan(asset, [canvas]);
+}
 
-  const logical = asset.dimensions;
-  const tileset = asset.tileset;
+export function planTilesetSheetGeneration(
+  asset: AiAssetDefinition,
+  requestedSize?: string
+): TilesetSheetGenerationGeometry {
+  if (requestedSize && requestedSize !== "auto") {
+    return tilesetSheetGenerationGeometry(asset, requestedSize);
+  }
+
+  return selectTilesetGenerationPlan(asset, OPENAI_IMAGE_GENERATION_SIZES);
+}
+
+function selectTilesetGenerationPlan(
+  asset: AiAssetDefinition,
+  canvases: readonly AiAssetDimensions[]
+): TilesetSheetGenerationGeometry {
+  const { tileCount, tileset } = requireTilesetGenerationAsset(asset);
+  let best: TilesetGenerationCandidate | undefined;
+
+  for (const canvas of canvases) {
+    for (let columns = 1; columns <= tileCount; columns += 1) {
+      const rows = Math.ceil(tileCount / columns);
+      if (columns > canvas.width || rows > canvas.height) continue;
+      const geometry = buildTilesetSheetGenerationGeometry(asset, canvas, {
+        columns,
+        rows
+      });
+      const cell = geometry.cells[0]!;
+      const unused = columns * rows - tileCount;
+      const packedAspect =
+        (columns * tileset.tileWidth) /
+        (rows * tileset.tileHeight);
+      const candidate: TilesetGenerationCandidate = {
+        geometry,
+        // Useful coverage is the fraction of model pixels owned by actual tiles.
+        // It rewards a canvas whose aspect matches the temporary grid and
+        // naturally penalizes empty packing slots and wasted canvas space.
+        coverage:
+          (tileCount * cell.width * cell.height) /
+          (canvas.width * canvas.height),
+        aspectDelta: Math.abs(
+          Math.log(packedAspect / (canvas.width / canvas.height))
+        ),
+        unused,
+        logicalColumnDelta: Math.abs(columns - tileset.columns)
+      };
+
+      if (!best || isBetterTilesetGenerationCandidate(candidate, best)) {
+        best = candidate;
+      }
+    }
+  }
+
+  if (!best) {
+    throw new Error(`Tileset "${asset.id}" cannot fit on an image generation canvas.`);
+  }
+  return best.geometry;
+}
+
+type TilesetGenerationCandidate = {
+  geometry: TilesetSheetGenerationGeometry;
+  coverage: number;
+  aspectDelta: number;
+  unused: number;
+  logicalColumnDelta: number;
+};
+
+function isBetterTilesetGenerationCandidate(
+  candidate: TilesetGenerationCandidate,
+  current: TilesetGenerationCandidate
+): boolean {
+  const epsilon = 1e-12;
+  if (Math.abs(candidate.coverage - current.coverage) > epsilon) {
+    return candidate.coverage > current.coverage;
+  }
+  if (Math.abs(candidate.aspectDelta - current.aspectDelta) > epsilon) {
+    return candidate.aspectDelta < current.aspectDelta;
+  }
+  if (candidate.unused !== current.unused) return candidate.unused < current.unused;
+  if (candidate.geometry.scale !== current.geometry.scale) {
+    return candidate.geometry.scale > current.geometry.scale;
+  }
+  if (candidate.logicalColumnDelta !== current.logicalColumnDelta) {
+    return candidate.logicalColumnDelta < current.logicalColumnDelta;
+  }
+  const candidateArea = candidate.geometry.canvas.width * candidate.geometry.canvas.height;
+  const currentArea = current.geometry.canvas.width * current.geometry.canvas.height;
+  if (candidateArea !== currentArea) return candidateArea < currentArea;
+  return candidate.geometry.generationColumns < current.geometry.generationColumns;
+}
+
+function buildTilesetSheetGenerationGeometry(
+  asset: AiAssetDefinition,
+  canvas: AiAssetDimensions,
+  packing: { columns: number; rows: number }
+): TilesetSheetGenerationGeometry {
+  const { logical, tileset, capacity, tileCount } =
+    requireTilesetGenerationAsset(asset);
+
   const margin = tileset.margin ?? 0;
   const spacing = tileset.spacing ?? 0;
-  const capacity = tileset.columns * tileset.rows;
-  const tileCount = Math.min(tileset.tileCount ?? capacity, capacity);
   // The generation grid is intentionally independent of the final sheet grid.
-  // Packing a very wide logical sheet (for example, four props in one row) into
-  // a layout that fills the model canvas gives every tile enough vertical room.
-  // The final logical order is restored during per-cell composition.
-  const gutterUnit = Math.max(
+  // Canvas, packing, ownership regions, and crop rectangles are planned as one
+  // coordinate system. The final logical order is restored during composition.
+  const minimumRegionWidth = Math.floor(canvas.width / packing.columns);
+  const minimumRegionHeight = Math.floor(canvas.height / packing.rows);
+  const usableRegionWidth = Math.max(
     1,
-    Math.ceil(Math.min(tileset.tileWidth, tileset.tileHeight) / 8)
+    Math.floor(minimumRegionWidth * (1 - 2 * TILESET_GENERATION_REGION_EDGE_GUARD))
   );
-  const packing = selectTilesetGenerationPacking({
-    canvas,
-    tileCount,
-    tileWidth: tileset.tileWidth,
-    tileHeight: tileset.tileHeight,
-    gutterUnit,
-    logicalColumns: tileset.columns
-  });
-  const paddedLayoutWidth =
-    packing.columns * tileset.tileWidth + (packing.columns + 1) * gutterUnit;
-  const paddedLayoutHeight =
-    packing.rows * tileset.tileHeight + (packing.rows + 1) * gutterUnit;
+  const usableRegionHeight = Math.max(
+    1,
+    Math.floor(minimumRegionHeight * (1 - 2 * TILESET_GENERATION_REGION_EDGE_GUARD))
+  );
   const maximumScale = Math.min(
-    canvas.width / paddedLayoutWidth,
-    canvas.height / paddedLayoutHeight
+    usableRegionWidth / tileset.tileWidth,
+    usableRegionHeight / tileset.tileHeight
   );
   if (!Number.isFinite(maximumScale) || maximumScale <= 0) {
-    throw new Error(`Tileset "${asset.id}" cannot fit on a ${requestedSize} generation canvas.`);
+    throw new Error(
+      `Tileset "${asset.id}" cannot fit in a ${packing.columns}x${packing.rows} ` +
+      `grid on a ${canvas.width}x${canvas.height} generation canvas.`
+    );
   }
 
   const scale = maximumScale >= 1 ? Math.floor(maximumScale) : maximumScale;
@@ -139,21 +234,22 @@ export function tilesetSheetGenerationGeometry(
 
     return logicalRect;
   });
-  const slots = Array.from({ length: packing.columns * packing.rows }, (_, index) => {
-    const column = index % packing.columns;
-    const row = Math.floor(index / packing.columns);
+  const placementRegions = Array.from(
+    { length: packing.columns * packing.rows },
+    (_, index) => {
+      const column = index % packing.columns;
+      const row = Math.floor(index / packing.columns);
+      return {
+        index,
+        ...tilesetGenerationRegion(canvas, packing, column, row)
+      };
+    }
+  );
+  const slots = placementRegions.map((region) => {
     return {
-      index,
-      // Image models naturally compose a requested grid around equal full-canvas
-      // region centers. Keep the extraction rectangle centered on that same point;
-      // compacting the rectangles as one centered block shifts the outer columns
-      // inward and deterministically assigns part of each tile to its neighbor.
-      x: Math.round(
-        ((column + 0.5) / packing.columns) * canvas.width - cellWidth / 2
-      ),
-      y: Math.round(
-        ((row + 0.5) / packing.rows) * canvas.height - cellHeight / 2
-      ),
+      index: region.index,
+      x: region.x + Math.floor((region.width - cellWidth) / 2),
+      y: region.y + Math.floor((region.height - cellHeight) / 2),
       width: cellWidth,
       height: cellHeight
     };
@@ -185,6 +281,7 @@ export function tilesetSheetGenerationGeometry(
     canvas,
     logical,
     sheet,
+    placementRegions,
     cells,
     unusedSlots,
     generationColumns: packing.columns,
@@ -201,67 +298,39 @@ export function tilesetSheetGenerationGeometry(
   };
 }
 
-function selectTilesetGenerationPacking(options: {
-  canvas: AiAssetDimensions;
+function requireTilesetGenerationAsset(asset: AiAssetDefinition): {
+  logical: AiAssetDimensions;
+  tileset: NonNullable<AiAssetDefinition["tileset"]>;
+  capacity: number;
   tileCount: number;
-  tileWidth: number;
-  tileHeight: number;
-  gutterUnit: number;
-  logicalColumns: number;
-}): { columns: number; rows: number } {
-  if (options.tileCount <= 0) {
+} {
+  if (asset.kind !== "tileset" || !asset.tileset || !asset.dimensions) {
+    throw new Error(`AI asset "${asset.id}" is not a dimensioned tileset.`);
+  }
+  const capacity = asset.tileset.columns * asset.tileset.rows;
+  const tileCount = Math.min(asset.tileset.tileCount ?? capacity, capacity);
+  if (tileCount <= 0) {
     throw new Error("A tileset generation layout requires at least one usable tile.");
   }
+  return {
+    logical: asset.dimensions,
+    tileset: asset.tileset,
+    capacity,
+    tileCount
+  };
+}
 
-  let best: {
-    columns: number;
-    rows: number;
-    scale: number;
-    unused: number;
-    aspectDelta: number;
-    packingScore: number;
-    logicalColumnDelta: number;
-  } | undefined;
-  const canvasAspect = options.canvas.width / options.canvas.height;
-
-  for (let columns = 1; columns <= options.tileCount; columns += 1) {
-    const rows = Math.ceil(options.tileCount / columns);
-    const paddedWidth =
-      columns * options.tileWidth + (columns + 1) * options.gutterUnit;
-    const paddedHeight =
-      rows * options.tileHeight + (rows + 1) * options.gutterUnit;
-    const maximumScale = Math.min(
-      options.canvas.width / paddedWidth,
-      options.canvas.height / paddedHeight
-    );
-    const scale = maximumScale >= 1 ? Math.floor(maximumScale) : maximumScale;
-    const cellWidth = Math.max(1, Math.floor(options.tileWidth * scale));
-    const cellHeight = Math.max(1, Math.floor(options.tileHeight * scale));
-    const gutter = Math.max(1, Math.floor(options.gutterUnit * scale));
-    const layoutWidth = columns * cellWidth + (columns - 1) * gutter;
-    const layoutHeight = rows * cellHeight + (rows - 1) * gutter;
-    if (layoutWidth > options.canvas.width || layoutHeight > options.canvas.height) continue;
-
-    const unused = columns * rows - options.tileCount;
-    const aspectDelta = Math.abs(Math.log((layoutWidth / layoutHeight) / canvasAspect));
-    // Prefer a canvas-shaped staging layout, while charging enough for empty
-    // slots that four tiles still use a clean 2x2 grid instead of a sparse 3x2.
-    const candidate = {
-      columns,
-      rows,
-      scale,
-      unused,
-      aspectDelta,
-      packingScore: aspectDelta + 0.8 * (unused / options.tileCount),
-      logicalColumnDelta: Math.abs(columns - options.logicalColumns)
-    };
-    if (!best || isBetterTilesetPacking(candidate, best)) best = candidate;
-  }
-
-  if (!best) {
-    throw new Error("The tileset cells cannot fit on the requested generation canvas.");
-  }
-  return { columns: best.columns, rows: best.rows };
+function tilesetGenerationRegion(
+  canvas: AiAssetDimensions,
+  packing: { columns: number; rows: number },
+  column: number,
+  row: number
+): TilesetSheetRect {
+  const left = Math.floor((column / packing.columns) * canvas.width);
+  const top = Math.floor((row / packing.rows) * canvas.height);
+  const right = Math.floor(((column + 1) / packing.columns) * canvas.width);
+  const bottom = Math.floor(((row + 1) / packing.rows) * canvas.height);
+  return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
 function tilesetGenerationMinimumGutter(
@@ -294,30 +363,6 @@ function tilesetGenerationMinimumGutter(
 
   const positiveGaps = gaps.filter((gap) => gap > 0);
   return positiveGaps.length > 0 ? Math.max(1, Math.min(...positiveGaps)) : 0;
-}
-
-function isBetterTilesetPacking(
-  candidate: {
-    scale: number;
-    unused: number;
-    aspectDelta: number;
-    packingScore: number;
-    logicalColumnDelta: number;
-  },
-  current: {
-    scale: number;
-    unused: number;
-    aspectDelta: number;
-    packingScore: number;
-    logicalColumnDelta: number;
-  }
-): boolean {
-  if (candidate.scale !== current.scale) return candidate.scale > current.scale;
-  if (candidate.packingScore !== current.packingScore) {
-    return candidate.packingScore < current.packingScore;
-  }
-  if (candidate.unused !== current.unused) return candidate.unused < current.unused;
-  return candidate.logicalColumnDelta < current.logicalColumnDelta;
 }
 
 export async function stageTilesetSheetReference(
@@ -400,6 +445,17 @@ export async function cropTilesetSheetFromGeneration(
       }
     : { r: 0, g: 0, b: 0, alpha: 0 };
   const actualCanvas = { width: metadata.width, height: metadata.height };
+  const aspectDelta = Math.abs(Math.log(
+    (actualCanvas.width / actualCanvas.height) /
+    (geometry.canvas.width / geometry.canvas.height)
+  ));
+  if (aspectDelta > 1e-3) {
+    throw new Error(
+      `Generated tileset raster is ${actualCanvas.width}x${actualCanvas.height}, ` +
+      `which does not match the planned ${geometry.canvas.width}x${geometry.canvas.height} ` +
+      "canvas aspect ratio. Refusing to stretch tile ownership regions."
+    );
+  }
   const cellOverlays = await Promise.all(
     geometry.cells.filter((cell) => cell.usable).map(async (cell) => {
       const crop = scaleGenerationRect(cell, geometry.canvas, actualCanvas);

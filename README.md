@@ -96,6 +96,8 @@ For larger projects, keep assets as JSON files in folders and generate the TypeS
 
 A tileset is a first-class asset because its grid, generation rules, version bundle, and editor are different from an ordinary animation spritesheet. The version's `file` is the static base atlas. Each tileset animation stores one complete atlas file per temporal frame, so a logical tile keeps the same index while playback swaps aligned sheets:
 
+Tileset generation uses a temporary staging grid that is independent of the final atlas shape. The dev provider jointly chooses that grid and the supported model-canvas aspect, gives every tile one disjoint ownership region with symmetric chroma-key guards, and then recomposes the extracted tiles into the declared logical rows and columns. Do not choose a tileset's model canvas from `dimensions`: those describe the final atlas, so a wide `4×1` atlas may correctly use a square `2×2` generation canvas. An explicit non-`auto` `settings.size` pins the model canvas, while the staging grid is still planned within it.
+
 ```ts
 "world.forest": {
   id: "world.forest",

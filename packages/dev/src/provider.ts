@@ -28,16 +28,19 @@ import {
   variationDirectionPromptLine
 } from "./provider-image-processing.js";
 import type { RgbColor } from "./provider-image-processing.js";
+import { closestImageGenerationSize } from "./image-generation-sizes.js";
 import {
   cropTilesetSheetFromGeneration,
+  planTilesetSheetGeneration,
   stageTilesetSheetReference,
-  tilesetSheetGenerationGeometry,
   tilesetSheetRectLabel
 } from "./tileset-sheet-processing.js";
 import type {
   TilesetSheetGenerationGeometry,
   TilesetSheetOutputPadding
 } from "./tileset-sheet-processing.js";
+
+export { closestImageGenerationSize } from "./image-generation-sizes.js";
 
 const OPAQUE_TILESET_PADDING: RgbColor = { red: 0, green: 0, blue: 0 };
 export type GenerateAssetRequest = {
@@ -291,13 +294,11 @@ export function createOpenAiImageProvider(
       const configuredSize =
         request.settings?.size ??
         request.asset.settings?.size;
-      const generationSize =
-        request.asset.kind === "tileset" && configuredSize === "auto"
-          ? closestImageGenerationSize(dimensions)
-          : configuredSize ?? closestImageGenerationSize(dimensions);
       const tilesetGeometry = request.asset.kind === "tileset" && request.asset.tileset
-        ? tilesetSheetGenerationGeometry(request.asset, generationSize)
+        ? planTilesetSheetGeneration(request.asset, configuredSize)
         : undefined;
+      const generationSize = tilesetGeometry?.size ??
+        configuredSize ?? closestImageGenerationSize(dimensions);
       const tilesetPadding = tilesetGeometry
         ? tilesetOutputPadding(postprocessTransparency, chromaKey)
         : undefined;
@@ -952,32 +953,9 @@ function tilesetGenerationGeometryPromptLines(
   )).join("; ");
   const rowLabel = geometry.generationRows === 1 ? "row" : "rows";
   const columnLabel = geometry.generationColumns === 1 ? "column" : "columns";
-  const placementRegions = Array.from(
-    { length: geometry.generationColumns * geometry.generationRows },
-    (_, index) => {
-      const column = index % geometry.generationColumns;
-      const row = Math.floor(index / geometry.generationColumns);
-      const left = Math.floor(
-        (column / geometry.generationColumns) * geometry.canvas.width
-      );
-      const top = Math.floor(
-        (row / geometry.generationRows) * geometry.canvas.height
-      );
-      const right = Math.floor(
-        ((column + 1) / geometry.generationColumns) * geometry.canvas.width
-      );
-      const bottom = Math.floor(
-        ((row + 1) / geometry.generationRows) * geometry.canvas.height
-      );
-
-      return `Placement region ${index + 1} [${tilesetSheetRectLabel({
-        x: left,
-        y: top,
-        width: right - left,
-        height: bottom - top
-      })}]`;
-    }
-  ).join("; ");
+  const placementRegions = geometry.placementRegions.map((region) => (
+    `Placement region ${region.index + 1} [${tilesetSheetRectLabel(region)}]`
+  )).join("; ");
 
   return [
     `Actual returned raster canvas: ${geometry.canvas.width}x${geometry.canvas.height} pixels. These are the coordinates you must draw in.`,
@@ -1046,22 +1024,6 @@ function tilesetTileRectangles(asset: AiAssetDefinition): string {
   const tileCount = tileset.tileCount ?? tileset.columns * tileset.rows;
   return Array.from({ length: tileCount }, (_, index) => tilesetTileRectangle(asset, index))
     .join("; ");
-}
-
-export function closestImageGenerationSize(dimensions: AiAssetDimensions): string {
-  const targetRatio = dimensions.width / dimensions.height;
-  const sizes = [
-    { value: "1024x1024", ratio: 1 },
-    { value: "1536x1024", ratio: 1.5 },
-    { value: "1024x1536", ratio: 2 / 3 }
-  ];
-
-  return sizes
-    .map((size) => ({
-      ...size,
-      distance: Math.abs(Math.log(targetRatio / size.ratio))
-    }))
-    .sort((left, right) => left.distance - right.distance)[0]!.value;
 }
 
 function sanitizeReferenceName(value: string): string {

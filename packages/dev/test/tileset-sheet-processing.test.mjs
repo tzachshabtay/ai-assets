@@ -7,6 +7,7 @@ import sharp from "sharp";
 import { removeTilesetChromaBackground } from "../dist/provider-image-processing.js";
 import {
   cropTilesetSheetFromGeneration,
+  planTilesetSheetGeneration,
   stageTilesetSheetReference,
   tilesetSheetGenerationGeometry
 } from "../dist/tileset-sheet-processing.js";
@@ -32,21 +33,21 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
 
   assert.deepEqual(
     { columns: propsGeometry.generationColumns, rows: propsGeometry.generationRows },
-    { columns: 2, rows: 2 }
+    { columns: 3, rows: 2 }
   );
   assert.deepEqual(propsGeometry.sheet, {
-    x: 176,
-    y: 48,
-    width: 1184,
-    height: 928
+    x: 32,
+    y: 32,
+    width: 1472,
+    height: 960
   });
-  assert.equal(propsGeometry.scale, 13);
-  assert.equal(propsGeometry.gutter, 48);
+  assert.equal(propsGeometry.scale, 14);
+  assert.equal(propsGeometry.gutter, 32);
   assert.deepEqual(propsGeometry.outerPadding, {
-    left: 176,
-    top: 48,
-    right: 176,
-    bottom: 48
+    left: 32,
+    top: 32,
+    right: 32,
+    bottom: 32
   });
   assert.deepEqual(
     propsGeometry.cells.map(({ x, y, width, height, logical }) => ({
@@ -57,24 +58,13 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
       logical
     })),
     [
-      { x: 176, y: 48, width: 416, height: 416, logical: { x: 0, y: 0, width: 32, height: 32 } },
-      { x: 944, y: 48, width: 416, height: 416, logical: { x: 32, y: 0, width: 32, height: 32 } },
-      { x: 176, y: 560, width: 416, height: 416, logical: { x: 64, y: 0, width: 32, height: 32 } },
-      { x: 944, y: 560, width: 416, height: 416, logical: { x: 96, y: 0, width: 32, height: 32 } }
+      { x: 32, y: 32, width: 448, height: 448, logical: { x: 0, y: 0, width: 32, height: 32 } },
+      { x: 544, y: 32, width: 448, height: 448, logical: { x: 32, y: 0, width: 32, height: 32 } },
+      { x: 1056, y: 32, width: 448, height: 448, logical: { x: 64, y: 0, width: 32, height: 32 } },
+      { x: 32, y: 544, width: 448, height: 448, logical: { x: 96, y: 0, width: 32, height: 32 } }
     ]
   );
-  assert.deepEqual(
-    propsGeometry.cells.map((cell) => ({
-      x: cell.x + cell.width / 2,
-      y: cell.y + cell.height / 2
-    })),
-    [
-      { x: 384, y: 256 },
-      { x: 1152, y: 256 },
-      { x: 384, y: 768 },
-      { x: 1152, y: 768 }
-    ]
-  );
+  assert.equal(propsGeometry.unusedSlots.length, 2);
 
   const forest = tilesetAsset({
     dimensions: { width: 128, height: 96 },
@@ -92,17 +82,17 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
   );
   assert.deepEqual(forestGeometry.sheet, {
     x: 48,
-    y: 27,
+    y: 26,
     width: 1440,
-    height: 970
+    height: 971
   });
   assert.equal(forestGeometry.scale, 9);
-  assert.equal(forestGeometry.gutter, 27);
+  assert.equal(forestGeometry.gutter, 26);
   assert.deepEqual(forestGeometry.cells[0], {
     index: 0,
     usable: true,
     x: 48,
-    y: 27,
+    y: 26,
     width: 288,
     height: 288,
     logical: { x: 0, y: 0, width: 32, height: 32 }
@@ -135,18 +125,18 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
   assert.deepEqual(partialGeometry.cells[4], {
     index: 4,
     usable: true,
-    x: 560,
-    y: 560,
-    width: 416,
-    height: 416,
+    x: 544,
+    y: 544,
+    width: 448,
+    height: 448,
     logical: { x: 0, y: 32, width: 32, height: 32 }
   });
   assert.deepEqual(partialGeometry.unusedSlots, [{
     index: 5,
-    x: 1072,
-    y: 560,
-    width: 416,
-    height: 416
+    x: 1056,
+    y: 544,
+    width: 448,
+    height: 448
   }]);
 
   const threeTiles = tilesetAsset({
@@ -197,8 +187,151 @@ test("tileset geometry reserves isolated cells with centered generation-only gut
   );
   assert.deepEqual(
     { width: rectangularGeometry.cells[0].width, height: rectangularGeometry.cells[0].height },
-    { width: 320, height: 640 }
+    { width: 336, height: 672 }
   );
+});
+
+test("adaptive tileset planning jointly chooses the model canvas and packing grid", () => {
+  const props = tilesetAsset({
+    dimensions: { width: 128, height: 32 },
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 4,
+    rows: 1,
+    tileCount: 4
+  });
+  const propsPlan = planTilesetSheetGeneration(props);
+
+  assert.deepEqual(
+    {
+      size: propsPlan.size,
+      columns: propsPlan.generationColumns,
+      rows: propsPlan.generationRows,
+      scale: propsPlan.scale
+    },
+    { size: "1024x1024", columns: 2, rows: 2, scale: 14 }
+  );
+  assert.deepEqual(
+    propsPlan.cells.map(({ x, y, width, height, logical }) => ({
+      x,
+      y,
+      width,
+      height,
+      logical
+    })),
+    [
+      { x: 32, y: 32, width: 448, height: 448, logical: { x: 0, y: 0, width: 32, height: 32 } },
+      { x: 544, y: 32, width: 448, height: 448, logical: { x: 32, y: 0, width: 32, height: 32 } },
+      { x: 32, y: 544, width: 448, height: 448, logical: { x: 64, y: 0, width: 32, height: 32 } },
+      { x: 544, y: 544, width: 448, height: 448, logical: { x: 96, y: 0, width: 32, height: 32 } }
+    ]
+  );
+  assert.deepEqual(
+    propsPlan.cells.map((cell) => ({
+      x: cell.x + cell.width / 2,
+      y: cell.y + cell.height / 2
+    })),
+    [
+      { x: 256, y: 256 },
+      { x: 768, y: 256 },
+      { x: 256, y: 768 },
+      { x: 768, y: 768 }
+    ]
+  );
+
+  const planFor = ({ tileCount, columns, rows, tileWidth = 32, tileHeight = 32 }) => (
+    planTilesetSheetGeneration(tilesetAsset({
+      dimensions: { width: columns * tileWidth, height: rows * tileHeight },
+      tileWidth,
+      tileHeight,
+      columns,
+      rows,
+      tileCount
+    }))
+  );
+  const summaries = [
+    planFor({ tileCount: 3, columns: 3, rows: 1 }),
+    planFor({ tileCount: 5, columns: 4, rows: 2 }),
+    planFor({ tileCount: 9, columns: 4, rows: 3 }),
+    planFor({ tileCount: 12, columns: 4, rows: 3 }),
+    planFor({ tileCount: 4, columns: 4, rows: 1, tileWidth: 16, tileHeight: 32 })
+  ].map((plan) => ({
+    size: plan.size,
+    columns: plan.generationColumns,
+    rows: plan.generationRows
+  }));
+
+  assert.deepEqual(summaries, [
+    { size: "1024x1024", columns: 2, rows: 2 },
+    { size: "1536x1024", columns: 3, rows: 2 },
+    { size: "1024x1024", columns: 3, rows: 3 },
+    { size: "1536x1024", columns: 4, rows: 3 },
+    { size: "1536x1024", columns: 4, rows: 1 }
+  ]);
+
+  const autoPropsPlan = planTilesetSheetGeneration(props, "auto");
+  assert.deepEqual(
+    {
+      size: autoPropsPlan.size,
+      columns: autoPropsPlan.generationColumns,
+      rows: autoPropsPlan.generationRows
+    },
+    { size: "1024x1024", columns: 2, rows: 2 }
+  );
+});
+
+test("every planned crop is centered inside one disjoint ownership region", () => {
+  for (let tileCount = 1; tileCount <= 12; tileCount += 1) {
+    const logicalColumns = Math.min(4, tileCount);
+    const asset = tilesetAsset({
+      dimensions: {
+        width: logicalColumns * 32,
+        height: Math.ceil(tileCount / logicalColumns) * 32
+      },
+      tileWidth: 32,
+      tileHeight: 32,
+      columns: logicalColumns,
+      rows: Math.ceil(tileCount / logicalColumns),
+      tileCount
+    });
+    const plan = planTilesetSheetGeneration(asset);
+    const slots = [...plan.cells, ...plan.unusedSlots];
+
+    assert.equal(plan.placementRegions.length, slots.length);
+    plan.placementRegions.forEach((region, index) => {
+      const column = index % plan.generationColumns;
+      const row = Math.floor(index / plan.generationColumns);
+      const expectedLeft = Math.floor(
+        (column / plan.generationColumns) * plan.canvas.width
+      );
+      const expectedTop = Math.floor(
+        (row / plan.generationRows) * plan.canvas.height
+      );
+      const expectedRight = Math.floor(
+        ((column + 1) / plan.generationColumns) * plan.canvas.width
+      );
+      const expectedBottom = Math.floor(
+        ((row + 1) / plan.generationRows) * plan.canvas.height
+      );
+      assert.deepEqual(region, {
+        index,
+        x: expectedLeft,
+        y: expectedTop,
+        width: expectedRight - expectedLeft,
+        height: expectedBottom - expectedTop
+      });
+
+      const slot = slots[index];
+      const leftGuard = slot.x - region.x;
+      const rightGuard = region.x + region.width - slot.x - slot.width;
+      const topGuard = slot.y - region.y;
+      const bottomGuard = region.y + region.height - slot.y - slot.height;
+      assert.ok(leftGuard >= 0 && rightGuard >= 0);
+      assert.ok(topGuard >= 0 && bottomGuard >= 0);
+      assert.ok(Math.abs(leftGuard - rightGuard) <= 1);
+      assert.ok(Math.abs(topGuard - bottomGuard) <= 1);
+    });
+  }
 });
 
 test("region-centered props cells recompose into the logical one-row sheet", async () => {
@@ -210,13 +343,13 @@ test("region-centered props cells recompose into the logical one-row sheet", asy
     rows: 1,
     tileCount: 4
   });
-  const geometry = tilesetSheetGenerationGeometry(asset, "1536x1024");
-  const raw = solidPng(1536, 1024, CHROMA);
+  const geometry = planTilesetSheetGeneration(asset);
+  const raw = solidPng(1024, 1024, CHROMA);
   const expectedGenerationRects = [
-    { x: 176, y: 48, width: 416, height: 416 },
-    { x: 944, y: 48, width: 416, height: 416 },
-    { x: 176, y: 560, width: 416, height: 416 },
-    { x: 944, y: 560, width: 416, height: 416 }
+    { x: 32, y: 32, width: 448, height: 448 },
+    { x: 544, y: 32, width: 448, height: 448 },
+    { x: 32, y: 544, width: 448, height: 448 },
+    { x: 544, y: 544, width: 448, height: 448 }
   ];
 
   expectedGenerationRects.forEach((rect, index) => {
@@ -327,6 +460,42 @@ test("per-cell extraction preserves rows when the returned raster is scaled", as
     assertGridCellColor(cropped, index, 2, TILE_COLORS[index]);
   }
   assert.equal(countColor(cropped, [250, 250, 0, 255]), 0);
+});
+
+test("crop accepts proportional returned raster scaling and rejects aspect mismatch", async () => {
+  const asset = tilesetAsset({
+    dimensions: { width: 32, height: 32 },
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 1,
+    rows: 1,
+    tileCount: 1
+  });
+  const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
+  const proportional = solidPng(512, 512, CHROMA);
+  const cell = geometry.cells[0];
+  fillRect(
+    proportional,
+    cell.x / 2,
+    cell.y / 2,
+    cell.width / 2,
+    cell.height / 2,
+    TILE_COLORS[0]
+  );
+
+  const cropped = PNG.sync.read(await cropTilesetSheetFromGeneration(
+    PNG.sync.write(proportional),
+    geometry,
+    "png"
+  ));
+  assert.deepEqual({ width: cropped.width, height: cropped.height }, asset.dimensions);
+  assertCellColor(cropped, 0, TILE_COLORS[0]);
+
+  const aspectMismatch = solidPng(512, 384, CHROMA);
+  await assert.rejects(
+    cropTilesetSheetFromGeneration(PNG.sync.write(aspectMismatch), geometry, "png"),
+    /Generated tileset raster is 512x384.*planned 1024x1024 canvas aspect ratio.*Refusing to stretch tile ownership regions/s
+  );
 });
 
 test("staged tileset references split logical cells into matching isolated rectangles", async () => {

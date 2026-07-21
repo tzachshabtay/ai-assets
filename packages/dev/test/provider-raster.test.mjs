@@ -4,7 +4,10 @@ import test from "node:test";
 import sharp from "sharp";
 
 import { createOpenAiImageProvider } from "../dist/provider.js";
-import { tilesetSheetGenerationGeometry } from "../dist/tileset-sheet-processing.js";
+import {
+  planTilesetSheetGeneration,
+  tilesetSheetGenerationGeometry
+} from "../dist/tileset-sheet-processing.js";
 
 function imageAsset(dimensions, settings = {}) {
   return {
@@ -136,21 +139,22 @@ test("OpenAI provider chooses the closest output aspect ratio unless size is exp
 test("OpenAI provider keeps full-sheet tileset generation to one request per candidate", async () => {
   const originalFetch = globalThis.fetch;
   const asset = propsTilesetAsset();
-  const geometry = tilesetSheetGenerationGeometry(asset, "1536x1024");
+  const geometry = planTilesetSheetGeneration(asset);
   const expectedGenerationCells = [
-    { x: 176, y: 48, width: 416, height: 416 },
-    { x: 944, y: 48, width: 416, height: 416 },
-    { x: 176, y: 560, width: 416, height: 416 },
-    { x: 944, y: 560, width: 416, height: 416 }
+    { x: 32, y: 32, width: 448, height: 448 },
+    { x: 544, y: 32, width: 448, height: 448 },
+    { x: 32, y: 544, width: 448, height: 448 },
+    { x: 544, y: 544, width: 448, height: 448 }
   ];
+  assert.equal(geometry.size, "1024x1024");
   assert.deepEqual(
     geometry.cells.map(({ x, y, width, height }) => ({ x, y, width, height })),
     expectedGenerationCells
   );
   const tileColors = ["#c81414", "#14c814", "#1414c8", "#c8c814"];
   const generated = await sharp(Buffer.from(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024">
-      <rect width="1536" height="1024" fill="#ff00ff"/>
+    <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#ff00ff"/>
       ${expectedGenerationCells.map((cell, index) => (
         `<rect x="${cell.x}" y="${cell.y}" width="${cell.width}" ` +
           `height="${cell.height}" fill="${tileColors[index]}"/>`
@@ -182,21 +186,21 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
     assert.equal(options.length, 3);
     for (const body of requestBodies) {
       assert.equal(body.n, 1);
-      assert.equal(body.size, "1536x1024");
-      assert.match(body.prompt, /Actual returned raster canvas: 1536x1024 pixels/);
+      assert.equal(body.size, "1024x1024");
+      assert.match(body.prompt, /Actual returned raster canvas: 1024x1024 pixels/);
       assert.match(
         body.prompt,
         /Temporary full-canvas placement grid: divide the entire raster into 2 equal columns by 2 equal rows/i
       );
       assert.match(body.prompt, /Exact equal placement regions in immutable row-major order/i);
-      assert.match(body.prompt, /Placement region 1 \[x=0-767, y=0-511\]/);
-      assert.match(body.prompt, /Placement region 4 \[x=768-1535, y=512-1023\]/);
+      assert.match(body.prompt, /Placement region 1 \[x=0-511, y=0-511\]/);
+      assert.match(body.prompt, /Placement region 4 \[x=512-1023, y=512-1023\]/);
       assert.match(
         body.prompt,
         /Center that tile's actual extracted rectangle inside its assigned equal placement region/i
       );
-      assert.match(body.prompt, /Tile 1 \[x=176-591, y=48-463\]/);
-      assert.match(body.prompt, /Tile 4 \[x=944-1359, y=560-975\]/);
+      assert.match(body.prompt, /Tile 1 \[x=32-479, y=32-479\]/);
+      assert.match(body.prompt, /Tile 4 \[x=544-991, y=544-991\]/);
       assert.match(body.prompt, /hard-gutter color/i);
       assert.match(body.prompt, /safe-content rectangle/i);
       assert.match(body.prompt, /complete silhouette must not touch or cross/i);
@@ -228,13 +232,96 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
   }
 });
 
-test("OpenAI provider stages full-sheet tileset edit references in generation space", async () => {
+test("OpenAI provider preserves an explicit tileset generation canvas", async () => {
   const originalFetch = globalThis.fetch;
-  const asset = propsTilesetAsset();
+  const baseAsset = propsTilesetAsset();
+  const asset = {
+    ...baseAsset,
+    settings: {
+      ...baseAsset.settings,
+      size: "1536x1024"
+    }
+  };
   const geometry = tilesetSheetGenerationGeometry(asset, "1536x1024");
+  const expectedGenerationCells = [
+    { x: 32, y: 32, width: 448, height: 448 },
+    { x: 544, y: 32, width: 448, height: 448 },
+    { x: 1056, y: 32, width: 448, height: 448 },
+    { x: 32, y: 544, width: 448, height: 448 }
+  ];
+  assert.equal(geometry.size, "1536x1024");
+  assert.deepEqual(
+    { columns: geometry.generationColumns, rows: geometry.generationRows },
+    { columns: 3, rows: 2 }
+  );
+  assert.deepEqual(
+    geometry.cells.map(({ x, y, width, height }) => ({ x, y, width, height })),
+    expectedGenerationCells
+  );
+
+  const tileColors = ["#c81414", "#14c814", "#1414c8", "#c8c814"];
   const generated = await sharp(Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024">
       <rect width="1536" height="1024" fill="#ff00ff"/>
+      ${expectedGenerationCells.map((cell, index) => (
+        `<rect x="${cell.x}" y="${cell.y}" width="${cell.width}" ` +
+          `height="${cell.height}" fill="${tileColors[index]}"/>`
+      )).join("\n")}
+    </svg>
+  `)).png().toBuffer();
+  const requestBodies = [];
+
+  try {
+    globalThis.fetch = async (url, init) => {
+      assert.match(String(url), /\/v1\/images\/generations$/);
+      const body = JSON.parse(init.body);
+      requestBodies.push(body);
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    const [option] = await provider.generate({ asset });
+
+    assert.equal(requestBodies.length, 1);
+    assert.ok(option);
+    const [body] = requestBodies;
+    assert.equal(body.size, "1536x1024");
+    assert.match(body.prompt, /Actual returned raster canvas: 1536x1024 pixels/);
+    assert.match(
+      body.prompt,
+      /Temporary full-canvas placement grid: divide the entire raster into 3 equal columns by 2 equal rows/i
+    );
+    assert.match(body.prompt, /Placement region 1 \[x=0-511, y=0-511\]/);
+    assert.match(body.prompt, /Placement region 6 \[x=1024-1535, y=512-1023\]/);
+    assert.match(body.prompt, /Tile 1 \[x=32-479, y=32-479\]/);
+    assert.match(body.prompt, /Tile 4 \[x=32-479, y=544-991\]/);
+
+    const { data, info } = await sharp(option.image)
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    assert.deepEqual({ width: info.width, height: info.height }, { width: 128, height: 32 });
+    assert.deepEqual(rgbAt(data, info.width, 16, 16), [200, 20, 20]);
+    assert.deepEqual(rgbAt(data, info.width, 48, 16), [20, 200, 20]);
+    assert.deepEqual(rgbAt(data, info.width, 80, 16), [20, 20, 200]);
+    assert.deepEqual(rgbAt(data, info.width, 112, 16), [200, 200, 20]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("OpenAI provider stages full-sheet tileset edit references in generation space", async () => {
+  const originalFetch = globalThis.fetch;
+  const asset = propsTilesetAsset();
+  const geometry = planTilesetSheetGeneration(asset);
+  assert.equal(geometry.size, "1024x1024");
+  const generated = await sharp(Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
+      <rect width="1024" height="1024" fill="#ff00ff"/>
       ${geometry.cells.map((cell) => (
         `<rect x="${cell.x}" y="${cell.y}" width="${cell.width}" ` +
           `height="${cell.height}" fill="#c81414"/>`
@@ -256,9 +343,9 @@ test("OpenAI provider stages full-sheet tileset edit references in generation sp
       fetchCount += 1;
       assert.match(String(url), /\/v1\/images\/edits$/);
       assert.ok(init.body instanceof FormData);
-      assert.equal(init.body.get("size"), "1536x1024");
+      assert.equal(init.body.get("size"), "1024x1024");
       const prompt = String(init.body.get("prompt"));
-      assert.match(prompt, /Actual returned raster canvas: 1536x1024 pixels/);
+      assert.match(prompt, /Actual returned raster canvas: 1024x1024 pixels/);
       assert.match(prompt, /preserve referenced artwork at its existing scale and position/i);
       assert.doesNotMatch(prompt, /safe-content rectangle/i);
 
@@ -269,11 +356,11 @@ test("OpenAI provider stages full-sheet tileset edit references in generation sp
       const metadata = await staged.metadata();
       assert.deepEqual(
         { width: metadata.width, height: metadata.height },
-        { width: 1536, height: 1024 }
+        { width: 1024, height: 1024 }
       );
       const { data, info } = await staged.raw().toBuffer({ resolveWithObject: true });
       const padding = rgbAt(data, info.width, 0, 0);
-      for (const [x, y] of [[384, 256], [1152, 256], [384, 768], [1152, 768]]) {
+      for (const [x, y] of [[256, 256], [768, 256], [256, 768], [768, 768]]) {
         assert.deepEqual(rgbAt(data, info.width, x, y), [200, 20, 20]);
       }
       for (const cell of geometry.cells) {
@@ -287,7 +374,7 @@ test("OpenAI provider stages full-sheet tileset edit references in generation sp
       const second = geometry.cells[1];
       const gutterX = Math.floor((first.x + first.width + second.x) / 2);
       assert.deepEqual(rgbAt(data, info.width, gutterX, first.y), padding);
-      assert.deepEqual(rgbAt(data, info.width, 1535, 1023), padding);
+      assert.deepEqual(rgbAt(data, info.width, 1023, 1023), padding);
       assert.notDeepEqual(padding, [200, 20, 20]);
 
       return new Response(JSON.stringify({
