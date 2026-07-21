@@ -137,6 +137,9 @@ export function normalizeAssetUrls(manifest: AiAssetManifest): void {
       if (typeof version.file === "string") {
         version.file = productionAssetUrl(version.file);
       }
+      if (typeof version.tilesetSourceFile === "string") {
+        version.tilesetSourceFile = productionAssetUrl(version.tilesetSourceFile);
+      }
       for (const sequence of Object.values(version.tilesetAnimations ?? {})) {
         sequence.files = sequence.files.map(productionAssetUrl);
       }
@@ -157,6 +160,9 @@ export function referencedAssetFiles(manifest: AiAssetManifest): string[] {
     for (const version of Object.values(asset.versions ?? {})) {
       if (typeof version.file === "string") {
         files.add(version.file);
+      }
+      if (typeof version.tilesetSourceFile === "string") {
+        files.add(version.tilesetSourceFile);
       }
       for (const sequence of Object.values(version.tilesetAnimations ?? {})) {
         for (const file of sequence.files) {

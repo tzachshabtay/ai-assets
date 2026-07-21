@@ -258,6 +258,11 @@ test("a mixed base tileset is promoted as PNG with the composed geometry", () =>
       revisedPrompt: undefined,
       dimensions: result.dimensions,
       tileset: result.tileset,
+      tilesetSourceDataUrl: result.dataUrl,
+      tilesetTransforms: [
+        { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 },
+        { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 }
+      ],
       settings: { format: "png" }
     }
   );

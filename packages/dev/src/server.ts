@@ -11,6 +11,7 @@ import {
   type AiAssetStyleGuide,
   type AiAssetTileset,
   type AiTilesetTile,
+  type AiTilesetTileTransform,
   type AiTilesetAnimation,
   type AiAssetVersion,
   type AiVoiceGenerationSettings
@@ -407,6 +408,8 @@ async function routeRequest(
       audioPlayback?: AiAssetDefinition["audioPlayback"];
       voiceSettings?: AiAssetDefinition["voiceSettings"];
       durationSeconds?: number;
+      tilesetSourceDataUrl?: string;
+      tilesetTransforms?: AiTilesetTileTransform[];
       activate?: boolean;
       notes?: string;
     }>(request);
@@ -445,6 +448,10 @@ async function routeRequest(
       assetId: body.assetId,
       versionName: body.versionName,
       option,
+      tilesetSource: body.tilesetSourceDataUrl
+        ? imageFromDataUrl(body.tilesetSourceDataUrl, "tileset source image")
+        : undefined,
+      tilesetTransforms: body.tilesetTransforms,
       activate: body.activate,
       notes: body.notes
     });

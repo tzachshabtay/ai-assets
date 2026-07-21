@@ -25,6 +25,7 @@ export type {
   AiTilesetAnimationFrameTiming,
   AiTilesetAnimationVersion,
   AiTilesetTile,
+  AiTilesetTileTransform,
   ResolvedAiAsset
 } from "./types.js";
 

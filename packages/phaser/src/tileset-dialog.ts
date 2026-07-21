@@ -2,7 +2,8 @@ import type {
   AiAssetDefinition,
   AiAssetFrameGrid,
   AiAssetTileset,
-  AiTilesetAnimation
+  AiTilesetAnimation,
+  AiTilesetTileTransform
 } from "@ai-game-assets/core";
 import type {
   GeneratedDebugOption,
@@ -59,14 +60,11 @@ export type TilesetBaseMixCurrent = {
 
 export type TilesetEditorResult = {
   dataUrl: string;
+  sourceDataUrl: string;
+  transforms: AiTilesetTileTransform[];
 };
 
-export type TilesetTileTransform = {
-  offsetX: number;
-  offsetY: number;
-  scaleX: number;
-  scaleY: number;
-};
+export type TilesetTileTransform = AiTilesetTileTransform;
 
 export type TilesetTileTransformDrawPlan = {
   source: { x: number; y: number; width: number; height: number };
@@ -188,6 +186,11 @@ export function createMixedTilesetOption(
     revisedPrompt: undefined,
     dimensions: result.dimensions,
     tileset: result.tileset,
+    tilesetSourceDataUrl: result.dataUrl,
+    tilesetTransforms: Array.from(
+      { length: tilesetTileCount(result.tileset) },
+      identityTilesetTileTransform
+    ),
     settings: {
       ...template.settings,
       format: "png"
@@ -350,6 +353,8 @@ export async function openTilesetEditor(options: {
   asset: AiAssetDefinition;
   assetId: string;
   src: string;
+  sourceSrc?: string;
+  initialTransforms?: AiTilesetTileTransform[];
   regenerateTile(
     tile: number,
     tileset: TilesetTileGenerationOverride,
@@ -361,6 +366,11 @@ export async function openTilesetEditor(options: {
   if (!tileset) return;
 
   const tileCount = tilesetTileCount(tileset);
+  const sourceSrc = options.sourceSrc ?? options.src;
+  const initialTransforms = Array.from(
+    { length: tileCount },
+    (_, tile) => normalizeTilesetTileTransform(options.initialTransforms?.[tile])
+  );
   const touchUpScale = Math.min(224 / tileset.tileWidth, 224 / tileset.tileHeight);
   const touchUpDisplaySize = {
     width: Math.max(1, Math.round(tileset.tileWidth * touchUpScale)),
@@ -439,11 +449,11 @@ export async function openTilesetEditor(options: {
     { length: tileCount },
     (_, tile) => ({
       source: {
-        src: options.src,
+        src: sourceSrc,
         tile,
         tileset
       },
-      transform: identityTilesetTileTransform()
+      transform: { ...initialTransforms[tile]! }
     })
   );
   let copiedTile: TilesetEditorTileDraft | undefined;
@@ -749,7 +759,7 @@ export async function openTilesetEditor(options: {
   cancelButton.addEventListener("click", close);
   confirmButton.addEventListener("click", async () => {
     if (busy) return;
-    if (!tilesetEditorHasChanges(tileDrafts, options.src, tileset)) {
+    if (!tilesetEditorHasChanges(tileDrafts, sourceSrc, tileset, initialTransforms)) {
       close();
       return;
     }
@@ -757,12 +767,12 @@ export async function openTilesetEditor(options: {
     syncButtons();
     setFeedback("Applying tileset edits...", "busy");
     try {
-      const dataUrl = await composeTilesetEditorSheet({
-        originalSheetSrc: options.src,
+      const result = await composeTilesetEditorSheets({
+        originalSheetSrc: sourceSrc,
         tileset,
         tileDrafts
       });
-      await options.onConfirm({ dataUrl });
+      await options.onConfirm(result);
       close();
     } catch (error) {
       setFeedback(`Could not apply tileset edits: ${tilesetErrorMessage(error)}`, "error");
@@ -1804,29 +1814,34 @@ function singleTileTilesetMetadata(
 function tilesetEditorHasChanges(
   tileDrafts: TilesetEditorTileDraft[],
   originalSheetSrc: string,
-  tileset: DesignerTilesetMetadata
+  tileset: DesignerTilesetMetadata,
+  initialTransforms: AiTilesetTileTransform[]
 ): boolean {
   return tileDrafts.some((draft, tile) => (
     draft.source.src !== originalSheetSrc ||
     draft.source.tile !== tile ||
     !sameTilesetGrid(draft.source.tileset, tileset) ||
-    !isIdentityTilesetTileTransform(draft.transform)
+    !sameTilesetTileTransform(draft.transform, initialTransforms[tile])
   ));
 }
 
-function isIdentityTilesetTileTransform(transform: TilesetTileTransform): boolean {
-  const normalized = normalizeTilesetTileTransform(transform);
-  return normalized.offsetX === 0 &&
-    normalized.offsetY === 0 &&
-    normalized.scaleX === 1 &&
-    normalized.scaleY === 1;
+function sameTilesetTileTransform(
+  left: Partial<TilesetTileTransform> | undefined,
+  right: Partial<TilesetTileTransform> | undefined
+): boolean {
+  const normalizedLeft = normalizeTilesetTileTransform(left);
+  const normalizedRight = normalizeTilesetTileTransform(right);
+  return normalizedLeft.offsetX === normalizedRight.offsetX &&
+    normalizedLeft.offsetY === normalizedRight.offsetY &&
+    normalizedLeft.scaleX === normalizedRight.scaleX &&
+    normalizedLeft.scaleY === normalizedRight.scaleY;
 }
 
-async function composeTilesetEditorSheet(options: {
+async function composeTilesetEditorSheets(options: {
   originalSheetSrc: string;
   tileset: DesignerTilesetMetadata;
   tileDrafts: TilesetEditorTileDraft[];
-}): Promise<string> {
+}): Promise<TilesetEditorResult> {
   const sourceEntries = [
     { src: options.originalSheetSrc, tileset: options.tileset, label: "Current tileset" },
     ...options.tileDrafts.map((draft, tile) => ({
@@ -1853,50 +1868,63 @@ async function composeTilesetEditorSheet(options: {
     }
   }
 
-  const dimensions = tilesetDimensions(options.tileset);
-  const canvas = document.createElement("canvas");
-  canvas.width = dimensions.width;
-  canvas.height = dimensions.height;
-  const context = canvas.getContext("2d");
   const originalImage = images.get(options.originalSheetSrc);
-  if (!context || !originalImage) {
-    throw new Error("Could not create a canvas for the edited tileset.");
-  }
+  if (!originalImage) throw new Error("Could not load the current tileset source.");
 
-  context.imageSmoothingEnabled = false;
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+  const compose = (applyTransforms: boolean): string => {
+    const dimensions = tilesetDimensions(options.tileset);
+    const canvas = document.createElement("canvas");
+    canvas.width = dimensions.width;
+    canvas.height = dimensions.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Could not create a canvas for the edited tileset.");
 
-  for (const [tile, draft] of options.tileDrafts.entries()) {
-    if (draft.source.tile < 0 || draft.source.tile >= tilesetTileCount(draft.source.tileset)) {
-      throw new Error(`Tile ${tile + 1} does not have a valid source tile.`);
-    }
-    const image = images.get(draft.source.src);
-    if (!image) throw new Error(`Tile ${tile + 1} source could not be loaded.`);
-
-    const source = tileRect(draft.source.tileset, draft.source.tile);
-    const plan = tilesetTileTransformDrawPlan(options.tileset, tile, draft.transform);
-    context.clearRect(plan.clip.x, plan.clip.y, plan.clip.width, plan.clip.height);
-    context.save();
-    context.beginPath();
-    context.rect(plan.clip.x, plan.clip.y, plan.clip.width, plan.clip.height);
-    context.clip();
     context.imageSmoothingEnabled = false;
-    context.drawImage(
-      image,
-      source.x,
-      source.y,
-      source.width,
-      source.height,
-      plan.destination.x,
-      plan.destination.y,
-      plan.destination.width,
-      plan.destination.height
-    );
-    context.restore();
-  }
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
 
-  return canvas.toDataURL("image/png");
+    for (const [tile, draft] of options.tileDrafts.entries()) {
+      if (draft.source.tile < 0 || draft.source.tile >= tilesetTileCount(draft.source.tileset)) {
+        throw new Error(`Tile ${tile + 1} does not have a valid source tile.`);
+      }
+      const image = images.get(draft.source.src);
+      if (!image) throw new Error(`Tile ${tile + 1} source could not be loaded.`);
+
+      const source = tileRect(draft.source.tileset, draft.source.tile);
+      const transform = applyTransforms
+        ? draft.transform
+        : identityTilesetTileTransform();
+      const plan = tilesetTileTransformDrawPlan(options.tileset, tile, transform);
+      context.clearRect(plan.clip.x, plan.clip.y, plan.clip.width, plan.clip.height);
+      context.save();
+      context.beginPath();
+      context.rect(plan.clip.x, plan.clip.y, plan.clip.width, plan.clip.height);
+      context.clip();
+      context.imageSmoothingEnabled = false;
+      context.drawImage(
+        image,
+        source.x,
+        source.y,
+        source.width,
+        source.height,
+        plan.destination.x,
+        plan.destination.y,
+        plan.destination.width,
+        plan.destination.height
+      );
+      context.restore();
+    }
+
+    return canvas.toDataURL("image/png");
+  };
+
+  return {
+    dataUrl: compose(true),
+    sourceDataUrl: compose(false),
+    transforms: options.tileDrafts.map((draft) => (
+      normalizeTilesetTileTransform(draft.transform)
+    ))
+  };
 }
 
 async function composeTilesetSheets(options: {

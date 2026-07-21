@@ -8,6 +8,7 @@ import {
   type AiAssetTarget,
   type AiAssetVersion,
   type AiTilesetAnimation,
+  type AiTilesetTileTransform,
   type GeneratedAssetOption
 } from "./internal.js";
 import { randomUUID } from "node:crypto";
@@ -26,6 +27,11 @@ export type SaveGeneratedOptionInput = {
   assetId: string;
   versionName: string;
   option: GeneratedAssetOption;
+  tilesetSource?: {
+    image: Uint8Array;
+    mimeType: string;
+  };
+  tilesetTransforms?: AiTilesetTileTransform[];
   activate?: boolean;
   notes?: string;
 };
@@ -125,8 +131,27 @@ export async function saveGeneratedOption(
   const publicFile =
     options.publicPathPrefix ? `${options.publicPathPrefix}/${fileName}` : fileName;
 
+  assertTilesetEditInput(asset, input);
+  const tilesetSourceExtension = input.tilesetSource
+    ? extensionFromMimeType(input.tilesetSource.mimeType)
+    : undefined;
+  const tilesetSourceFileName = tilesetSourceExtension
+    ? `${sanitizeFilePart(input.assetId)}.${sanitizeFilePart(input.versionName)}.tileset-source.${tilesetSourceExtension}`
+    : undefined;
+  const tilesetSourceFilePath = tilesetSourceFileName
+    ? path.join(options.assetsDir, tilesetSourceFileName)
+    : undefined;
+  const publicTilesetSourceFile = tilesetSourceFileName
+    ? publicAssetFile(options, tilesetSourceFileName)
+    : undefined;
+
   await mkdir(options.assetsDir, { recursive: true });
-  await writeFile(filePath, input.option.image);
+  await Promise.all([
+    writeFile(filePath, input.option.image),
+    ...(tilesetSourceFilePath && input.tilesetSource
+      ? [writeFile(tilesetSourceFilePath, input.tilesetSource.image)]
+      : [])
+  ]);
 
   const version = createAiAssetVersion(asset, {
     name: input.versionName,
@@ -140,7 +165,9 @@ export async function saveGeneratedOption(
     voiceSettings: input.option.voiceSettings,
     durationSeconds: input.option.durationSeconds,
     parentVersion: asset.activeVersion || undefined,
-    notes: input.notes
+    notes: input.notes,
+    tilesetSourceFile: publicTilesetSourceFile,
+    tilesetTransforms: input.tilesetTransforms
   });
 
   // Promoting a newly generated tileset base intentionally starts a clean
@@ -298,6 +325,16 @@ export async function saveTilesetAnimation(
     await readStoredAssetFile(options, sourceVersion.file)
   );
 
+  let tilesetSourceFile: (typeof pendingFiles)[number] | undefined;
+  if (sourceVersion.tilesetSourceFile) {
+    const sourceExtension = extensionFromFileName(sourceVersion.tilesetSourceFile);
+    queueFile(
+      `${fileStem}.tileset-source.${sourceExtension}`,
+      await readStoredAssetFile(options, sourceVersion.tilesetSourceFile)
+    );
+    tilesetSourceFile = pendingFiles.at(-1);
+  }
+
   const sequenceFiles: Record<string, { files: string[] }> = {};
   for (const definition of assetDefinition.tileset?.animations ?? []) {
     if (definition.key === input.animationKey) {
@@ -351,7 +388,9 @@ export async function saveTilesetAnimation(
       settings: sourceVersion.settings,
       parentVersion: sourceVersionName,
       notes: input.notes,
-      tilesetAnimations: sequenceFiles
+      tilesetAnimations: sequenceFiles,
+      tilesetSourceFile: tilesetSourceFile?.publicFile,
+      tilesetTransforms: sourceVersion.tilesetTransforms
     });
     const updatedAsset = addVersion(assetDefinition, versionName, version, { activate: true });
     manifest.assets[input.assetId] = updatedAsset;
@@ -383,7 +422,7 @@ export async function saveTilesetAnimation(
       version,
       filePath: baseFile.filePath,
       animationFilePaths: pendingFiles
-        .filter((file) => file !== baseFile)
+        .filter((file) => file !== baseFile && file !== tilesetSourceFile)
         .map((file) => file.filePath)
     };
   } catch (error) {
@@ -519,6 +558,7 @@ export async function ensureTargetVariant(
         versionName,
         {
           ...version,
+          tilesetTransforms: version.tilesetTransforms?.map((transform) => ({ ...transform })),
           tilesetAnimations: version.tilesetAnimations
             ? Object.fromEntries(
                 Object.entries(version.tilesetAnimations).map(([key, sequence]) => [
@@ -659,8 +699,57 @@ async function deleteUnreferencedVersionFiles(
 function versionFiles(version: AiAssetVersion): string[] {
   return [
     version.file,
+    ...(version.tilesetSourceFile ? [version.tilesetSourceFile] : []),
     ...Object.values(version.tilesetAnimations ?? {}).flatMap((sequence) => sequence.files)
   ];
+}
+
+function assertTilesetEditInput(
+  asset: AiAssetDefinition,
+  input: SaveGeneratedOptionInput
+): void {
+  const tilesetSource = input.tilesetSource;
+  const tilesetTransforms = input.tilesetTransforms;
+  const hasSource = tilesetSource !== undefined;
+  const hasTransforms = tilesetTransforms !== undefined;
+  if (hasSource !== hasTransforms) {
+    throw new Error("tilesetSource and tilesetTransforms must be provided together.");
+  }
+  if (!hasSource && !hasTransforms) return;
+  if (!tilesetSource || !tilesetTransforms) {
+    throw new Error("tilesetSource and tilesetTransforms must be provided together.");
+  }
+  if (asset.kind !== "tileset" || !asset.tileset) {
+    throw new Error("Tileset edit metadata is only valid for tileset assets.");
+  }
+  if (!tilesetSource.image.byteLength) {
+    throw new Error("Tileset source image must not be empty.");
+  }
+  if (!tilesetSource.mimeType.startsWith("image/")) {
+    throw new Error("Tileset source must be an image.");
+  }
+
+  const tileset = input.option.tileset ?? asset.tileset;
+  const tileCount = Math.min(
+    tileset.tileCount ?? tileset.columns * tileset.rows,
+    tileset.columns * tileset.rows
+  );
+  if (!Array.isArray(tilesetTransforms) || tilesetTransforms.length !== tileCount) {
+    throw new Error(`tilesetTransforms must contain exactly ${tileCount} entries.`);
+  }
+  for (const [index, transform] of tilesetTransforms.entries()) {
+    if (!Number.isInteger(transform?.offsetX) || !Number.isInteger(transform?.offsetY)) {
+      throw new Error(`tilesetTransforms.${index} offsets must be integers.`);
+    }
+    if (
+      !Number.isFinite(transform?.scaleX) ||
+      transform.scaleX <= 0 ||
+      !Number.isFinite(transform?.scaleY) ||
+      transform.scaleY <= 0
+    ) {
+      throw new Error(`tilesetTransforms.${index} scales must be positive numbers.`);
+    }
+  }
 }
 
 async function readStoredAssetFile(

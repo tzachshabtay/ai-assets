@@ -10,7 +10,8 @@ export type {
   AiAssetStyleGuide,
   AiAssetTarget,
   AiAssetVersion,
-  AiTilesetAnimation
+  AiTilesetAnimation,
+  AiTilesetTileTransform
 } from "@ai-game-assets/core";
 
 export type { GeneratedAssetOption } from "./provider.js";

@@ -79,6 +79,18 @@ export type AiTilesetAnimationVersion = {
   files: string[];
 };
 
+/**
+ * A non-destructive transform applied to one tile in its own pixel coordinate
+ * space. Tiles are scaled around their center, then offset, and clipped to the
+ * tile cell when the displayed sheet is composed.
+ */
+export type AiTilesetTileTransform = {
+  offsetX: number;
+  offsetY: number;
+  scaleX: number;
+  scaleY: number;
+};
+
 export type AiAssetLinkedAnimation = {
   label: string;
   assetId: string;
@@ -167,6 +179,10 @@ export type AiAssetVersion = {
   parentVersion?: string;
   notes?: string;
   tilesetAnimations?: Record<string, AiTilesetAnimationVersion>;
+  /** Untouched source sheet used to resume non-destructive per-tile edits. */
+  tilesetSourceFile?: string;
+  /** One transform per usable tile in the source sheet. */
+  tilesetTransforms?: AiTilesetTileTransform[];
 };
 
 export type AiAssetTarget = {

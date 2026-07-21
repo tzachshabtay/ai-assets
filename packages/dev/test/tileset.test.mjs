@@ -9,6 +9,8 @@ import { assertManifest } from "@ai-game-assets/core";
 import {
   createAiAssetDevServer,
   generateTilesetAnimationBranches,
+  normalizeAssetUrls,
+  referencedAssetFiles,
   serializeGeneratedTilesetAnimationOption
 } from "../dist/index.js";
 import {
@@ -87,6 +89,60 @@ test("tileset manifest validation enforces geometry and full-sheet sequence leng
   assert.throws(
     () => assertManifest({ schemaVersion: 1, assets: { forest: invalidSequence } }),
     /must contain exactly 2 files/
+  );
+});
+
+test("tileset manifest validation preserves a complete non-destructive edit document", () => {
+  const asset = tilesetAsset();
+  asset.versions.v1.tilesetSourceFile = "/assets/forest.v1.tileset-source.png";
+  asset.versions.v1.tilesetTransforms = [
+    { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 },
+    { offsetX: 3, offsetY: -2, scaleX: 1.25, scaleY: 0.75 }
+  ];
+  const manifest = { schemaVersion: 1, assets: { forest: asset } };
+
+  assert.doesNotThrow(() => assertManifest(manifest));
+  assert.deepEqual(referencedAssetFiles(manifest), [
+    "/assets/forest.v1.png",
+    "/assets/forest.v1.tileset-source.png",
+    "/assets/forest.v1.torch.1.png",
+    "/assets/forest.v1.torch.2.png",
+    "/assets/forest.v1.water.1.png",
+    "/assets/forest.v1.water.2.png"
+  ]);
+  const normalized = structuredClone(manifest);
+  normalizeAssetUrls(normalized);
+  assert.equal(
+    normalized.assets.forest.versions.v1.tilesetSourceFile,
+    "assets/forest.v1.tileset-source.png"
+  );
+
+  const missingSource = structuredClone(asset);
+  delete missingSource.versions.v1.tilesetSourceFile;
+  assert.throws(
+    () => assertManifest({ schemaVersion: 1, assets: { forest: missingSource } }),
+    /tilesetSourceFile and tilesetTransforms must be provided together/
+  );
+
+  const wrongCount = structuredClone(asset);
+  wrongCount.versions.v1.tilesetTransforms.pop();
+  assert.throws(
+    () => assertManifest({ schemaVersion: 1, assets: { forest: wrongCount } }),
+    /tilesetTransforms must contain exactly 2 entries/
+  );
+
+  const invalidOffset = structuredClone(asset);
+  invalidOffset.versions.v1.tilesetTransforms[1].offsetX = 0.5;
+  assert.throws(
+    () => assertManifest({ schemaVersion: 1, assets: { forest: invalidOffset } }),
+    /tilesetTransforms\.1\.offsetX must be an integer/
+  );
+
+  const invalidScale = structuredClone(asset);
+  invalidScale.versions.v1.tilesetTransforms[1].scaleY = 0;
+  assert.throws(
+    () => assertManifest({ schemaVersion: 1, assets: { forest: invalidScale } }),
+    /tilesetTransforms\.1\.scaleY must be a positive number/
   );
 });
 
@@ -302,6 +358,10 @@ test("tileset base generation and promotion honor tile and grid geometry overrid
         prompt: generated.prompt,
         dimensions: generated.dimensions,
         tileset: generated.tileset,
+        tilesetSourceDataUrl: generated.dataUrl,
+        tilesetTransforms: [
+          { offsetX: 4, offsetY: -1, scaleX: 1.25, scaleY: 0.8 }
+        ],
         activate: true
       })
     });
@@ -320,6 +380,14 @@ test("tileset base generation and promotion honor tile and grid geometry overrid
     assert.equal(saved.assets.forest.activeVersion, "resized");
     assert.deepEqual(saved.assets.forest.dimensions, { width: 24, height: 20 });
     assert.deepEqual(saved.assets.forest.tileset, generationAsset.tileset);
+    assert.notEqual(saveResult.version.tilesetSourceFile, saveResult.version.file);
+    assert.deepEqual(saveResult.version.tilesetTransforms, [
+      { offsetX: 4, offsetY: -1, scaleX: 1.25, scaleY: 0.8 }
+    ]);
+    assert.deepEqual(
+      await readFile(path.join(assetsDir, path.basename(saveResult.version.tilesetSourceFile))),
+      Buffer.from(generated.dataUrl.split(",")[1], "base64")
+    );
   } finally {
     await devServer.close();
   }
@@ -535,11 +603,17 @@ test("tileset animation save composes and deletes an atomic version bundle", asy
   const assetsDir = path.join(root, "assets");
   const manifestPath = path.join(root, "manifest.json");
   const asset = tilesetAsset();
+  asset.versions.v1.tilesetSourceFile = "/assets/forest.v1.tileset-source.png";
+  asset.versions.v1.tilesetTransforms = [
+    { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 },
+    { offsetX: 2, offsetY: -3, scaleX: 1.5, scaleY: 0.75 }
+  ];
   const manifest = { schemaVersion: 1, assets: { forest: asset } };
 
   await mkdir(assetsDir, { recursive: true });
   await Promise.all([
     writeFile(path.join(assetsDir, "forest.v1.png"), "base"),
+    writeFile(path.join(assetsDir, "forest.v1.tileset-source.png"), "raw-source"),
     writeFile(path.join(assetsDir, "forest.v1.water.1.png"), "old-water-1"),
     writeFile(path.join(assetsDir, "forest.v1.water.2.png"), "old-water-2"),
     writeFile(path.join(assetsDir, "forest.v1.torch.1.png"), "torch-1"),
@@ -576,6 +650,13 @@ test("tileset animation save composes and deletes an atomic version bundle", asy
 
   assert.equal(result.asset.activeVersion, "v2");
   assert.equal(result.version.parentVersion, "v1");
+  assert.deepEqual(result.version.tilesetTransforms, asset.versions.v1.tilesetTransforms);
+  assert.notEqual(result.version.tilesetSourceFile, asset.versions.v1.tilesetSourceFile);
+  const copiedTilesetSourcePath = path.join(
+    assetsDir,
+    path.basename(result.version.tilesetSourceFile)
+  );
+  assert.equal(await readFile(copiedTilesetSourcePath, "utf8"), "raw-source");
   assert.equal(result.version.tilesetAnimations.water.files.length, 2);
   assert.equal(result.version.tilesetAnimations.torch.files.length, 2);
   assert.equal(await readFile(result.filePath, "utf8"), "base");
@@ -600,6 +681,7 @@ test("tileset animation save composes and deletes an atomic version bundle", asy
     versionName: "v2"
   });
   await assert.rejects(readFile(result.filePath), /ENOENT/);
+  await assert.rejects(readFile(copiedTilesetSourcePath), /ENOENT/);
   for (const filePath of result.animationFilePaths) {
     await assert.rejects(readFile(filePath), /ENOENT/);
   }
@@ -616,6 +698,8 @@ test("tileset animation save composes and deletes an atomic version bundle", asy
     }
   });
   assert.equal(promoted.version.tilesetAnimations, undefined);
+  assert.equal(promoted.version.tilesetSourceFile, undefined);
+  assert.equal(promoted.version.tilesetTransforms, undefined);
 });
 
 test("deleting a target variant version preserves files shared with its source asset", async () => {
@@ -627,6 +711,11 @@ test("deleting a target variant version preserves files shared with its source a
     ...structuredClone(asset.versions.v1),
     name: "v2",
     file: "/assets/forest.v2.png",
+    tilesetSourceFile: "/assets/forest.v2.tileset-source.png",
+    tilesetTransforms: [
+      { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 },
+      { offsetX: 2, offsetY: 1, scaleX: 1.2, scaleY: 0.9 }
+    ],
     tilesetAnimations: {
       water: {
         files: ["/assets/forest.v2.water.1.png", "/assets/forest.v2.water.2.png"]
@@ -638,6 +727,7 @@ test("deleting a target variant version preserves files shared with its source a
   };
   const sharedFiles = [
     "forest.v2.png",
+    "forest.v2.tileset-source.png",
     "forest.v2.water.1.png",
     "forest.v2.water.2.png",
     "forest.v2.torch.1.png",

@@ -3,6 +3,7 @@ import type {
   AiAssetGenerationSettings,
   AiAssetManifest,
   AiAssetTileset,
+  AiTilesetTileTransform,
   AiTilesetTile,
   AiTilesetAnimation,
   AiAssetVersion,
@@ -63,6 +64,8 @@ export type GeneratedDebugOption = {
     spacing?: number;
   };
   tileset?: AiAssetTileset;
+  tilesetSourceDataUrl?: string;
+  tilesetTransforms?: AiTilesetTileTransform[];
   animations?: Array<{
     key: string;
     frames: number[];
@@ -139,6 +142,8 @@ export type SaveDebugOptionRequest = {
   };
   frameGrid?: GeneratedDebugOption["frameGrid"];
   tileset?: GeneratedDebugOption["tileset"];
+  tilesetSourceDataUrl?: string;
+  tilesetTransforms?: AiTilesetTileTransform[];
   animations?: GeneratedDebugOption["animations"];
   settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;

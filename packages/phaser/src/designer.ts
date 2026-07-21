@@ -9,6 +9,8 @@ import type {
   AiAssetFormat,
   AiAssetGenerationSettings,
   AiAssetManifest,
+  AiAssetVersion,
+  AiTilesetTileTransform,
   AiTilesetAnimation
 } from "@ai-game-assets/core";
 import {
@@ -111,6 +113,50 @@ export type AiAssetDesigner = {
   close(): void;
   destroy(): void;
 };
+
+export type TilesetEditorInitialState = {
+  sourceSrc: string;
+  initialTransforms?: AiTilesetTileTransform[];
+};
+
+/**
+ * Resolves the canonical, untransformed source used by Edit Tileset. A pending
+ * option is its own editing lineage: when it has no saved source metadata, its
+ * rendered image becomes the new source instead of borrowing the active
+ * version's unrelated source sheet.
+ */
+export function resolveTilesetEditorInitialState(options: {
+  renderedSrc: string;
+  currentOption?: GeneratedDebugOption;
+  activeVersion?: AiAssetVersion;
+  resolveAssetUrl(file: string): string;
+}): TilesetEditorInitialState {
+  if (options.currentOption) {
+    const sourceSrc = options.currentOption.tilesetSourceDataUrl;
+    return {
+      sourceSrc: sourceSrc ?? options.renderedSrc,
+      initialTransforms: sourceSrc
+        ? cloneTilesetTransforms(options.currentOption.tilesetTransforms)
+        : undefined
+    };
+  }
+
+  const sourceFile = options.activeVersion?.tilesetSourceFile;
+  return {
+    sourceSrc: sourceFile
+      ? options.resolveAssetUrl(sourceFile)
+      : options.renderedSrc,
+    initialTransforms: sourceFile
+      ? cloneTilesetTransforms(options.activeVersion?.tilesetTransforms)
+      : undefined
+  };
+}
+
+function cloneTilesetTransforms(
+  transforms: AiTilesetTileTransform[] | undefined
+): AiTilesetTileTransform[] | undefined {
+  return transforms?.map((transform) => ({ ...transform }));
+}
 
 import {
   assetWithGeneratedGeometry,
@@ -829,6 +875,11 @@ export function installAiAssetDesigner(
     const activeVersion = asset.versions[asset.activeVersion];
     const dataUrl = pending?.dataUrl ??
       await imageSourceToDataUrl(resolveAssetUrl(activeVersion.file));
+    const tilesetSourceDataUrl = pending
+      ? pending.tilesetSourceDataUrl
+      : activeVersion.tilesetSourceFile
+        ? await imageSourceToDataUrl(resolveAssetUrl(activeVersion.tilesetSourceFile))
+        : undefined;
     return {
       ...(pending ?? {
         index: -1,
@@ -841,6 +892,12 @@ export function installAiAssetDesigner(
         settings: activeVersion.settings ?? asset.settings
       }),
       dataUrl,
+      tilesetSourceDataUrl,
+      tilesetTransforms: tilesetSourceDataUrl
+        ? cloneTilesetTransforms(
+            pending ? pending.tilesetTransforms : activeVersion.tilesetTransforms
+          )
+        : undefined,
       tileset: assetWithTilesetAnimationDefinition(asset, definition).tileset
     };
   };
@@ -2118,6 +2175,8 @@ export function installAiAssetDesigner(
           dimensions: promotedOption.dimensions,
           frameGrid: promotedOption.frameGrid,
           tileset: promotedOption.tileset,
+          tilesetSourceDataUrl: promotedOption.tilesetSourceDataUrl,
+          tilesetTransforms: promotedOption.tilesetTransforms,
           animations: assetWithGeneratedGeometry(
             manifest.assets[promotedAssetId],
             promotedOption,
@@ -2339,6 +2398,8 @@ export function installAiAssetDesigner(
             dimensions: pending.option.dimensions,
             frameGrid: pending.option.frameGrid,
             tileset: pending.option.tileset,
+            tilesetSourceDataUrl: pending.option.tilesetSourceDataUrl,
+            tilesetTransforms: pending.option.tilesetTransforms,
             animations: assetWithGeneratedGeometry(asset, pending.option, {
               inheritAnimations: pending.inheritAnimations
             }).animations,
@@ -2483,17 +2544,28 @@ export function installAiAssetDesigner(
       resolveAssetUrl,
       async onSelect(versionName, option) {
         const optionAsset = assetWithGeneratedGeometry(asset, option, { inheritAnimations: true });
+        const version = asset.versions[versionName];
+        const tilesetSourceDataUrl = version?.tilesetSourceFile
+          ? await imageSourceToDataUrl(resolveAssetUrl(version.tilesetSourceFile))
+          : undefined;
+        const versionOption: GeneratedDebugOption = {
+          ...option,
+          tilesetSourceDataUrl,
+          tilesetTransforms: tilesetSourceDataUrl
+            ? cloneTilesetTransforms(version?.tilesetTransforms)
+            : undefined
+        };
 
         for (const item of elements.options.querySelectorAll(".ai-game-assets-designer__option")) {
           item.classList.remove("is-selected");
         }
 
-        selectedOption = option;
-        rememberPendingOption(selectedTargetAssetId, option, {
+        selectedOption = versionOption;
+        rememberPendingOption(selectedTargetAssetId, versionOption, {
           inheritAnimations: true,
           previewedVersionName: versionName
         });
-        showOptionInCurrentPreview(option, versionName);
+        showOptionInCurrentPreview(versionOption, versionName);
         previewedVersionName = versionName;
         elements.currentPreview.classList.add("is-selected");
         elements.promoteButton.disabled = activePromotionId !== undefined;
@@ -2501,18 +2573,18 @@ export function installAiAssetDesigner(
         if (isAudioAsset(asset)) {
           renderAudioPlayer({
             container: elements.currentAudio,
-            src: option.dataUrl,
+            src: versionOption.dataUrl,
             label: readableAssetName(selectedTargetAssetId),
-            playback: option.audioPlayback
+            playback: versionOption.audioPlayback
           });
-          options.onPreview(selectedTargetAssetId, option.dataUrl, optionAsset);
+          options.onPreview(selectedTargetAssetId, versionOption.dataUrl, optionAsset);
         } else {
-          elements.currentImage.src = option.dataUrl;
+          elements.currentImage.src = versionOption.dataUrl;
           previewImageSource({
             scene: options.scene,
             manifest,
             assetId: selectedTargetAssetId,
-            src: option.dataUrl,
+            src: versionOption.dataUrl,
             textureKey: `ai-version-preview:${selectedTargetAssetId}:${versionName}:${Date.now()}`,
             assetOverride: optionAsset,
             onPreview: options.onPreview
@@ -2930,14 +3002,23 @@ export function installAiAssetDesigner(
           tiles: draftTiles
         }
       } : editorAsset;
+      const renderedSrc = sourceOption?.dataUrl ?? resolveAssetUrl(activeVersion!.file);
+      const editorInitialState = resolveTilesetEditorInitialState({
+        renderedSrc,
+        currentOption: sourceOption,
+        activeVersion,
+        resolveAssetUrl
+      });
       void openTilesetEditor({
         root: elements.root,
         asset: tilesetEditorAsset,
         assetId,
-        src: sourceOption?.dataUrl ?? resolveAssetUrl(activeVersion!.file),
+        src: renderedSrc,
+        sourceSrc: editorInitialState.sourceSrc,
+        initialTransforms: editorInitialState.initialTransforms,
         regenerateTile: (tile, tileset, currentTileSrc) =>
           regenerateTilesetTile(assetId, tile, tileset, currentTileSrc),
-        onConfirm: async ({ dataUrl }) => {
+        onConfirm: async ({ dataUrl, sourceDataUrl, transforms }) => {
           const previousOption = editedCurrentOption;
           const optionAsset = {
             ...tilesetEditorAsset,
@@ -2959,6 +3040,8 @@ export function installAiAssetDesigner(
             revisedPrompt: previousOption?.revisedPrompt ?? activeVersion?.revisedPrompt,
             dimensions: optionAsset.dimensions,
             tileset: optionAsset.tileset,
+            tilesetSourceDataUrl: sourceDataUrl,
+            tilesetTransforms: cloneTilesetTransforms(transforms),
             settings: optionAsset.settings
           };
           selectedOption = editedCurrentOption;

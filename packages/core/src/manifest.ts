@@ -452,13 +452,55 @@ function assertVersion(
         `${assetId}.versions.${versionName}.tilesetAnimations is only valid for tileset assets.`
       );
     }
+    if (version.tilesetSourceFile !== undefined || version.tilesetTransforms !== undefined) {
+      throw new Error(
+        `${assetId}.versions.${versionName} tileset source metadata is only valid for tileset assets.`
+      );
+    }
     return;
+  }
+
+  const hasTilesetSource = version.tilesetSourceFile !== undefined;
+  const hasTilesetTransforms = version.tilesetTransforms !== undefined;
+  if (hasTilesetSource !== hasTilesetTransforms) {
+    throw new Error(
+      `${assetId}.versions.${versionName}.tilesetSourceFile and tilesetTransforms must be provided together.`
+    );
+  }
+
+  const tileCount = asset.tileset?.tileCount ??
+    ((asset.tileset?.columns ?? 0) * (asset.tileset?.rows ?? 0));
+  if (hasTilesetSource && hasTilesetTransforms) {
+    assertNonEmpty(
+      version.tilesetSourceFile,
+      `${assetId}.versions.${versionName}.tilesetSourceFile`
+    );
+    if (version.tilesetSourceFile === version.file) {
+      throw new Error(
+        `${assetId}.versions.${versionName}.tilesetSourceFile must be distinct from the composed version file.`
+      );
+    }
+    if (!Array.isArray(version.tilesetTransforms) || version.tilesetTransforms.length !== tileCount) {
+      throw new Error(
+        `${assetId}.versions.${versionName}.tilesetTransforms must contain exactly ${tileCount} entries.`
+      );
+    }
+    for (const [index, transform] of version.tilesetTransforms.entries()) {
+      const label = `${assetId}.versions.${versionName}.tilesetTransforms.${index}`;
+      assertInteger(transform?.offsetX, `${label}.offsetX`);
+      assertInteger(transform?.offsetY, `${label}.offsetY`);
+      assertPositiveNumber(transform?.scaleX, `${label}.scaleX`);
+      assertPositiveNumber(transform?.scaleY, `${label}.scaleY`);
+    }
   }
 
   const animationDefinitions = new Map(
     (asset.tileset?.animations ?? []).map((animation) => [animation.key, animation])
   );
-  const versionFiles = new Set<string>([version.file]);
+  const versionFiles = new Set<string>([
+    version.file,
+    ...(version.tilesetSourceFile ? [version.tilesetSourceFile] : [])
+  ]);
   for (const [animationKey, sequence] of Object.entries(version.tilesetAnimations ?? {})) {
     assertNonEmpty(animationKey, `${assetId}.versions.${versionName}.tilesetAnimations key`);
     const definition = animationDefinitions.get(animationKey);
@@ -544,6 +586,12 @@ function assertPositiveNumber(value: number, label: string): void {
 function assertNonNegativeInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new Error(`${label} must be a non-negative integer.`);
+  }
+}
+
+function assertInteger(value: number, label: string): void {
+  if (!Number.isInteger(value)) {
+    throw new Error(`${label} must be an integer.`);
   }
 }
 

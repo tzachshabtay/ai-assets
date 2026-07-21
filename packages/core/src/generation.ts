@@ -5,6 +5,7 @@ import type {
   AiVoiceGenerationSettings,
   AiAssetGenerationSettings,
   AiTilesetAnimationVersion,
+  AiTilesetTileTransform,
   AiAssetVersion
 } from "./types.js";
 
@@ -23,6 +24,8 @@ export type CreateVersionInput = {
   notes?: string;
   createdAt?: string;
   tilesetAnimations?: Record<string, AiTilesetAnimationVersion>;
+  tilesetSourceFile?: string;
+  tilesetTransforms?: AiTilesetTileTransform[];
 };
 
 export function createAiAssetVersion(
@@ -62,7 +65,9 @@ export function createAiAssetVersion(
             { files: [...animation.files] }
           ])
         )
-      : undefined
+      : undefined,
+    tilesetSourceFile: input.tilesetSourceFile,
+    tilesetTransforms: input.tilesetTransforms?.map((transform) => ({ ...transform }))
   };
 }
 
