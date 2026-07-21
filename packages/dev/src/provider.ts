@@ -279,7 +279,6 @@ export function createOpenAiImageProvider(
       }
 
       const outputFormat = normalizeOutputFormat(requestedFormat);
-      const background = normalizeBackgroundForModel(model, requestedBackground);
       const chromaKey = selectChromaKey(request);
       const postprocessTransparency = shouldPostprocessTransparency(request, {
         prompt,
@@ -287,6 +286,17 @@ export function createOpenAiImageProvider(
         outputFormat,
         requestedBackground
       });
+      // Tileset transparency is encoded as a visible chroma matte and removed
+      // locally. Requesting an opaque raster keeps the API-level background
+      // setting consistent with that contract instead of suggesting alpha or a
+      // visual checkerboard preview to the model.
+      const background = request.asset.kind === "tileset" && postprocessTransparency
+        ? "opaque"
+        : normalizeBackgroundForModel(model, requestedBackground);
+      const persistedBackground =
+        request.settings?.background ??
+        request.asset.settings?.background ??
+        requestedBackground;
       const frameAlignment =
         request.settings?.frameAlignment ??
         request.asset.settings?.frameAlignment ??
@@ -404,7 +414,7 @@ export function createOpenAiImageProvider(
               ...request.asset.settings,
               ...request.settings,
               model,
-              background,
+              background: persistedBackground,
               format: outputFormat === "jpeg" ? "jpg" : outputFormat,
               ...(postprocessTransparency && request.asset.frameGrid ? { frameAlignment } : {})
             }
@@ -660,7 +670,10 @@ export function gameAssetPrompt(
   const structuredTilesetPrompt = isTilesetAnimation
     ? []
     : context.tilesetGeometry
-      ? modelTilesetArtworkPromptLines(request.asset)
+      ? modelTilesetArtworkPromptLines(
+          request.asset,
+          shouldRequestRgbaPng(request, context) ? context.chromaKey : undefined
+        )
       : structuredTilesetPromptLines(request.asset);
   if (
     structuredTilesetPrompt.length &&
@@ -880,18 +893,32 @@ function structuredTilesetPromptLines(asset: AiAssetDefinition): string[] {
   ];
 }
 
-function modelTilesetArtworkPromptLines(asset: AiAssetDefinition): string[] {
+function modelTilesetArtworkPromptLines(
+  asset: AiAssetDefinition,
+  chromaKey?: RgbColor
+): string[] {
   const tileset = asset.tileset;
   if (!tileset?.tiles) return [];
 
   const tileCount = tileset.tileCount ?? tileset.columns * tileset.rows;
+  const chroma = chromaKey ? hexColor(chromaKey) : undefined;
 
   return [
     "Create one deterministic hand-authored tileset in the isolated generation-canvas tile slots declared below.",
     "Read tile slots left-to-right, then top-to-bottom.",
     "Use one cohesive visual style, palette, scale, lighting, perspective, and pixel treatment across every tile.",
+    ...(chroma
+      ? [
+          `Raster transparency encoding for every numbered tile: "transparent" or "empty" describes game alpha after post-processing. In the raster you return, paint every such pixel the exact flat chroma color ${chroma}. Never draw a checkerboard transparency preview, white/gray squares, actual-alpha preview pattern, or any other matte.`
+        ]
+      : []),
     `Draw exactly these ${tileCount} tiles in this exact order:`,
-    ...tileset.tiles.map((tile, index) => `Tile ${index + 1} — ${tile.prompt.trim()}`)
+    ...tileset.tiles.map((tile, index) => (
+      `Tile ${index + 1} — ${tile.prompt.trim()}` +
+      (chroma
+        ? ` Encoding rule for Tile ${index + 1}: if any pixel should be transparent or empty, paint that pixel only ${chroma}; never represent transparency with a checkerboard or another background.`
+        : "")
+    ))
   ];
 }
 

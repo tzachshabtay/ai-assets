@@ -184,10 +184,26 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
 
     assert.equal(requestBodies.length, 3);
     assert.equal(options.length, 3);
+    for (const option of options) {
+      assert.equal(option.settings.background, "auto");
+    }
     for (const body of requestBodies) {
       assert.equal(body.n, 1);
       assert.equal(body.size, "1024x1024");
+      assert.equal(body.background, "opaque");
       assert.match(body.prompt, /Actual returned raster canvas: 1024x1024 pixels/);
+      assert.match(
+        body.prompt,
+        /Raster transparency encoding for every numbered tile:.*paint every such pixel the exact flat chroma color #[0-9a-f]{6}.*Never draw a checkerboard transparency preview/i
+      );
+      assert.equal(
+        body.prompt.match(/Encoding rule for Tile \d+:/g)?.length,
+        4
+      );
+      assert.match(
+        body.prompt,
+        /Tile 1 — A centered wooden crate on a transparent background\. Encoding rule for Tile 1:.*never represent transparency with a checkerboard/i
+      );
       assert.match(
         body.prompt,
         /Temporary full-canvas placement grid: divide the entire raster into 2 equal columns by 2 equal rows/i
@@ -309,6 +325,56 @@ test("OpenAI provider preserves an explicit tileset generation canvas", async ()
     assert.deepEqual(rgbAt(data, info.width, 48, 16), [20, 200, 20]);
     assert.deepEqual(rgbAt(data, info.width, 80, 16), [20, 20, 200]);
     assert.deepEqual(rgbAt(data, info.width, 112, 16), [200, 200, 20]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("tileset chroma transport does not persist opaque background on promotion", async () => {
+  const originalFetch = globalThis.fetch;
+  const asset = propsTilesetAsset();
+  const generated = await sharp({
+    create: {
+      width: 1024,
+      height: 1024,
+      channels: 4,
+      background: { r: 255, g: 0, b: 255, alpha: 1 }
+    }
+  }).png().toBuffer();
+  const requestBodies = [];
+
+  try {
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(init.body);
+      requestBodies.push(body);
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    const [firstOption] = await provider.generate({ asset });
+    assert.equal(firstOption.settings.background, "auto");
+
+    const promotedAsset = {
+      ...asset,
+      settings: {
+        ...asset.settings,
+        ...firstOption.settings
+      }
+    };
+    assert.equal(promotedAsset.settings.background, "auto");
+
+    const [nextOption] = await provider.generate({ asset: promotedAsset });
+    assert.equal(nextOption.settings.background, "auto");
+    assert.deepEqual(requestBodies.map((body) => body.background), ["opaque", "opaque"]);
+    for (const body of requestBodies) {
+      assert.match(body.prompt, /exact flat chroma color/i);
+      assert.match(body.prompt, /never draw a checkerboard transparency preview/i);
+    }
   } finally {
     globalThis.fetch = originalFetch;
   }
