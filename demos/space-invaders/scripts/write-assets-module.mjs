@@ -44,7 +44,7 @@ async function copyStaticShell(outputDir) {
   await rm(outputDir, { recursive: true, force: true });
   await mkdir(path.join(outputDir, "assets"), { recursive: true });
 
-  for (const fileName of ["index.html", "styles.css", "favicon.svg"]) {
+  for (const fileName of ["index.html", "styles.css", "favicon.svg", "privacy.html"]) {
     await cp(path.join(publicDir, fileName), path.join(outputDir, fileName));
   }
 
