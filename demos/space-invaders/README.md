@@ -135,6 +135,25 @@ npm run android:sync --workspace @ai-game-assets/demo-space-invaders
 npm run android:install:debug --workspace @ai-game-assets/demo-space-invaders
 ```
 
+Android internal-test releases are built and published by the `Deploy Android Internal Test` GitHub Actions workflow. Run it manually from the repository's Actions tab. The workflow:
+
+- checks out the committed repository state, so uncommitted designer previews cannot enter a release
+- builds the `mobilePortrait` production assets and syncs Capacitor
+- assigns a unique version code for every workflow attempt
+- signs the AAB with the Play upload key
+- retains the signed AAB as a workflow artifact for 30 days
+- publishes a completed release to Google Play's `internal` track
+
+Configure these GitHub repository secrets before running it:
+
+- `ANDROID_UPLOAD_KEYSTORE_BASE64`: the upload keystore encoded as one base64 string
+- `ANDROID_KEYSTORE_PASSWORD`: the keystore password
+- `ANDROID_KEY_ALIAS`: the upload-key alias
+- `ANDROID_KEY_PASSWORD`: the upload-key password
+- `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`: a Google service-account JSON key whose account has permission to publish AI Invaders releases
+
+The first four values must correspond to the upload key registered with Play App Signing. The Google service account needs Android Publisher API access and app-level release permission for `com.aiassets.invaders`.
+
 iOS uses the tablet build:
 
 ```sh
