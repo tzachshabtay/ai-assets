@@ -50,6 +50,11 @@ import {
   type TilesetTileGenerationOverride
 } from "./tileset-dialog.js";
 import { aiTilesetAnimationTextureKey } from "./keys.js";
+import {
+  promotedVoiceId,
+  regenerateAndPromoteVoiceLines,
+  voiceLineRegenerationPlan
+} from "./voice-line-regeneration.js";
 
 type AiAssetTextureFrameConfig = {
   frameWidth: number;
@@ -254,6 +259,25 @@ export function installAiAssetDesigner(
   let panelRevision = 0;
   let promotionId = 0;
   let activePromotionId: number | undefined;
+  let activeVoiceLineRegeneration:
+    | {
+        controller: AbortController;
+        id: number;
+      }
+    | undefined;
+  let activeFirstDrafts = options.autoFirstDrafts !== false;
+  let destroyed = false;
+  let deferredVoiceLineManifestSync = false;
+  const deferredVoiceLinePendingAssetIds = new Set<string>();
+  let deferredVoiceLineManifestSyncPromise: Promise<boolean> | undefined;
+  type DisableableDesignerControl =
+    | HTMLButtonElement
+    | HTMLInputElement
+    | HTMLSelectElement
+    | HTMLTextAreaElement;
+  let voiceLineBatchControlStates:
+    | Array<[DisableableDesignerControl, boolean]>
+    | undefined;
   let mixingTileset = false;
 
   const regenerateTilesetTile = async (
@@ -304,11 +328,95 @@ export function installAiAssetDesigner(
   mount.append(elements.root);
   bindKeyboardCapture(elements.root, options.scene);
 
+  const setVoiceLineBatchControlsLocked = (locked: boolean) => {
+    if (locked) {
+      if (voiceLineBatchControlStates) return;
+      const controls = Array.from(
+        elements.panel.querySelectorAll<DisableableDesignerControl>(
+          "button, input, select, textarea"
+        )
+      ).filter((control) => control !== elements.regenerateAllLinesButton);
+      voiceLineBatchControlStates = controls.map((control) => [control, control.disabled]);
+      for (const control of controls) control.disabled = true;
+      elements.assetBrowser.setAttribute("inert", "");
+      elements.currentPreview.setAttribute("inert", "");
+      elements.options.setAttribute("inert", "");
+      return;
+    }
+
+    for (const [control, wasDisabled] of voiceLineBatchControlStates ?? []) {
+      control.disabled = wasDisabled;
+    }
+    voiceLineBatchControlStates = undefined;
+    elements.assetBrowser.removeAttribute("inert");
+    elements.currentPreview.removeAttribute("inert");
+    elements.options.removeAttribute("inert");
+  };
+
+  const syncRegenerateAllLinesButton = () => {
+    if (activeVoiceLineRegeneration) {
+      const stopping = activeVoiceLineRegeneration.controller.signal.aborted;
+      elements.regenerateAllLinesButton.hidden = false;
+      elements.regenerateAllLinesButton.disabled = stopping;
+      elements.regenerateAllLinesButton.textContent = stopping
+        ? "Stopping after current line..."
+        : "Stop after current line";
+      elements.regenerateAllLinesButton.title = stopping
+        ? "The batch will stop after the current line is promoted."
+        : "Finish and promote the current line, then stop before generating another.";
+      return;
+    }
+
+    const selectedAsset = manifest.assets[selectedAssetId];
+    const plan = voiceLineRegenerationPlan(manifest, selectedAssetId, selectedTargetId);
+    const { baseVoiceAssetId, lineAssetIds, missingTargetLineAssetIds } = plan;
+    const isBaseVoiceView =
+      selectedAsset?.kind === "voice" &&
+      selectedTargetAssetId === baseVoiceAssetId &&
+      !selectedTilesetAnimationKey;
+    const hasPromotedVoice = Boolean(promotedVoiceId(manifest, baseVoiceAssetId));
+    const hasPendingBaseVoice = pendingOptions.has(baseVoiceAssetId);
+    const pendingLineCount = lineAssetIds.filter((assetId) => pendingOptions.has(assetId)).length;
+    const hasAnyPendingOption = pendingOptions.size > 0;
+
+    elements.regenerateAllLinesButton.textContent = "Regenerate all lines";
+    elements.regenerateAllLinesButton.hidden = !isBaseVoiceView;
+    elements.regenerateAllLinesButton.disabled =
+      !isBaseVoiceView ||
+      !hasPromotedVoice ||
+      hasPendingBaseVoice ||
+      pendingLineCount > 0 ||
+      hasAnyPendingOption ||
+      missingTargetLineAssetIds.length > 0 ||
+      lineAssetIds.length === 0 ||
+      activeFirstDrafts ||
+      Boolean(activeGeneration) ||
+      activePromotionId !== undefined;
+    elements.regenerateAllLinesButton.title = !isBaseVoiceView
+      ? ""
+      : hasPendingBaseVoice
+        ? "Promote the selected base voice before regenerating its lines."
+        : missingTargetLineAssetIds.length > 0
+          ? `Create target variants for ${missingTargetLineAssetIds.length} linked line${missingTargetLineAssetIds.length === 1 ? "" : "s"} before regenerating this target voice.`
+          : pendingLineCount > 0
+            ? `Promote or revert the ${pendingLineCount} pending linked line${pendingLineCount === 1 ? "" : "s"} before regenerating all lines.`
+            : hasAnyPendingOption
+              ? "Promote or revert all pending asset options before regenerating voice lines."
+              : activeFirstDrafts
+                ? "Wait for automatic first drafts to finish before regenerating voice lines."
+                : !hasPromotedVoice
+                  ? "Promote a base voice before regenerating its lines."
+                  : lineAssetIds.length === 0
+                    ? "This voice has no linked lines to regenerate."
+                    : `Generate and promote one new option for ${lineAssetIds.length} linked line${lineAssetIds.length === 1 ? "" : "s"}.`;
+  };
+
   const syncPromoteAllButton = () => {
     elements.promoteAllButton.disabled =
       pendingOptions.size === 0 ||
       Boolean(activeGeneration) ||
       activePromotionId !== undefined;
+    syncRegenerateAllLinesButton();
   };
   const rememberPendingOption = (
     assetId: string,
@@ -329,8 +437,59 @@ export function installAiAssetDesigner(
     });
     syncPromoteAllButton();
   };
+  const flushDeferredVoiceLineManifest = (): Promise<boolean> => {
+    if (!deferredVoiceLineManifestSync) return Promise.resolve(true);
+    if (
+      [...deferredVoiceLinePendingAssetIds].some((assetId) => pendingOptions.has(assetId))
+    ) {
+      return Promise.resolve(false);
+    }
+    if (deferredVoiceLineManifestSyncPromise) {
+      return deferredVoiceLineManifestSyncPromise;
+    }
+
+    deferredVoiceLineManifestSyncPromise = (async () => {
+      try {
+        const syncedManifest = await client.syncManifestModule();
+        manifest = syncedManifest;
+        deferredVoiceLineManifestSync = false;
+        deferredVoiceLinePendingAssetIds.clear();
+        if (!destroyed) {
+          try {
+            options.onManifestUpdated?.(manifest);
+          } catch (error) {
+            setStatus(
+              elements,
+              `Manifest refreshed, but the live game could not adopt it. ${errorMessage(error)}`,
+              "error"
+            );
+          }
+        }
+        return true;
+      } catch (error) {
+        if (!destroyed) {
+          setStatus(
+            elements,
+            `Could not refresh the generated manifest module. ${errorMessage(error)}`,
+            "error"
+          );
+        }
+        return false;
+      } finally {
+        deferredVoiceLineManifestSyncPromise = undefined;
+      }
+    })();
+    return deferredVoiceLineManifestSyncPromise;
+  };
+  const resolveDeferredVoiceLinePendingOption = (assetId: string) => {
+    if (!deferredVoiceLinePendingAssetIds.delete(assetId)) return;
+    if (deferredVoiceLinePendingAssetIds.size === 0) {
+      void flushDeferredVoiceLineManifest();
+    }
+  };
   const forgetPendingOption = (assetId: string) => {
     pendingOptions.delete(assetId);
+    resolveDeferredVoiceLinePendingOption(assetId);
     syncPromoteAllButton();
   };
   const hasEditableTilesetAnimationFrames = (
@@ -1946,6 +2105,237 @@ export function installAiAssetDesigner(
     }
   });
 
+  elements.regenerateAllLinesButton.addEventListener("click", async () => {
+    if (activeVoiceLineRegeneration) {
+      if (!activeVoiceLineRegeneration.controller.signal.aborted) {
+        activeVoiceLineRegeneration.controller.abort();
+        syncRegenerateAllLinesButton();
+        setStatus(
+          elements,
+          "Stopping after the current line is promoted...",
+          "busy"
+        );
+      }
+      return;
+    }
+
+    const voiceAssetId = selectedAssetId;
+    const voice = manifest.assets[voiceAssetId];
+    const plan = voiceLineRegenerationPlan(manifest, voiceAssetId, selectedTargetId);
+    const { baseVoiceAssetId, lineAssetIds, missingTargetLineAssetIds } = plan;
+
+    if (
+      voice?.kind !== "voice" ||
+      selectedTargetAssetId !== baseVoiceAssetId ||
+      selectedTilesetAnimationKey ||
+      activeFirstDrafts ||
+      activeGeneration ||
+      activePromotionId !== undefined
+    ) {
+      return;
+    }
+    if (pendingOptions.has(baseVoiceAssetId)) {
+      setStatus(elements, "Promote the selected base voice before regenerating its lines.", "error");
+      return;
+    }
+    if (!promotedVoiceId(manifest, baseVoiceAssetId)) {
+      setStatus(elements, "Promote a base voice before regenerating its lines.", "error");
+      return;
+    }
+    if (missingTargetLineAssetIds.length > 0) {
+      setStatus(
+        elements,
+        `Create target variants for ${missingTargetLineAssetIds.map(readableAssetName).join(", ")} before regenerating this target voice.`,
+        "error"
+      );
+      return;
+    }
+    if (lineAssetIds.length === 0) {
+      setStatus(elements, "This voice has no linked lines to regenerate.", "error");
+      return;
+    }
+    const pendingLineAssetIds = lineAssetIds.filter((assetId) => pendingOptions.has(assetId));
+    if (pendingLineAssetIds.length > 0) {
+      setStatus(
+        elements,
+        `Promote or revert pending options for ${pendingLineAssetIds.map(readableAssetName).join(", ")} before regenerating all lines.`,
+        "error"
+      );
+      return;
+    }
+    if (pendingOptions.size > 0) {
+      setStatus(
+        elements,
+        "Promote or revert all pending asset options before regenerating voice lines.",
+        "error"
+      );
+      return;
+    }
+
+    const targetLabel = selectedTargetId
+      ? manifest.targets?.[selectedTargetId]?.label ?? readableAssetName(selectedTargetId)
+      : "Default";
+    const confirmed = window.confirm(
+      `Regenerate and promote one new option for all ${lineAssetIds.length} linked line${lineAssetIds.length === 1 ? "" : "s"} of ${readableAssetName(baseVoiceAssetId)} (${targetLabel})?\n\nThis uses paid generation and replaces each line's active version as it completes.`
+    );
+    if (!confirmed) return;
+
+    const currentPromotionId = promotionId + 1;
+    const controller = new AbortController();
+    promotionId = currentPromotionId;
+    activePromotionId = currentPromotionId;
+    activeVoiceLineRegeneration = { controller, id: currentPromotionId };
+    elements.panel.setAttribute("aria-busy", "true");
+    setVoiceLineBatchControlsLocked(true);
+    syncPromoteAllButton();
+    syncMixTilesetButton();
+
+    let promotedCount = 0;
+    let liveRefreshError: { assetId: string; error: unknown } | undefined;
+    let batchCompletedCleanly = false;
+
+    try {
+      const result = await regenerateAndPromoteVoiceLines({
+        manifest,
+        voiceAssetId,
+        targetId: selectedTargetId,
+        client,
+        signal: controller.signal,
+        onProgress(progress) {
+          if (activeVoiceLineRegeneration?.id !== currentPromotionId) return;
+          const action = controller.signal.aborted
+            ? "Finishing"
+            : progress.phase === "generation" ? "Generating" : "Promoting";
+          setStatus(
+            elements,
+            `${action} ${readableAssetName(progress.assetId)} (${progress.index + 1}/${progress.total})...`,
+            "busy"
+          );
+        }
+      });
+
+      manifest = result.manifest;
+      promotedCount = result.promoted.length;
+      if (destroyed || activeVoiceLineRegeneration?.id !== currentPromotionId) {
+        return;
+      }
+      if (result.manifestModuleSyncDeferred || result.manifestModuleSyncError) {
+        deferredVoiceLineManifestSync = true;
+      }
+      if (result.manifestModuleSyncDeferred) {
+        for (const failure of result.failures) {
+          if (failure.option) deferredVoiceLinePendingAssetIds.add(failure.assetId);
+        }
+        if (result.cancelled?.option) {
+          deferredVoiceLinePendingAssetIds.add(result.cancelled.assetId);
+        }
+      }
+      for (const saved of result.promoted) {
+        pendingOptions.delete(saved.asset.id);
+        resolveDeferredVoiceLinePendingOption(saved.asset.id);
+        formatDrafts.delete(saved.asset.id);
+        try {
+          (options.onAssetReady ?? options.onPreview)(
+            saved.asset.id,
+            resolveAssetUrl(saved.file),
+            saved.asset
+          );
+        } catch (error) {
+          liveRefreshError ??= { assetId: saved.asset.id, error };
+        }
+      }
+      for (const failure of result.failures) {
+        if (failure.option) {
+          rememberPendingOption(failure.assetId, failure.option);
+        }
+      }
+      if (result.cancelled?.option) {
+        rememberPendingOption(result.cancelled.assetId, result.cancelled.option);
+      }
+      batchCompletedCleanly =
+        promotedCount > 0 &&
+        result.failures.length === 0 &&
+        !result.cancelled &&
+        !result.manifestModuleSyncError &&
+        !result.manifestModuleSyncDeferred &&
+        pendingOptions.size === 0;
+      if (promotedCount > 0) {
+        try {
+          options.onManifestUpdated?.(manifest);
+        } catch (error) {
+          liveRefreshError ??= { assetId: baseVoiceAssetId, error };
+        }
+      }
+
+      syncTargetAsset(baseVoiceAssetId);
+      renderAssetBrowser();
+
+      const firstFailure = result.failures[0];
+      const processedCount = result.promoted.length + result.failures.length;
+      if (result.cancelled) {
+        setStatus(
+          elements,
+          `Stopped after ${processedCount}/${lineAssetIds.length} lines; ${promotedCount} promoted` +
+            `${result.failures.length > 0 ? ` and ${result.failures.length} failed` : ""}.`,
+          result.failures.length > 0 ? "error" : "success"
+        );
+      } else if (firstFailure) {
+        const unattemptedCount = lineAssetIds.length - processedCount;
+        setStatus(
+          elements,
+          `Regenerated and promoted ${promotedCount}/${lineAssetIds.length} lines. ` +
+            `${result.failures.length} failed; first failure was ${readableAssetName(firstFailure.assetId)} ` +
+            `during ${firstFailure.phase}: ${errorMessage(firstFailure.error)}` +
+            `${firstFailure.phase === "promotion" && unattemptedCount > 0
+              ? ` ${unattemptedCount} remaining line${unattemptedCount === 1 ? " was" : "s were"} not generated to avoid further paid requests while promotion is unavailable.`
+              : ""}` +
+            `${result.manifestModuleSyncDeferred
+              ? " The generated option remains selected; promote or revert it before restarting."
+              : ""}`,
+          "error"
+        );
+      } else if (result.manifestModuleSyncError) {
+        setStatus(
+          elements,
+          `Regenerated and promoted all ${promotedCount} lines, but the generated manifest module could not be refreshed. ${errorMessage(result.manifestModuleSyncError)}`,
+          "error"
+        );
+      } else if (liveRefreshError) {
+        setStatus(
+          elements,
+          `Regenerated all ${promotedCount} lines, but ${readableAssetName(liveRefreshError.assetId)} ` +
+            `could not refresh live. Restart to load it. ${errorMessage(liveRefreshError.error)}`,
+          "error"
+        );
+      } else {
+        setStatus(
+          elements,
+          `Regenerated and promoted all ${promotedCount} lines.`,
+          "success"
+        );
+      }
+    } catch (error) {
+      setStatus(elements, `Could not regenerate voice lines. ${errorMessage(error)}`, "error");
+    } finally {
+      if (activeVoiceLineRegeneration?.id === currentPromotionId) {
+        activeVoiceLineRegeneration = undefined;
+      }
+      if (activePromotionId === currentPromotionId) {
+        activePromotionId = undefined;
+      }
+      if (!destroyed) {
+        elements.panel.removeAttribute("aria-busy");
+        setVoiceLineBatchControlsLocked(false);
+        syncPromoteAllButton();
+        syncMixTilesetButton();
+      }
+    }
+
+    if (!destroyed && options.restartOnPromote && batchCompletedCleanly) {
+      window.location.reload();
+    }
+  });
+
   elements.uploadButton.addEventListener("click", async () => {
     const asset = manifest.assets[selectedTargetAssetId];
 
@@ -2482,6 +2872,7 @@ export function installAiAssetDesigner(
         }
 
         pendingOptions.delete(assetId);
+        resolveDeferredVoiceLinePendingOption(assetId);
         formatDrafts.delete(assetId);
         promotedCount += 1;
       } catch (error) {
@@ -2530,8 +2921,23 @@ export function installAiAssetDesigner(
     }
   });
 
-  elements.restartButton.addEventListener("click", () => {
-    window.location.reload();
+  elements.restartButton.addEventListener("click", async () => {
+    if (
+      deferredVoiceLineManifestSync &&
+      [...deferredVoiceLinePendingAssetIds].some((assetId) => pendingOptions.has(assetId))
+    ) {
+      setStatus(
+        elements,
+        "Promote or revert the pending generated voice line before restarting.",
+        "error"
+      );
+      return;
+    }
+    if (deferredVoiceLineManifestSync) {
+      setStatus(elements, "Refreshing the generated manifest module...", "busy");
+      if (!await flushDeferredVoiceLineManifest()) return;
+    }
+    if (!destroyed) window.location.reload();
   });
 
   elements.versionsButton.addEventListener("click", () => {
@@ -3126,26 +3532,41 @@ export function installAiAssetDesigner(
       continueOnError: true,
       onManifestUpdated: (updatedManifest) => {
         manifest = updatedManifest;
-        options.onManifestUpdated?.(updatedManifest);
-        syncAsset(selectedAssetId);
+        if (!destroyed) {
+          options.onManifestUpdated?.(updatedManifest);
+          syncAsset(selectedAssetId);
+        }
       },
       onAssetReady: (assetId, textureKey, asset) => {
-        (options.onAssetReady ?? options.onPreview)(assetId, textureKey, asset);
+        if (!destroyed) {
+          (options.onAssetReady ?? options.onPreview)(assetId, textureKey, asset);
+        }
       },
-      onProgress: handleFirstDraftProgress,
+      onProgress: (progress) => {
+        if (!destroyed) handleFirstDraftProgress(progress);
+      },
       onError: (error, assetId) => {
-        setStatus(
-          elements,
-          `First draft failed for ${readableAssetName(assetId)}: ${errorMessage(error)}`,
-          "error"
-        );
+        if (!destroyed) {
+          setStatus(
+            elements,
+            `First draft failed for ${readableAssetName(assetId)}: ${errorMessage(error)}`,
+            "error"
+          );
+        }
       }
     }).then((result) => {
-      if (result.generatedAssetIds.length > 0 && result.errors.length === 0) {
+      if (!destroyed && result.generatedAssetIds.length > 0 && result.errors.length === 0) {
         setStatus(elements, "First drafts generated.", "success");
       }
     }).catch((error) => {
-      setStatus(elements, `First draft failed: ${errorMessage(error)}`, "error");
+      if (!destroyed) {
+        setStatus(elements, `First draft failed: ${errorMessage(error)}`, "error");
+      }
+    }).finally(() => {
+      activeFirstDrafts = false;
+      if (!destroyed) {
+        syncPromoteAllButton();
+      }
     });
   }
 
@@ -3154,7 +3575,9 @@ export function installAiAssetDesigner(
     open: () => setOpen(true),
     close: () => setOpen(false),
     destroy: () => {
+      destroyed = true;
       activeGeneration?.controller.abort();
+      activeVoiceLineRegeneration?.controller.abort();
       stopStatusAnimation(elements.status);
       dockPanel.destroy();
       elements.root.remove();

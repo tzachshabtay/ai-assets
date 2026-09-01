@@ -64,6 +64,7 @@ export type DesignerElements = {
   uploadButton: HTMLButtonElement;
   deriveButton: HTMLButtonElement;
   regenerateButton: HTMLButtonElement;
+  regenerateAllLinesButton: HTMLButtonElement;
   mixTilesetButton: HTMLButtonElement;
   versionsButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
@@ -259,6 +260,11 @@ export function createDesignerElements(
   regenerateButton.type = "button";
   regenerateButton.textContent = "Regenerate";
 
+  const regenerateAllLinesButton = document.createElement("button");
+  regenerateAllLinesButton.type = "button";
+  regenerateAllLinesButton.textContent = "Regenerate all lines";
+  regenerateAllLinesButton.hidden = true;
+
   const mixTilesetButton = document.createElement("button");
   mixTilesetButton.type = "button";
   mixTilesetButton.textContent = "Mix tileset";
@@ -294,6 +300,7 @@ export function createDesignerElements(
   actions.className = "ai-game-assets-designer__actions";
   actions.append(
     regenerateButton,
+    regenerateAllLinesButton,
     mixTilesetButton,
     uploadButton,
     deriveButton,
@@ -379,6 +386,7 @@ export function createDesignerElements(
     uploadButton,
     deriveButton,
     regenerateButton,
+    regenerateAllLinesButton,
     mixTilesetButton,
     versionsButton,
     promoteButton,

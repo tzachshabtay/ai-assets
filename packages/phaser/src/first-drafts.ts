@@ -48,9 +48,10 @@ export async function ensureMissingAiAssetFirstDrafts(
     .filter((assetId) => isMissingLoadableAsset(options.manifest.assets[assetId]));
   const generatedAssetIds: string[] = [];
   const errors: EnsureMissingAiAssetFirstDraftsResult["errors"] = [];
-  const pendingCompletions: Promise<void>[] = [];
+  let hasPersistedDrafts = false;
 
   const applyResult = async (result: EnsureFirstDraftsResult) => {
+    hasPersistedDrafts ||= result.generated.length > 0;
     Object.assign(options.manifest.assets, result.manifest.assets);
     options.manifest.styleGuide = result.manifest.styleGuide;
     options.onManifestUpdated?.(options.manifest);
@@ -87,53 +88,63 @@ export async function ensureMissingAiAssetFirstDrafts(
     generatedAssetIds: []
   });
 
-  for (const assetId of targetAssetIds) {
-    if (!isMissingLoadableAsset(options.manifest.assets[assetId])) {
-      continue;
-    }
-
-    options.onProgress?.({
-      completed: generatedAssetIds.length,
-      total: targetAssetIds.length,
-      currentAssetId: assetId,
-      generatedAssetIds: [...generatedAssetIds]
-    });
-
-    try {
-      const generation = options.client.ensureFirstDrafts({ assetIds: [assetId] });
-      const result = await softTimeout(
-        generation,
-        options.generationTimeoutMs ?? 90000,
-        `Timed out generating first draft for AI asset "${assetId}".`
-      );
-
-      if (result.status === "timeout") {
-        errors.push({ assetId, error: result.error });
-        options.onError?.(result.error, assetId);
-
-        pendingCompletions.push(
-          generation
-            .then((lateResult) => applyResult(lateResult))
-            .catch((error) => {
-              errors.push({ assetId, error });
-              options.onError?.(error, assetId);
-            })
-        );
+  try {
+    for (const assetId of targetAssetIds) {
+      if (!isMissingLoadableAsset(options.manifest.assets[assetId])) {
         continue;
       }
 
-      await applyResult(result.value);
-    } catch (error) {
-      errors.push({ assetId, error });
-      options.onError?.(error, assetId);
+      options.onProgress?.({
+        completed: generatedAssetIds.length,
+        total: targetAssetIds.length,
+        currentAssetId: assetId,
+        generatedAssetIds: [...generatedAssetIds]
+      });
 
-      if (!options.continueOnError) {
-        throw error;
+      try {
+        const generation = options.client.ensureFirstDrafts({
+          assetIds: [assetId],
+          deferManifestModuleWrite: true
+        });
+        const result = await softTimeout(
+          generation,
+          options.generationTimeoutMs ?? 90000,
+          `Timed out generating first draft for AI asset "${assetId}".`
+        );
+
+        if (result.status === "timeout") {
+          errors.push({ assetId, error: result.error });
+          options.onError?.(result.error, assetId);
+
+          // The request may still finish after the soft timeout. Keep first
+          // drafts sequential and wait for it before another whole-manifest
+          // mutation can begin.
+          try {
+            await applyResult(await generation);
+          } catch (error) {
+            errors.push({ assetId, error });
+            options.onError?.(error, assetId);
+          }
+          continue;
+        }
+
+        await applyResult(result.value);
+      } catch (error) {
+        errors.push({ assetId, error });
+        options.onError?.(error, assetId);
+
+        if (!options.continueOnError) {
+          throw error;
+        }
       }
     }
+  } finally {
+    if (hasPersistedDrafts) {
+      const syncedManifest = await options.client.syncManifestModule();
+      Object.assign(options.manifest.assets, syncedManifest.assets);
+      options.manifest.styleGuide = syncedManifest.styleGuide;
+    }
   }
-
-  void Promise.allSettled(pendingCompletions);
 
   options.onProgress?.({
     completed: generatedAssetIds.length,

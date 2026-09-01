@@ -286,6 +286,7 @@ The designer supports:
 - selecting a generated or saved option updates the Current preview without promoting it, so it can be edited in place; Revert preview restores the active promoted version
 - cancelable generations
 - upload for images, spritesheets, animation frames, sound effects, music, and voice lines
+- one-click regeneration and promotion of every linked voice line from a selected promoted base voice
 - version history, revert, promote, and delete
 - style guide prompt and reference image management
 - animation editor with per-frame delay, offset, scale, rotation, and tags

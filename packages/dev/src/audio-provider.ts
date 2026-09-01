@@ -141,6 +141,11 @@ async function generateElevenLabsVoicePreviews(
     ...request.asset.voiceSettings,
     ...request.voiceSettings
   };
+  // A newly designed base voice must be promoted into a new permanent voice.
+  // Carrying IDs from the previous active version would make createVoice()
+  // treat the fresh preview as already promoted.
+  delete voiceSettings.voiceId;
+  delete voiceSettings.generatedVoiceId;
   const audioSettings = {
     ...request.asset.audioSettings,
     ...request.audioSettings

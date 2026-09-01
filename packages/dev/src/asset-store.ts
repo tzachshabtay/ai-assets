@@ -34,6 +34,7 @@ export type SaveGeneratedOptionInput = {
   tilesetTransforms?: AiTilesetTileTransform[];
   activate?: boolean;
   notes?: string;
+  deferManifestModuleWrite?: boolean;
 };
 
 export type SaveGeneratedOptionResult = {
@@ -208,7 +209,7 @@ export async function saveGeneratedOption(
   assertManifest(manifest);
   await writeManifest(options.manifestPath, manifest);
 
-  if (options.manifestModulePath) {
+  if (options.manifestModulePath && !input.deferManifestModuleWrite) {
     await writeManifestModule(options.manifestModulePath, manifest);
   }
 

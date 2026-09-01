@@ -31,7 +31,8 @@ import {
   readManifest,
   saveGeneratedOption,
   saveTilesetAnimation,
-  saveStyleGuide
+  saveStyleGuide,
+  writeManifestModule
 } from "./asset-store.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -327,6 +328,7 @@ async function routeRequest(
   if (request.method === "POST" && url.pathname === "/__ai-assets/ensure-first-drafts") {
     const body = await readJson<{
       assetIds?: string[];
+      deferManifestModuleWrite?: boolean;
     }>(request);
     let manifest = await readManifest(options.manifestPath);
     const requestedAssetIds = body.assetIds ?? Object.keys(manifest.assets);
@@ -364,7 +366,8 @@ async function routeRequest(
         versionName,
         option,
         activate: true,
-        notes: "Auto-generated first draft for a missing asset."
+        notes: "Auto-generated first draft for a missing asset.",
+        deferManifestModuleWrite: body.deferManifestModuleWrite
       });
 
       manifest = result.manifest;
@@ -391,6 +394,18 @@ async function routeRequest(
     return;
   }
 
+  if (
+    request.method === "POST" &&
+    url.pathname === "/__ai-assets/sync-manifest-module"
+  ) {
+    const manifest = await readManifest(options.manifestPath);
+    if (options.manifestModulePath) {
+      await writeManifestModule(options.manifestModulePath, manifest);
+    }
+    sendJson(response, 200, { manifest });
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/__ai-assets/save") {
     const body = await readJson<{
       assetId: string;
@@ -412,6 +427,7 @@ async function routeRequest(
       tilesetTransforms?: AiTilesetTileTransform[];
       activate?: boolean;
       notes?: string;
+      deferManifestModuleWrite?: boolean;
     }>(request);
     let option = optionFromDataUrl(body.dataUrl, {
       prompt: body.prompt,
@@ -453,7 +469,8 @@ async function routeRequest(
         : undefined,
       tilesetTransforms: body.tilesetTransforms,
       activate: body.activate,
-      notes: body.notes
+      notes: body.notes,
+      deferManifestModuleWrite: body.deferManifestModuleWrite
     });
 
     const responseBody: SaveDebugOptionResponse = {

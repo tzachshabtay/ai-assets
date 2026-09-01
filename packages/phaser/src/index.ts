@@ -117,6 +117,23 @@ export type {
 export { installAiAssetDesigner } from "./designer.js";
 
 export type {
+  RegenerateAndPromoteVoiceLinesOptions,
+  VoiceLineRegenerationCancellation,
+  VoiceLineRegenerationFailure,
+  VoiceLineRegenerationPhase,
+  VoiceLineRegenerationPlan,
+  VoiceLineRegenerationProgress,
+  VoiceLineRegenerationResult
+} from "./voice-line-regeneration.js";
+
+export {
+  linkedVoiceLineAssetIds,
+  promotedVoiceId,
+  regenerateAndPromoteVoiceLines,
+  voiceLineRegenerationPlan
+} from "./voice-line-regeneration.js";
+
+export type {
   PhaserAnimationsLike,
   PhaserImageLike,
   PhaserLoaderLike,

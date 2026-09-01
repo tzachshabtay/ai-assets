@@ -152,6 +152,7 @@ export type SaveDebugOptionRequest = {
   durationSeconds?: number;
   activate?: boolean;
   notes?: string;
+  deferManifestModuleWrite?: boolean;
 };
 
 export type SaveDebugOptionResult = {
@@ -170,6 +171,7 @@ export type DeleteDebugVersionRequest = {
 
 export type EnsureFirstDraftsRequest = {
   assetIds?: string[];
+  deferManifestModuleWrite?: boolean;
 };
 
 export type EnsureFirstDraftsResult = {
@@ -437,6 +439,20 @@ export class AiAssetDebugClient {
     }
 
     return response.json() as Promise<SaveDebugOptionResult>;
+  }
+
+  async syncManifestModule(): Promise<AiAssetManifest> {
+    const url = `${this.endpoint}/__ai-assets/sync-manifest-module`;
+    const response = await fetchDebugEndpoint(url, {
+      method: "POST"
+    });
+
+    if (!response.ok) {
+      throw new Error(await responseErrorMessage(response));
+    }
+
+    const body = await response.json() as { manifest: AiAssetManifest };
+    return body.manifest;
   }
 
   async deleteVersion(request: DeleteDebugVersionRequest): Promise<AiAssetManifest> {
