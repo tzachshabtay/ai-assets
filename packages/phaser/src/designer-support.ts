@@ -3832,6 +3832,43 @@ export function cssUrl(value: string): string {
   return value.replace(/["\\]/g, "\\$&");
 }
 
+const designerInputBoundaryEventTypes = [
+  "mousedown",
+  "mouseup",
+  "touchstart",
+  "touchend",
+  "touchcancel",
+  "click"
+] as const;
+
+/**
+ * Keeps DOM interactions with the in-game designer from reaching Phaser's
+ * window-level input listeners. The events retain their default browser
+ * behavior so controls, focus, and designer drag gestures continue to work.
+ */
+export function bindDesignerInputBoundary(...targets: EventTarget[]): () => void {
+  const uniqueTargets = [...new Set(targets)];
+  const stopPropagation = (event: Event): void => event.stopPropagation();
+
+  for (const target of uniqueTargets) {
+    for (const eventType of designerInputBoundaryEventTypes) {
+      target.addEventListener(eventType, stopPropagation);
+    }
+  }
+
+  let bound = true;
+  return () => {
+    if (!bound) return;
+    bound = false;
+
+    for (const target of uniqueTargets) {
+      for (const eventType of designerInputBoundaryEventTypes) {
+        target.removeEventListener(eventType, stopPropagation);
+      }
+    }
+  };
+}
+
 export function bindKeyboardCapture(root: HTMLElement, scene: AiAssetDesignerSceneLike): void {
   const stopKeyboardEvent = (event: KeyboardEvent) => {
     const target = event.target;

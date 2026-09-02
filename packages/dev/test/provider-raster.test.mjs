@@ -136,6 +136,99 @@ test("OpenAI provider chooses the closest output aspect ratio unless size is exp
   }
 });
 
+test("OpenAI provider transports ordinary transparent images through an opaque chroma matte", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp(Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+      <rect width="16" height="16" fill="#ff00ff"/>
+      <rect x="4" y="4" width="8" height="8" fill="#228844"/>
+    </svg>
+  `)).png().toBuffer();
+  let requestBody;
+
+  try {
+    globalThis.fetch = async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const asset = imageAsset(
+      { width: 16, height: 16 },
+      { model: "gpt-image-2", background: "transparent", format: "png" }
+    );
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    const [option] = await provider.generate({ asset });
+
+    assert.equal(requestBody.background, "opaque");
+    assert.match(requestBody.prompt, /flat chroma-key color #ff00ff/i);
+    assert.equal(option.settings.background, "transparent");
+
+    const { data, info } = await sharp(option.image)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    assert.equal(rgbaAt(data, info.width, info.channels, 0, 0)[3], 0);
+    assert.deepEqual(
+      rgbaAt(data, info.width, info.channels, 8, 8),
+      [34, 136, 68, 255]
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("OpenAI provider leaves explicitly opaque ordinary images opaque", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp({
+    create: {
+      width: 16,
+      height: 16,
+      channels: 4,
+      background: { r: 255, g: 0, b: 255, alpha: 1 }
+    }
+  }).png().toBuffer();
+  let requestBody;
+
+  try {
+    globalThis.fetch = async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const asset = imageAsset(
+      { width: 16, height: 16 },
+      { model: "gpt-image-2", background: "opaque", format: "png" }
+    );
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    const [option] = await provider.generate({ asset });
+
+    assert.equal(requestBody.background, "opaque");
+    assert.doesNotMatch(requestBody.prompt, /flat chroma-key color/i);
+    assert.equal(option.settings.background, "opaque");
+
+    const { data, info } = await sharp(option.image)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    assert.deepEqual(
+      rgbaAt(data, info.width, info.channels, 0, 0),
+      [255, 0, 255, 255]
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("OpenAI provider keeps full-sheet tileset generation to one request per candidate", async () => {
   const originalFetch = globalThis.fetch;
   const asset = propsTilesetAsset();
@@ -565,4 +658,9 @@ test("OpenAI provider forwards AbortSignal to the active fetch", async () => {
 function rgbAt(data, width, x, y) {
   const offset = (y * width + x) * 4;
   return Array.from(data.subarray(offset, offset + 3));
+}
+
+function rgbaAt(data, width, channels, x, y) {
+  const offset = (y * width + x) * channels;
+  return Array.from(data.subarray(offset, offset + 4));
 }

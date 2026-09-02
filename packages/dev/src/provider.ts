@@ -286,11 +286,11 @@ export function createOpenAiImageProvider(
         outputFormat,
         requestedBackground
       });
-      // Tileset transparency is encoded as a visible chroma matte and removed
+      // Generated transparency is encoded as a visible chroma matte and removed
       // locally. Requesting an opaque raster keeps the API-level background
       // setting consistent with that contract instead of suggesting alpha or a
       // visual checkerboard preview to the model.
-      const background = request.asset.kind === "tileset" && postprocessTransparency
+      const background = postprocessTransparency
         ? "opaque"
         : normalizeBackgroundForModel(model, requestedBackground);
       const persistedBackground =

@@ -166,6 +166,7 @@ function cloneTilesetTransforms(
 import {
   assetWithGeneratedGeometry,
   audioGenerationOverridesFromInputs,
+  bindDesignerInputBoundary,
   bindKeyboardCapture,
   canEditGenerationFormat,
   createDesignerElements,
@@ -326,6 +327,7 @@ export function installAiAssetDesigner(
   }
   const mount = options.mount ?? document.body;
   mount.append(elements.root);
+  const unbindInputBoundary = bindDesignerInputBoundary(elements.root, elements.toggle);
   bindKeyboardCapture(elements.root, options.scene);
 
   const setVoiceLineBatchControlsLocked = (locked: boolean) => {
@@ -3579,6 +3581,7 @@ export function installAiAssetDesigner(
       activeGeneration?.controller.abort();
       activeVoiceLineRegeneration?.controller.abort();
       stopStatusAnimation(elements.status);
+      unbindInputBoundary();
       dockPanel.destroy();
       elements.root.remove();
     }
