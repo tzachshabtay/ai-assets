@@ -5,6 +5,7 @@ import { PNG } from "pngjs";
 
 import {
   alignSpriteSheetFrames,
+  removeChromaBackground,
   removeTilesetChromaBackground,
   selectChromaKey,
   shouldRequestRgbaPng
@@ -111,6 +112,118 @@ test("structured tileset tile prompts participate in chroma-key selection", () =
   });
 
   assert.notDeepEqual(chromaKey, { red: 255, green: 0, blue: 255 });
+});
+
+test("style prompts participate in chroma-key selection", () => {
+  const chromaKey = selectChromaKey({
+    asset: {
+      id: "portrait",
+      kind: "image",
+      prompt: "A centered portrait.",
+      dimensions: { width: 16, height: 16 },
+      activeVersion: "",
+      versions: {}
+    },
+    stylePrompt: "Painterly shadows with vivid magenta accents."
+  });
+
+  assert.notDeepEqual(chromaKey, { red: 255, green: 0, blue: 255 });
+});
+
+test("transparent raster prompts request one opaque chroma transport", () => {
+  const request = {
+    asset: {
+      id: "portrait",
+      kind: "image",
+      prompt: "A centered portrait.",
+      dimensions: { width: 16, height: 16 },
+      settings: { background: "transparent", format: "png", model: "gpt-image-2" },
+      activeVersion: "",
+      versions: {}
+    }
+  };
+  const prompt = gameAssetPrompt(request, {
+    prompt: request.asset.prompt,
+    model: "gpt-image-2",
+    outputFormat: "png",
+    requestedBackground: "transparent",
+    chromaKey: { red: 0, green: 255, blue: 0 }
+  });
+
+  assert.match(prompt, /Return a fully opaque PNG for this generation step/i);
+  assert.match(prompt, /single exact flat chroma-key color #00ff00/i);
+  assert.match(prompt, /Do not return native alpha/i);
+  assert.doesNotMatch(prompt, /Clean it into a real RGBA PNG/i);
+  assert.doesNotMatch(prompt, /Use a transparent background/i);
+});
+
+test("chroma cleanup removes high-confidence key pixels from enclosed sprite holes", () => {
+  const png = new PNG({ width: 24, height: 24 });
+
+  fillRect(png, 0, 0, 24, 24, [0, 255, 0, 255]);
+  fillRect(png, 4, 3, 16, 18, [130, 20, 35, 255]);
+  fillRect(png, 8, 8, 8, 8, [90, 190, 80, 255]);
+  fillRect(png, 9, 9, 6, 6, [4, 248, 10, 255]);
+
+  const cleaned = PNG.sync.read(removeChromaBackground(
+    PNG.sync.write(png),
+    { red: 0, green: 255, blue: 0 }
+  ));
+
+  assert.equal(alphaAt(cleaned, 0, 0), 0);
+  assert.equal(alphaAt(cleaned, 11, 11), 0);
+  assert.ok(alphaAt(cleaned, 8, 11) < 255);
+  assert.equal(alphaAt(cleaned, 5, 5), 255);
+});
+
+test("chroma cleanup learns a shifted coherent edge matte without clearing isolated detail", () => {
+  const png = new PNG({ width: 24, height: 24 });
+
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const variation = ((x + y) % 3) * 5;
+      setPixel(png, x, y, [82 + variation, 178 + variation, 104 + variation, 255]);
+    }
+  }
+
+  fillRect(png, 4, 3, 16, 18, [130, 20, 35, 255]);
+  setPixel(png, 11, 11, [87, 183, 109, 255]);
+
+  const cleaned = PNG.sync.read(removeChromaBackground(
+    PNG.sync.write(png),
+    { red: 0, green: 255, blue: 0 }
+  ));
+
+  assert.equal(alphaAt(cleaned, 0, 0), 0);
+  assert.equal(alphaAt(cleaned, 23, 23), 0);
+  assert.equal(alphaAt(cleaned, 11, 11), 255);
+  assert.equal(alphaAt(cleaned, 10, 11), 255);
+});
+
+test("chroma cleanup preserves nonuniform full-bleed art with isolated key-colored detail", () => {
+  const png = new PNG({ width: 32, height: 32 });
+
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      setPixel(png, x, y, [
+        70 + Math.round((160 * x) / (png.width - 1)),
+        20 + Math.round((80 * y) / (png.height - 1)),
+        40 + Math.round((150 * y) / (png.height - 1)),
+        255
+      ]);
+    }
+  }
+
+  fillRect(png, 8, 8, 16, 16, [0, 255, 0, 255]);
+
+  const cleaned = PNG.sync.read(removeChromaBackground(
+    PNG.sync.write(png),
+    { red: 0, green: 255, blue: 0 }
+  ));
+
+  assert.equal(alphaAt(cleaned, 0, 0), 255);
+  assert.equal(alphaAt(cleaned, 31, 31), 255);
+  assert.equal(alphaAt(cleaned, 16, 16), 255);
 });
 
 test("tileset cleanup removes the declared chroma from any tile that uses it", () => {
@@ -267,6 +380,14 @@ function fillRect(png, x, y, width, height, rgba) {
       png.data[offset + 3] = rgba[3];
     }
   }
+}
+
+function setPixel(png, x, y, rgba) {
+  const offset = (y * png.width + x) * 4;
+  png.data[offset] = rgba[0];
+  png.data[offset + 1] = rgba[1];
+  png.data[offset + 2] = rgba[2];
+  png.data[offset + 3] = rgba[3];
 }
 
 function alphaAt(png, x, y) {

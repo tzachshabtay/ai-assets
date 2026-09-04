@@ -720,9 +720,9 @@ export function gameAssetPrompt(
     );
   } else if (shouldRequestRgbaPng(request, context)) {
     lines.push(
-      "Use a transparent background, centered subject, no text, no watermark, no cast shadow, no floor shadow, no ground plane, no reflection. Keep the sprite readable through its shape and pose; do not darken or recolor the character to create contrast.",
-      "Clean it into a real RGBA PNG: the final game asset needs actual alpha transparency, not white, black, gray, checkerboard, or any matte color.",
-      `For local transparency processing, render every background and empty padding pixel as the flat chroma-key color ${hexColor(context.chromaKey)}. Do not use that exact chroma-key color inside the game asset itself.`,
+      "The final game asset will have a transparent background after local processing. Use a centered subject, no text, no watermark, no cast shadow, no floor shadow, no ground plane, and no reflection. Keep the sprite readable through its shape and pose; do not darken or recolor the character to create contrast.",
+      `Return a fully opaque PNG for this generation step. Render every background and empty padding pixel as the single exact flat chroma-key color ${hexColor(context.chromaKey)}. Do not use that exact chroma-key color inside the game asset itself.`,
+      "Do not return native alpha, a checkerboard, a substitute matte color, a gradient, texture, lighting, or color variation in the chroma-key background. Local processing will remove the chroma key and create the final RGBA transparency.",
       "Keep the asset edges crisp against the chroma-key background so it can be removed cleanly."
     );
   } else if (context.tilesetGeometry) {

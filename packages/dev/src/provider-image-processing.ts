@@ -25,6 +25,10 @@ const CHROMA_KEY_CANDIDATES: RgbColor[] = [
 const CHROMA_MATCH_TOLERANCE = 120;
 const CHROMA_EDGE_TOLERANCE = 170;
 const CHROMA_EDGE_FILL_TOLERANCE = 150;
+const STRICT_CHROMA_MATCH_TOLERANCE = 90;
+const COHERENT_EDGE_MATTE_TOLERANCE = 96;
+const COHERENT_EDGE_MATTE_MIN_COVERAGE = 0.55;
+const OPAQUE_EDGE_ALPHA_THRESHOLD = 224;
 
 export function selectChromaKey(request: GenerateAssetRequest): RgbColor {
   const samples = [...(request.references ?? []), ...(request.styleReferences ?? [])]
@@ -32,6 +36,7 @@ export function selectChromaKey(request: GenerateAssetRequest): RgbColor {
   const prompt = [
     request.prompt,
     request.asset.prompt,
+    request.stylePrompt,
     ...(request.asset.tileset?.tiles?.map((tile) => tile.prompt) ?? [])
   ].filter(Boolean).join(" ").toLowerCase();
 
@@ -479,7 +484,14 @@ function removeDetectedBackground(png: PNG, backgroundRemoval: BackgroundRemoval
   }
 
   for (let index = 0; index < transparent.length; index += 1) {
-    if (transparent[index]) {
+    if (
+      transparent[index] ||
+      (
+        backgroundRemoval.kind === "chroma" &&
+        backgroundRemoval.removeDisconnected &&
+        isHighConfidenceChromaPixel(png, index, backgroundRemoval.chromaKey)
+      )
+    ) {
       transparent[index] = 1;
       setAlpha(png, index, 0);
     }
@@ -489,8 +501,9 @@ function removeDetectedBackground(png: PNG, backgroundRemoval: BackgroundRemoval
 }
 
 type BackgroundRemoval =
-  | { kind: "chroma"; chromaKey: RgbColor }
-  | { kind: "edge-matte"; matteColor: RgbColor };
+  | { kind: "chroma"; chromaKey: RgbColor; removeDisconnected: boolean }
+  | { kind: "edge-matte"; matteColor: RgbColor }
+  | { kind: "coherent-edge-matte"; matteColor: RgbColor };
 
 function removeKnownChromaPixels(png: PNG, chromaKey: RgbColor): boolean {
   const transparent = new Uint8Array(png.width * png.height);
@@ -508,7 +521,11 @@ function removeKnownChromaPixels(png: PNG, chromaKey: RgbColor): boolean {
   }
 
   if (found) {
-    featherBackgroundEdges(png, transparent, { kind: "chroma", chromaKey });
+    featherBackgroundEdges(png, transparent, {
+      kind: "chroma",
+      chromaKey,
+      removeDisconnected: true
+    });
   }
 
   return found;
@@ -562,28 +579,35 @@ export function detectBackgroundRemoval(
   chromaKey: RgbColor
 ): BackgroundRemoval | undefined {
   if (hasRequestedChromaKey(png, chromaKey)) {
-    return { kind: "chroma", chromaKey };
+    return {
+      kind: "chroma",
+      chromaKey,
+      removeDisconnected: hasRequestedChromaKeyOnEdges(png, chromaKey)
+    };
   }
 
   const matteColor = detectNeutralEdgeMatte(png);
 
-  return matteColor ? { kind: "edge-matte", matteColor } : undefined;
+  if (matteColor) {
+    return { kind: "edge-matte", matteColor };
+  }
+
+  const coherentMatteColor = detectCoherentEdgeMatte(png);
+
+  return coherentMatteColor
+    ? { kind: "coherent-edge-matte", matteColor: coherentMatteColor }
+    : undefined;
 }
 
 export function hasRequestedChromaKey(png: PNG, chromaKey: RgbColor): boolean {
-  const edgeStats = sampleImageEdges(png, (index) => (
-    isChromaPixel(png, index, 90, chromaKey) ||
-    isKeyTintedPixel(rgbAt(png, index), chromaKey, 0.8)
-  ));
-
-  if (edgeStats.matches / edgeStats.total >= 0.18) return true;
+  if (hasRequestedChromaKeyOnEdges(png, chromaKey)) return true;
 
   let matches = 0;
   const threshold = Math.max(256, Math.floor(png.width * png.height * 0.005));
 
   for (let index = 0; index < png.width * png.height; index += 1) {
     if (
-      isChromaPixel(png, index, 90, chromaKey) ||
+      isChromaPixel(png, index, STRICT_CHROMA_MATCH_TOLERANCE, chromaKey) ||
       isKeyTintedPixel(rgbAt(png, index), chromaKey, 0.8)
     ) {
       matches += 1;
@@ -593,6 +617,15 @@ export function hasRequestedChromaKey(png: PNG, chromaKey: RgbColor): boolean {
   }
 
   return false;
+}
+
+export function hasRequestedChromaKeyOnEdges(png: PNG, chromaKey: RgbColor): boolean {
+  const edgeStats = sampleImageEdges(png, (index) => (
+    isChromaPixel(png, index, STRICT_CHROMA_MATCH_TOLERANCE, chromaKey) ||
+    isKeyTintedPixel(rgbAt(png, index), chromaKey, 0.8)
+  ));
+
+  return edgeStats.matches / edgeStats.total >= 0.18;
 }
 
 export function detectNeutralEdgeMatte(png: PNG): RgbColor | undefined {
@@ -635,6 +668,64 @@ export function detectNeutralEdgeMatte(png: PNG): RgbColor | undefined {
   ));
 
   return matteStats.matches / matteStats.total >= 0.55 ? matteColor : undefined;
+}
+
+export function detectCoherentEdgeMatte(png: PNG): RgbColor | undefined {
+  const corners = [
+    { x: 0, y: 0 },
+    { x: png.width - 1, y: 0 },
+    { x: 0, y: png.height - 1 },
+    { x: png.width - 1, y: png.height - 1 }
+  ].map(({ x, y }) => y * png.width + x)
+    .filter((index) => alphaAt(png, index) >= OPAQUE_EDGE_ALPHA_THRESHOLD)
+    .map((index) => rgbAt(png, index));
+
+  if (corners.length < 3) return undefined;
+
+  const cornerCluster = corners
+    .map((seed) => corners.filter((color) => (
+      colorDistance(color, seed) <= COHERENT_EDGE_MATTE_TOLERANCE
+    )))
+    .sort((left, right) => right.length - left.length)[0];
+
+  if (!cornerCluster || cornerCluster.length < 3) return undefined;
+
+  const cornerColor = averageColors(cornerCluster);
+  const matchingEdgeColors: RgbColor[] = [];
+  const edgeStats = sampleImageEdges(png, (index) => {
+    if (alphaAt(png, index) < OPAQUE_EDGE_ALPHA_THRESHOLD) return false;
+
+    const color = rgbAt(png, index);
+    const matches = colorDistance(color, cornerColor) <= COHERENT_EDGE_MATTE_TOLERANCE;
+
+    if (matches) matchingEdgeColors.push(color);
+    return matches;
+  });
+
+  if (
+    matchingEdgeColors.length === 0 ||
+    edgeStats.matches / edgeStats.total < COHERENT_EDGE_MATTE_MIN_COVERAGE
+  ) {
+    return undefined;
+  }
+
+  const matteColor = averageColors(matchingEdgeColors);
+  const refinedStats = sampleImageEdges(png, (index) => (
+    alphaAt(png, index) >= OPAQUE_EDGE_ALPHA_THRESHOLD &&
+    colorDistance(rgbAt(png, index), matteColor) <= COHERENT_EDGE_MATTE_TOLERANCE
+  ));
+
+  return refinedStats.matches / refinedStats.total >= COHERENT_EDGE_MATTE_MIN_COVERAGE
+    ? matteColor
+    : undefined;
+}
+
+function averageColors(colors: RgbColor[]): RgbColor {
+  return {
+    red: Math.round(colors.reduce((sum, color) => sum + color.red, 0) / colors.length),
+    green: Math.round(colors.reduce((sum, color) => sum + color.green, 0) / colors.length),
+    blue: Math.round(colors.reduce((sum, color) => sum + color.blue, 0) / colors.length)
+  };
 }
 
 export function resizePngToDimensions(image: Uint8Array, dimensions: AiAssetDimensions): Buffer {
@@ -993,7 +1084,23 @@ export function isRemovableEdgeBackgroundPixel(
     );
   }
 
+  if (backgroundRemoval.kind === "coherent-edge-matte") {
+    return colorDistance(rgbAt(png, index), backgroundRemoval.matteColor) <=
+      COHERENT_EDGE_MATTE_TOLERANCE;
+  }
+
   return isNeutralMattePixel(rgbAt(png, index), backgroundRemoval.matteColor);
+}
+
+export function isHighConfidenceChromaPixel(
+  png: PNG,
+  index: number,
+  chromaKey: RgbColor
+): boolean {
+  return (
+    isChromaPixel(png, index, STRICT_CHROMA_MATCH_TOLERANCE, chromaKey) ||
+    isKeyTintedPixel(rgbAt(png, index), chromaKey, 0.86)
+  );
 }
 
 export function isKeyTintedPixel(color: RgbColor, chromaKey: RgbColor, strength: number): boolean {
