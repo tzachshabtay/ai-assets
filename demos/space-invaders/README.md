@@ -2,6 +2,8 @@
 
 Playable production demo: [https://tzachshabtay.github.io/ai-assets/](https://tzachshabtay.github.io/ai-assets/)
 
+Library packages: [`@ai-game-assets/core`](https://www.npmjs.com/package/@ai-game-assets/core) · [`@ai-game-assets/phaser`](https://www.npmjs.com/package/@ai-game-assets/phaser) · [`@ai-game-assets/dev`](https://www.npmjs.com/package/@ai-game-assets/dev)
+
 This demo is the main integration test for the AI Game Assets packages. It is a Phaser arcade game whose graphics, animation metadata, audio, music, voices, target variants, and UI assets are managed through the asset library.
 
 ## What It Shows

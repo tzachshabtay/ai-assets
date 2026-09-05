@@ -1,5 +1,7 @@
 # AI Game Assets
 
+[Play the Space Invaders demo](https://tzachshabtay.github.io/ai-assets/) · [Core on npm](https://www.npmjs.com/package/@ai-game-assets/core) · [Phaser integration on npm](https://www.npmjs.com/package/@ai-game-assets/phaser) · [Dev tools on npm](https://www.npmjs.com/package/@ai-game-assets/dev)
+
 [![AI Game Assets demo video](https://img.youtube.com/vi/LaXCj2oczyI/hqdefault.jpg)](https://youtu.be/LaXCj2oczyI)
 
 Prompt-aware AI asset tooling for TypeScript 2D games. The library lets a game keep the creative intent for every asset next to the asset itself: prompts, dimensions, generation settings, saved versions, target variants, animation frame metadata, audio playback metadata, and voice direction.
@@ -20,9 +22,9 @@ Game teams usually treat generated assets as exported files. This project treats
 
 | Package | Purpose |
 | --- | --- |
-| `@ai-game-assets/core` | Engine-neutral asset types, manifest validation, version helpers, and target resolution. |
-| `@ai-game-assets/phaser` | Phaser loader/runtime helpers plus the in-game asset designer. |
-| `@ai-game-assets/dev` | Local development server, OpenAI image/SVG provider, ElevenLabs audio/voice provider, asset store, and production manifest builder. |
+| [`@ai-game-assets/core`](https://www.npmjs.com/package/@ai-game-assets/core) | Engine-neutral asset types, manifest validation, version helpers, and target resolution. |
+| [`@ai-game-assets/phaser`](https://www.npmjs.com/package/@ai-game-assets/phaser) | Phaser loader/runtime helpers plus the in-game asset designer. |
+| [`@ai-game-assets/dev`](https://www.npmjs.com/package/@ai-game-assets/dev) | Local development server, OpenAI image/SVG provider, ElevenLabs audio/voice provider, asset store, and production manifest builder. |
 
 Install the packages you need:
 
@@ -393,7 +395,7 @@ The Space Invaders demo has its own production build and GitHub Pages deployment
 
 ## Demo
 
-The main example is [Space Invaders](./demos/space-invaders/README.md). It exercises most of the library: images, spritesheets, animation metadata, targets, generated SVGs, SFX, music, voices, uploads, version history, derivation, and native mobile/tablet builds.
+The main example is the playable [Space Invaders demo](https://tzachshabtay.github.io/ai-assets/); its [demo README](./demos/space-invaders/README.md) covers local development and production builds. It exercises most of the library: images, spritesheets, animation metadata, targets, generated SVGs, SFX, music, voices, uploads, version history, derivation, and native mobile/tablet builds.
 
 ## License
 
