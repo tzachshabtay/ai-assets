@@ -4,7 +4,10 @@ import type {
 } from "@ai-game-assets/core";
 import sharp from "sharp";
 
-import { OPENAI_IMAGE_GENERATION_SIZES } from "./image-generation-sizes.js";
+import {
+  closestImageGenerationDimensions,
+  isGptImage2Model
+} from "./image-generation-sizes.js";
 import type { GenerateAssetReference } from "./provider.js";
 import type { RgbColor } from "./provider-image-processing.js";
 
@@ -84,20 +87,59 @@ export function tilesetSheetGenerationGeometry(
 
 export function planTilesetSheetGeneration(
   asset: AiAssetDefinition,
-  requestedSize?: string
+  requestedSize?: string,
+  model = "gpt-image-2"
 ): TilesetSheetGenerationGeometry {
   if (requestedSize && requestedSize !== "auto") {
     return tilesetSheetGenerationGeometry(asset, requestedSize);
   }
 
-  return selectTilesetGenerationPlan(asset, OPENAI_IMAGE_GENERATION_SIZES);
+  if (!isGptImage2Model(model)) {
+    throw new Error(
+      `Tileset "${asset.id}" requires an explicit generation settings.size ` +
+      `when using model "${model}" because automatic canvas dimensions cannot ` +
+      "be used for deterministic tileset cropping."
+    );
+  }
+
+  return selectFlexibleTilesetGenerationPlan(asset, model);
+}
+
+function selectFlexibleTilesetGenerationPlan(
+  asset: AiAssetDefinition,
+  model: string
+): TilesetSheetGenerationGeometry {
+  const { tileCount, tileset } = requireTilesetGenerationAsset(asset);
+  const usableRegionFraction = 1 - 2 * TILESET_GENERATION_REGION_EDGE_GUARD;
+  let best: TilesetGenerationCandidate | undefined;
+
+  for (let columns = 1; columns <= tileCount; columns += 1) {
+    const rows = Math.ceil(tileCount / columns);
+    const canvas = closestImageGenerationDimensions({
+      width: (columns * tileset.tileWidth) / usableRegionFraction,
+      height: (rows * tileset.tileHeight) / usableRegionFraction
+    }, model, { columns, rows });
+    const geometry = buildTilesetSheetGenerationGeometry(asset, canvas, {
+      columns,
+      rows
+    });
+    const candidate = tilesetGenerationCandidate(asset, geometry);
+    if (!best || isBetterTilesetGenerationCandidate(candidate, best)) {
+      best = candidate;
+    }
+  }
+
+  if (!best) {
+    throw new Error(`Tileset "${asset.id}" cannot fit on an image generation canvas.`);
+  }
+  return best.geometry;
 }
 
 function selectTilesetGenerationPlan(
   asset: AiAssetDefinition,
   canvases: readonly AiAssetDimensions[]
 ): TilesetSheetGenerationGeometry {
-  const { tileCount, tileset } = requireTilesetGenerationAsset(asset);
+  const { tileCount } = requireTilesetGenerationAsset(asset);
   let best: TilesetGenerationCandidate | undefined;
 
   for (const canvas of canvases) {
@@ -108,25 +150,7 @@ function selectTilesetGenerationPlan(
         columns,
         rows
       });
-      const cell = geometry.cells[0]!;
-      const unused = columns * rows - tileCount;
-      const packedAspect =
-        (columns * tileset.tileWidth) /
-        (rows * tileset.tileHeight);
-      const candidate: TilesetGenerationCandidate = {
-        geometry,
-        // Useful coverage is the fraction of model pixels owned by actual tiles.
-        // It rewards a canvas whose aspect matches the temporary grid and
-        // naturally penalizes empty packing slots and wasted canvas space.
-        coverage:
-          (tileCount * cell.width * cell.height) /
-          (canvas.width * canvas.height),
-        aspectDelta: Math.abs(
-          Math.log(packedAspect / (canvas.width / canvas.height))
-        ),
-        unused,
-        logicalColumnDelta: Math.abs(columns - tileset.columns)
-      };
+      const candidate = tilesetGenerationCandidate(asset, geometry);
 
       if (!best || isBetterTilesetGenerationCandidate(candidate, best)) {
         best = candidate;
@@ -138,6 +162,33 @@ function selectTilesetGenerationPlan(
     throw new Error(`Tileset "${asset.id}" cannot fit on an image generation canvas.`);
   }
   return best.geometry;
+}
+
+function tilesetGenerationCandidate(
+  asset: AiAssetDefinition,
+  geometry: TilesetSheetGenerationGeometry
+): TilesetGenerationCandidate {
+  const { tileCount, tileset } = requireTilesetGenerationAsset(asset);
+  const cell = geometry.cells[0]!;
+  const unused = geometry.generationColumns * geometry.generationRows - tileCount;
+  const packedAspect =
+    (geometry.generationColumns * tileset.tileWidth) /
+    (geometry.generationRows * tileset.tileHeight);
+
+  return {
+    geometry,
+    // Useful coverage is the fraction of model pixels owned by actual tiles.
+    // It rewards a canvas whose aspect matches the temporary grid and
+    // naturally penalizes empty packing slots and wasted canvas space.
+    coverage:
+      (tileCount * cell.width * cell.height) /
+      (geometry.canvas.width * geometry.canvas.height),
+    aspectDelta: Math.abs(
+      Math.log(packedAspect / (geometry.canvas.width / geometry.canvas.height))
+    ),
+    unused,
+    logicalColumnDelta: Math.abs(geometry.generationColumns - tileset.columns)
+  };
 }
 
 type TilesetGenerationCandidate = {

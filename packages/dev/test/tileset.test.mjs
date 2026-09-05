@@ -18,6 +18,7 @@ import {
   gameAssetPrompt,
   tilesetBasePrompt
 } from "../dist/provider.js";
+import { isValidGptImage2GenerationDimensions } from "../dist/image-generation-sizes.js";
 import { tilesetSheetGenerationGeometry } from "../dist/tileset-sheet-processing.js";
 import {
   deleteAssetVersion,
@@ -261,10 +262,42 @@ test("base tileset variations never receive animation variation instructions", (
   assert.doesNotMatch(animationPrompt, /Base tileset variation direction/i);
 });
 
-test("image generation chooses the closest supported aspect ratio by default", () => {
-  assert.equal(closestImageGenerationSize({ width: 128, height: 64 }), "1536x1024");
-  assert.equal(closestImageGenerationSize({ width: 64, height: 128 }), "1024x1536");
+test("image generation chooses a valid flexible canvas for GPT Image 2", () => {
+  assert.equal(closestImageGenerationSize({ width: 128, height: 64 }), "1440x720");
+  assert.equal(closestImageGenerationSize({ width: 64, height: 128 }), "720x1440");
   assert.equal(closestImageGenerationSize({ width: 96, height: 96 }), "1024x1024");
+  assert.equal(
+    closestImageGenerationSize(
+      { width: 960, height: 1260 },
+      "gpt-image-2",
+      { columns: 3, rows: 3 }
+    ),
+    "960x1248"
+  );
+  assert.equal(
+    closestImageGenerationSize({ width: 128, height: 64 }, "gpt-image-1.5"),
+    "auto"
+  );
+  assert.equal(
+    closestImageGenerationSize({ width: 960, height: 1260 }, "gpt-image-2-2026-04-21"),
+    "960x1264"
+  );
+  for (const dimensions of [
+    { width: 960, height: 1264 },
+    { width: 1024, height: 1024 },
+    { width: 3840, height: 2160 },
+    { width: 2880, height: 2880 }
+  ]) {
+    assert.equal(isValidGptImage2GenerationDimensions(dimensions), true);
+  }
+  for (const dimensions of [
+    { width: 960, height: 1260 },
+    { width: 4000, height: 1600 },
+    { width: 3840, height: 128 },
+    { width: 256, height: 256 }
+  ]) {
+    assert.equal(isValidGptImage2GenerationDimensions(dimensions), false);
+  }
 });
 
 test("tileset base generation and promotion honor tile and grid geometry overrides", async () => {

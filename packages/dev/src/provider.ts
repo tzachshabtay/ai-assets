@@ -31,6 +31,7 @@ import type { RgbColor } from "./provider-image-processing.js";
 import { closestImageGenerationSize } from "./image-generation-sizes.js";
 import {
   cropTilesetSheetFromGeneration,
+  parseImageGenerationSize,
   planTilesetSheetGeneration,
   stageTilesetSheetReference,
   tilesetSheetRectLabel
@@ -305,10 +306,22 @@ export function createOpenAiImageProvider(
         request.settings?.size ??
         request.asset.settings?.size;
       const tilesetGeometry = request.asset.kind === "tileset" && request.asset.tileset
-        ? planTilesetSheetGeneration(request.asset, configuredSize)
+        ? planTilesetSheetGeneration(request.asset, configuredSize, model)
         : undefined;
       const generationSize = tilesetGeometry?.size ??
-        configuredSize ?? closestImageGenerationSize(dimensions);
+        (configuredSize && configuredSize !== "auto"
+          ? configuredSize
+          : closestImageGenerationSize(
+              dimensions,
+              model,
+              request.asset.frameGrid
+                ? {
+                    columns: request.asset.frameGrid.columns,
+                    rows: request.asset.frameGrid.rows
+                  }
+                : undefined
+            ));
+      const generationDimensions = parseImageGenerationSize(generationSize);
       const tilesetPadding = tilesetGeometry
         ? tilesetOutputPadding(postprocessTransparency, chromaKey)
         : undefined;
@@ -337,7 +350,8 @@ export function createOpenAiImageProvider(
           variation: count > 1 ? createVariationSeed(index) : undefined,
           variationIndex: index,
           variationCount: count,
-          tilesetGeometry
+          tilesetGeometry,
+          generationDimensions
         }),
         n: 1,
         size: generationSize,
@@ -658,9 +672,11 @@ export function gameAssetPrompt(
     variationIndex?: number;
     variationCount?: number;
     tilesetGeometry?: TilesetSheetGenerationGeometry;
+    generationDimensions?: AiAssetDimensions;
   }
 ): string {
   const dimensions = requireAssetDimensions(request.asset);
+  const generationDimensions = context.generationDimensions;
   const isTilesetAnimation = request.purpose === "tileset-animation";
   const lines: string[] = [];
   const brief = assetBriefForModel(request, context.prompt);
@@ -708,7 +724,7 @@ export function gameAssetPrompt(
               shouldRequestRgbaPng(request, context),
               !isTilesetAnimation && !request.references?.length
             )
-          : [`Target canvas: ${dimensions.width}x${dimensions.height}.`])
+          : rasterGenerationCanvasPromptLines(generationDimensions, dimensions))
       ]));
 
   if (request.asset.kind === "tileset" && shouldRequestRgbaPng(request, context)) {
@@ -747,12 +763,25 @@ export function gameAssetPrompt(
     const columnLabel = request.asset.frameGrid.columns === 1 ? "column" : "columns";
     lines.push(
       `Spritesheet contract: exactly ${frameCount} animation frames arranged in the first ${frameCount} cells of a fixed grid with ${request.asset.frameGrid.columns} ${columnLabel} and ${request.asset.frameGrid.rows} ${rowLabel}.`,
-      `The final image must be one ${dimensions.width}x${dimensions.height} spritesheet, not separate images and not a different grid.`,
+      ...(generationDimensions
+        ? [
+            `The generated raster must be one ${generationDimensions.width}x${generationDimensions.height} spritesheet, not separate images and not a different grid.`,
+            `Generation-space cell rectangles are: ${gridCellRectangles(request, generationDimensions)}.`,
+            `Frame centers must be at these generation-space cell centers: ${gridCellCenters(request, generationDimensions)}.`
+          ]
+        : [
+            "The generated raster must be one spritesheet, not separate images and not a different grid. The image API will choose its pixel dimensions automatically.",
+            `Divide the entire generated raster edge-to-edge into exactly ${request.asset.frameGrid.columns} equal ${columnLabel} and ${request.asset.frameGrid.rows} equal ${rowLabel}. Treat those proportional regions as the frame cells regardless of the returned pixel dimensions.`
+          ]),
       `Use one frame per grid cell, ordered left-to-right then top-to-bottom.`,
-      `Each cell is exactly ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight}; do not merge cells, crop cells, add extra frames beyond ${frameCount}, or change the grid layout.`,
-      `Cell rectangles are: ${gridCellRectangles(request)}.`,
-      `Frame centers must be at these cell centers: ${gridCellCenters(request)}.`,
+      ...(generationDimensions && sameDimensions(generationDimensions, dimensions)
+        ? []
+        : [
+            `After generation, the complete sheet will be resampled to the final ${dimensions.width}x${dimensions.height} game asset with ${request.asset.frameGrid.frameWidth}x${request.asset.frameGrid.frameHeight} logical cells; do not use those final logical coordinates for the generated raster.`
+          ]),
+      `Do not merge cells, crop cells, add extra frames beyond ${frameCount}, or change the grid layout.`,
       "Each grid cell must contain exactly one complete frame of the subject. Do not place a nested spritesheet, turnaround sheet, contact sheet, labels, thumbnails, or multiple mini-poses inside any single cell.",
+      "Keep every visible part of each subject strictly inside its own cell with chroma-key padding on every side. No head, foot, limb, shadow, or stray pixel from one frame may cross into the row or column beside it.",
       "The grid layout is mandatory even if the animation would look nicer in another arrangement."
     );
 
@@ -1068,7 +1097,38 @@ function createVariationSeed(index: number): string {
   return `option-${index + 1}-${randomUUID()}`;
 }
 
-function gridCellCenters(request: GenerateAssetRequest): string {
+function rasterGenerationCanvasPromptLines(
+  generation: AiAssetDimensions | undefined,
+  logical: AiAssetDimensions
+): string[] {
+  if (!generation) {
+    return [
+      "Generation canvas: let the image API choose the raster dimensions automatically; do not assume a specific pixel width or height.",
+      `The provider will resample the returned raster to the final ${logical.width}x${logical.height} game-asset size after generation.`
+    ];
+  }
+
+  if (sameDimensions(generation, logical)) {
+    return [`Generation canvas: ${generation.width}x${generation.height}.`];
+  }
+
+  return [
+    `Generation canvas: ${generation.width}x${generation.height}. This is the exact raster size requested from the image model.`,
+    `The provider will resample it to the final ${logical.width}x${logical.height} game-asset size after generation.`
+  ];
+}
+
+function sameDimensions(
+  left: AiAssetDimensions,
+  right: AiAssetDimensions
+): boolean {
+  return left.width === right.width && left.height === right.height;
+}
+
+function gridCellCenters(
+  request: GenerateAssetRequest,
+  canvas = requireAssetDimensions(request.asset)
+): string {
   const frameGrid = request.asset.frameGrid;
 
   if (!frameGrid) return "";
@@ -1079,15 +1139,22 @@ function gridCellCenters(request: GenerateAssetRequest): string {
   for (let index = 0; index < frameCount; index += 1) {
     const column = index % frameGrid.columns;
     const row = Math.floor(index / frameGrid.columns);
-    const x = column * frameGrid.frameWidth + frameGrid.frameWidth / 2;
-    const y = row * frameGrid.frameHeight + frameGrid.frameHeight / 2;
+    const left = Math.floor((column / frameGrid.columns) * canvas.width);
+    const top = Math.floor((row / frameGrid.rows) * canvas.height);
+    const right = Math.floor(((column + 1) / frameGrid.columns) * canvas.width);
+    const bottom = Math.floor(((row + 1) / frameGrid.rows) * canvas.height);
+    const x = left + (right - left) / 2;
+    const y = top + (bottom - top) / 2;
     centers.push(`frame ${index + 1}=(${x},${y})`);
   }
 
   return centers.join("; ");
 }
 
-function gridCellRectangles(request: GenerateAssetRequest): string {
+function gridCellRectangles(
+  request: GenerateAssetRequest,
+  canvas = requireAssetDimensions(request.asset)
+): string {
   const frameGrid = request.asset.frameGrid;
 
   if (!frameGrid) return "";
@@ -1098,10 +1165,10 @@ function gridCellRectangles(request: GenerateAssetRequest): string {
   for (let index = 0; index < frameCount; index += 1) {
     const column = index % frameGrid.columns;
     const row = Math.floor(index / frameGrid.columns);
-    const x1 = column * frameGrid.frameWidth;
-    const y1 = row * frameGrid.frameHeight;
-    const x2 = x1 + frameGrid.frameWidth - 1;
-    const y2 = y1 + frameGrid.frameHeight - 1;
+    const x1 = Math.floor((column / frameGrid.columns) * canvas.width);
+    const y1 = Math.floor((row / frameGrid.rows) * canvas.height);
+    const x2 = Math.floor(((column + 1) / frameGrid.columns) * canvas.width) - 1;
+    const y2 = Math.floor(((row + 1) / frameGrid.rows) * canvas.height) - 1;
     rectangles.push(`frame ${index + 1}=x${x1}-${x2},y${y1}-${y2}`);
   }
 

@@ -24,6 +24,15 @@ function imageAsset(dimensions, settings = {}) {
   };
 }
 
+function spritesheetAsset(dimensions, frameGrid, settings = {}) {
+  return {
+    ...imageAsset(dimensions, settings),
+    id: "test-spritesheet",
+    kind: "spritesheet",
+    frameGrid
+  };
+}
+
 function propsTilesetAsset() {
   return {
     id: "tiles.props",
@@ -96,7 +105,7 @@ test("OpenAI provider resizes JPEG and WebP output without PNG decoding", async 
   }
 });
 
-test("OpenAI provider chooses the closest output aspect ratio unless size is explicit", async () => {
+test("OpenAI provider uses flexible GPT Image 2 sizes and auto for older models", async () => {
   const originalFetch = globalThis.fetch;
   const generated = await sharp({
     create: {
@@ -129,8 +138,135 @@ test("OpenAI provider chooses the closest output aspect ratio unless size is exp
         { format: "png", size: "1024x1024" }
       )
     });
+    await provider.generate({
+      asset: imageAsset(
+        { width: 64, height: 128 },
+        { format: "png", size: "auto" }
+      )
+    });
+    await provider.generate({
+      asset: imageAsset(
+        { width: 128, height: 64 },
+        { format: "png", model: "gpt-image-1.5" }
+      )
+    });
 
-    assert.deepEqual(requestedSizes, ["1536x1024", "1024x1024"]);
+    assert.deepEqual(
+      requestedSizes,
+      ["1440x720", "1024x1024", "720x1440", "auto"]
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("older image models do not receive invented spritesheet pixel geometry", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp({
+    create: {
+      width: 1024,
+      height: 1536,
+      channels: 4,
+      background: { r: 32, g: 96, b: 160, alpha: 1 }
+    }
+  }).png().toBuffer();
+  let requestBody;
+
+  try {
+    globalThis.fetch = async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    const [option] = await provider.generate({
+      asset: spritesheetAsset(
+        { width: 960, height: 1260 },
+        {
+          frameWidth: 320,
+          frameHeight: 420,
+          columns: 3,
+          rows: 3,
+          frameCount: 8
+        },
+        { format: "png", background: "opaque", model: "gpt-image-1.5" }
+      )
+    });
+
+    assert.equal(requestBody.size, "auto");
+    assert.match(requestBody.prompt, /image API will choose its pixel dimensions automatically/i);
+    assert.match(requestBody.prompt, /3 equal columns and 3 equal rows/i);
+    assert.doesNotMatch(requestBody.prompt, /generated raster must be one \d+x\d+ spritesheet/i);
+    assert.doesNotMatch(requestBody.prompt, /generation-space cell rectangles|cell centers/i);
+    assert.match(requestBody.prompt, /resampled to the final 960x1260 game asset/i);
+    assert.ok(option);
+    const metadata = await sharp(option.image).metadata();
+    assert.deepEqual(
+      { width: metadata.width, height: metadata.height },
+      { width: 960, height: 1260 }
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("OpenAI provider requests and describes a grid-divisible spritesheet canvas", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp({
+    create: {
+      width: 12,
+      height: 12,
+      channels: 4,
+      background: { r: 32, g: 96, b: 160, alpha: 1 }
+    }
+  }).png().toBuffer();
+  let requestBody;
+
+  try {
+    globalThis.fetch = async (_url, init) => {
+      requestBody = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    const [option] = await provider.generate({
+      asset: spritesheetAsset(
+        { width: 960, height: 1260 },
+        {
+          frameWidth: 320,
+          frameHeight: 420,
+          columns: 3,
+          rows: 3,
+          frameCount: 8
+        },
+        { format: "png", background: "opaque", model: "gpt-image-2" }
+      )
+    });
+
+    assert.equal(requestBody.size, "960x1248");
+    assert.match(requestBody.prompt, /Generation canvas: 960x1248/);
+    assert.match(requestBody.prompt, /generated raster must be one 960x1248 spritesheet/i);
+    assert.match(requestBody.prompt, /frame 1=x0-319,y0-415/);
+    assert.match(requestBody.prompt, /frame 4=x0-319,y416-831/);
+    assert.match(requestBody.prompt, /frame 7=x0-319,y832-1247/);
+    assert.match(requestBody.prompt, /resampled to the final 960x1260 game asset/i);
+    assert.doesNotMatch(requestBody.prompt, /final image must be one 960x1260 spritesheet/i);
+    assert.ok(option);
+    const metadata = await sharp(option.image).metadata();
+    assert.deepEqual(
+      { width: metadata.width, height: metadata.height },
+      { width: 960, height: 1260 }
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

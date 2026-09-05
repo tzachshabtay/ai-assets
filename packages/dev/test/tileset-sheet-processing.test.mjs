@@ -262,11 +262,11 @@ test("adaptive tileset planning jointly chooses the model canvas and packing gri
   }));
 
   assert.deepEqual(summaries, [
-    { size: "1024x1024", columns: 2, rows: 2 },
-    { size: "1536x1024", columns: 3, rows: 2 },
-    { size: "1024x1024", columns: 3, rows: 3 },
-    { size: "1536x1024", columns: 4, rows: 3 },
-    { size: "1536x1024", columns: 4, rows: 1 }
+    { size: "1776x592", columns: 3, rows: 1 },
+    { size: "1248x832", columns: 3, rows: 2 },
+    { size: "1008x1008", columns: 3, rows: 3 },
+    { size: "592x1776", columns: 2, rows: 6 },
+    { size: "1440x720", columns: 4, rows: 1 }
   ]);
 
   const autoPropsPlan = planTilesetSheetGeneration(props, "auto");
@@ -275,6 +275,25 @@ test("adaptive tileset planning jointly chooses the model canvas and packing gri
       size: autoPropsPlan.size,
       columns: autoPropsPlan.generationColumns,
       rows: autoPropsPlan.generationRows
+    },
+    { size: "1024x1024", columns: 2, rows: 2 }
+  );
+
+  assert.throws(
+    () => planTilesetSheetGeneration(props, undefined, "gpt-image-1.5"),
+    /requires an explicit generation settings\.size.*automatic canvas dimensions.*cropping/i
+  );
+
+  const explicitOlderModelPlan = planTilesetSheetGeneration(
+    props,
+    "1024x1024",
+    "gpt-image-1.5"
+  );
+  assert.deepEqual(
+    {
+      size: explicitOlderModelPlan.size,
+      columns: explicitOlderModelPlan.generationColumns,
+      rows: explicitOlderModelPlan.generationRows
     },
     { size: "1024x1024", columns: 2, rows: 2 }
   );
