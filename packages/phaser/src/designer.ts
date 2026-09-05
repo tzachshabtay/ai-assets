@@ -794,7 +794,7 @@ export function installAiAssetDesigner(
       : undefined;
     stopCurrentAnimationPreview?.();
     stopCurrentAnimationPreview = undefined;
-    elements.promptInput.value = tilesetAnimation?.prompt ?? activeVersion?.prompt ?? asset.prompt;
+    elements.promptInput.value = tilesetAnimation?.prompt ?? asset.prompt;
     elements.widthInput.value = String(
       asset.frameGrid?.frameWidth ?? tileset?.tileWidth ?? asset.dimensions?.width ?? 1
     );
