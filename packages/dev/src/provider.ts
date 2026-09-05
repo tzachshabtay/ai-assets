@@ -14,6 +14,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   alignSpriteSheetFrames,
+  composeSpriteSheetFrames,
   hexColor,
   referenceLockPromptLines,
   removeChromaBackground,
@@ -44,6 +45,10 @@ import type {
 export { closestImageGenerationSize } from "./image-generation-sizes.js";
 
 const OPAQUE_TILESET_PADDING: RgbColor = { red: 0, green: 0, blue: 0 };
+const forcedChromaKey = Symbol("forcedChromaKey");
+type InternalGenerateAssetRequest = GenerateAssetRequest & {
+  [forcedChromaKey]?: RgbColor;
+};
 export type GenerateAssetRequest = {
   asset: AiAssetDefinition;
   purpose?: "tileset-animation";
@@ -250,7 +255,7 @@ export type OpenAiImageProviderOptions = {
 export function createOpenAiImageProvider(
   options: OpenAiImageProviderOptions = {}
 ): AiImageProvider {
-  return {
+  const provider: AiImageProvider = {
     async generate(request, onOption) {
       const dimensions = requireAssetDimensions(request.asset);
       const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
@@ -280,7 +285,8 @@ export function createOpenAiImageProvider(
       }
 
       const outputFormat = normalizeOutputFormat(requestedFormat);
-      const chromaKey = selectChromaKey(request);
+      const chromaKey = (request as InternalGenerateAssetRequest)[forcedChromaKey] ??
+        selectChromaKey(request);
       const postprocessTransparency = shouldPostprocessTransparency(request, {
         prompt,
         model,
@@ -302,6 +308,18 @@ export function createOpenAiImageProvider(
         request.settings?.frameAlignment ??
         request.asset.settings?.frameAlignment ??
         "center";
+      if (shouldGenerateIsolatedSpriteFrames(request, postprocessTransparency)) {
+        return generateIsolatedSpriteSheetFrames(provider, request, {
+          prompt,
+          count: request.count ?? 1,
+          model,
+          outputFormat,
+          persistedBackground,
+          postprocessTransparency,
+          frameAlignment,
+          chromaKey
+        }, onOption);
+      }
       const configuredSize =
         request.settings?.size ??
         request.asset.settings?.size;
@@ -445,6 +463,193 @@ export function createOpenAiImageProvider(
       return generatedByIndex.flat();
     }
   };
+
+  return provider;
+}
+
+function shouldGenerateIsolatedSpriteFrames(
+  request: GenerateAssetRequest,
+  postprocessTransparency: boolean
+): boolean {
+  const frameGrid = request.asset.frameGrid;
+  const frameCount = frameGrid
+    ? Math.min(
+        frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows,
+        frameGrid.columns * frameGrid.rows
+      )
+    : 0;
+
+  return request.asset.kind === "spritesheet" &&
+    postprocessTransparency &&
+    frameCount > 1;
+}
+
+async function generateIsolatedSpriteSheetFrames(
+  provider: AiImageProvider,
+  request: GenerateAssetRequest,
+  context: {
+    prompt: string;
+    count: number;
+    model: string;
+    outputFormat: "png" | "webp" | "jpeg";
+    persistedBackground: AiAssetGenerationSettings["background"];
+    postprocessTransparency: boolean;
+    frameAlignment: "center" | "none";
+    chromaKey: RgbColor;
+  },
+  onOption?: GeneratedAssetOptionCallback
+): Promise<GeneratedAssetOption[]> {
+  const dimensions = requireAssetDimensions(request.asset);
+  const frameGrid = request.asset.frameGrid;
+  if (!frameGrid) return [];
+
+  const frameCount = Math.min(
+    frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows,
+    frameGrid.columns * frameGrid.rows
+  );
+  const internalBackground = context.outputFormat === "png"
+    ? context.persistedBackground
+    : "opaque";
+
+  return Promise.all(Array.from({ length: context.count }, async (_, optionIndex) => {
+    const branchSeed = createVariationSeed(optionIndex);
+    const frames: GeneratedAssetOption[] = [];
+    let priorFrame: GenerateAssetReference | undefined;
+
+    for (let frameIndex = 0; frameIndex < frameCount; frameIndex += 1) {
+      request.signal?.throwIfAborted();
+      const framePrompt = isolatedSpriteFramePrompt(context.prompt, {
+        frameIndex,
+        frameCount,
+        optionIndex,
+        optionCount: context.count,
+        branchSeed,
+        hasPriorFrame: Boolean(priorFrame),
+        originalReferenceCount: request.references?.length ?? 0
+      });
+      const frameAsset: AiAssetDefinition = {
+        ...request.asset,
+        kind: "image",
+        prompt: framePrompt,
+        dimensions: {
+          width: frameGrid.frameWidth,
+          height: frameGrid.frameHeight
+        },
+        frameGrid: undefined
+      };
+      const references = [
+        ...(request.references ?? []),
+        ...(priorFrame ? [priorFrame] : [])
+      ];
+      const frameRequest: InternalGenerateAssetRequest = {
+        ...request,
+        asset: frameAsset,
+        prompt: framePrompt,
+        count: 1,
+        settings: {
+          ...request.settings,
+          model: context.model,
+          size: "auto",
+          format: "png",
+          background: internalBackground,
+          frameAlignment: "none"
+        },
+        references
+      };
+      frameRequest[forcedChromaKey] = context.chromaKey;
+      const generated = await provider.generate(frameRequest);
+      const frame = generated[0];
+      if (!frame) {
+        throw new Error(
+          `Spritesheet "${request.asset.id}" option ${optionIndex + 1} frame ${frameIndex + 1} did not produce an image.`
+        );
+      }
+
+      frames.push(frame);
+      priorFrame = {
+        image: frame.image,
+        mimeType: "image/png",
+        fileName: `prior-frame-${frameIndex + 1}.png`
+      };
+    }
+
+    request.signal?.throwIfAborted();
+    let processedImage = await composeSpriteSheetFrames(
+      frames.map((frame) => frame.image),
+      dimensions,
+      frameGrid
+    );
+    if (context.postprocessTransparency && context.frameAlignment === "center") {
+      processedImage = alignSpriteSheetFrames(processedImage, frameGrid);
+    }
+    if (context.outputFormat !== "png") {
+      processedImage = await resizeRasterToDimensions(
+        processedImage,
+        dimensions,
+        context.outputFormat
+      );
+    }
+
+    const revisedPrompt = frames
+      .map((frame) => frame.revisedPrompt?.trim())
+      .filter((value): value is string => Boolean(value))
+      .join("\n\n");
+    const option: GeneratedAssetOption = {
+      image: processedImage,
+      mimeType: mimeTypeFromOutputFormat(context.outputFormat),
+      prompt: context.prompt,
+      model: context.model,
+      ...(revisedPrompt ? { revisedPrompt } : {}),
+      dimensions,
+      frameGrid,
+      tileset: request.asset.tileset,
+      settings: {
+        ...request.asset.settings,
+        ...request.settings,
+        model: context.model,
+        background: context.persistedBackground,
+        format: context.outputFormat === "jpeg" ? "jpg" : context.outputFormat,
+        ...(context.postprocessTransparency ? { frameAlignment: context.frameAlignment } : {})
+      }
+    };
+
+    request.signal?.throwIfAborted();
+    await onOption?.(option, optionIndex);
+    return option;
+  }));
+}
+
+function isolatedSpriteFramePrompt(
+  prompt: string,
+  context: {
+    frameIndex: number;
+    frameCount: number;
+    optionIndex: number;
+    optionCount: number;
+    branchSeed: string;
+    hasPriorFrame: boolean;
+    originalReferenceCount: number;
+  }
+): string {
+  const frameNumber = context.frameIndex + 1;
+  const priorReferenceNumber = context.originalReferenceCount + 1;
+
+  return [
+    prompt.trim(),
+    "",
+    `Generate only animation frame ${frameNumber} of ${context.frameCount} for candidate ${context.optionIndex + 1} of ${context.optionCount}.`,
+    `Candidate identity seed: ${context.branchSeed}. Keep this candidate's rendering and motion treatment consistent across every frame.`,
+    `Ignore and override any frame count, grid, row, column, canvas, or spritesheet-layout wording in the original brief. The authoritative animation has exactly ${context.frameCount} frames, and this request must return only frame ${frameNumber} as one isolated full-frame image containing exactly one complete pose, never a spritesheet, contact sheet, sequence, grid, or multiple poses.`,
+    `Render the animation phase at t=${context.frameIndex}/${context.frameCount}. Keep the pose meaningfully continuous with adjacent phases and make the complete sequence loop cleanly from its final sampled phase back to frame 1.`,
+    ...(context.hasPriorFrame
+      ? [
+          `Reference ${priorReferenceNumber} is the immediately preceding generated frame. Use it only for identity, scale, placement, and motion continuity; advance the action to the requested phase instead of copying it exactly.`
+        ]
+      : [
+          "This is the first sampled phase. Establish the character identity, scale, and placement that all later frames should preserve."
+        ]),
+    "Show the entire subject with padding on every side. Do not crop the head, feet, limbs, clothing, effects, or shadow at the canvas edge."
+  ].join("\n");
 }
 
 async function generateSvgAssets(

@@ -272,6 +272,128 @@ test("OpenAI provider requests and describes a grid-divisible spritesheet canvas
   }
 });
 
+test("transparent spritesheets generate isolated frames and composite exact cells", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  const callbackOptions = [];
+  const frameColors = [
+    "#7b2d2d",
+    "#2d7b3a",
+    "#2d4d7b",
+    "#7b692d",
+    "#6d2d7b",
+    "#2d747b",
+    "#7b4a2d",
+    "#4b4b67"
+  ];
+
+  try {
+    globalThis.fetch = async (url, init) => {
+      const isJson = typeof init.body === "string";
+      const body = isJson ? JSON.parse(init.body) : init.body;
+      const prompt = isJson ? body.prompt : body.get("prompt");
+      const size = isJson ? body.size : body.get("size");
+      const references = isJson ? [] : body.getAll("image[]");
+      const frameIndex = requests.length;
+      const chroma = /flat chroma-key color (#[0-9a-f]{6})/i.exec(prompt)?.[1];
+
+      assert.ok(chroma);
+      requests.push({
+        url: String(url),
+        prompt,
+        size,
+        chroma,
+        referenceCount: references.length
+      });
+
+      const generated = await sharp(Buffer.from(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+          <rect width="16" height="16" fill="${chroma}"/>
+          <rect x="4" y="4" width="8" height="8" fill="${frameColors[frameIndex]}"/>
+        </svg>
+      `)).png().toBuffer();
+
+      return new Response(JSON.stringify({
+        data: [{ b64_json: generated.toString("base64") }]
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    };
+
+    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+    const [option] = await provider.generate({
+      asset: spritesheetAsset(
+        { width: 960, height: 1260 },
+        {
+          frameWidth: 320,
+          frameHeight: 420,
+          columns: 3,
+          rows: 3,
+          frameCount: 8
+        },
+        {
+          format: "png",
+          background: "transparent",
+          model: "gpt-image-2",
+          size: "960x1248"
+        }
+      )
+    }, (generatedOption, index) => {
+      callbackOptions.push({ generatedOption, index });
+    });
+
+    assert.equal(requests.length, 8);
+    assert.equal(requests[0].url, "https://api.openai.com/v1/images/generations");
+    assert.ok(requests.slice(1).every((request) => (
+      request.url === "https://api.openai.com/v1/images/edits"
+    )));
+    assert.deepEqual(requests.map((request) => request.referenceCount), [0, 1, 1, 1, 1, 1, 1, 1]);
+    assert.ok(requests.every((request) => request.size === "896x1168"));
+    assert.equal(new Set(requests.map((request) => request.chroma)).size, 1);
+    requests.forEach((request, index) => {
+      assert.match(request.prompt, new RegExp(`Generate only animation frame ${index + 1} of 8`));
+      assert.match(request.prompt, /authoritative animation has exactly 8 frames/i);
+      assert.match(request.prompt, /Single-image asset contract/i);
+      assert.doesNotMatch(request.prompt, /Spritesheet contract:/i);
+    });
+
+    assert.ok(option);
+    assert.equal(option.prompt, "A test game image.");
+    assert.deepEqual(option.frameGrid, {
+      frameWidth: 320,
+      frameHeight: 420,
+      columns: 3,
+      rows: 3,
+      frameCount: 8
+    });
+    assert.equal(callbackOptions.length, 1);
+    assert.equal(callbackOptions[0].generatedOption, option);
+    assert.equal(callbackOptions[0].index, 0);
+
+    const { data, info } = await sharp(option.image)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    assert.deepEqual(
+      { width: info.width, height: info.height },
+      { width: 960, height: 1260 }
+    );
+    frameColors.forEach((color, index) => {
+      const column = index % 3;
+      const row = Math.floor(index / 3);
+      assert.deepEqual(
+        rgbaAt(data, info.width, info.channels, column * 320 + 160, row * 420 + 210),
+        [...hexToRgb(color), 255]
+      );
+    });
+    assert.equal(rgbaAt(data, info.width, info.channels, 160, 420)[3], 0);
+    assert.equal(rgbaAt(data, info.width, info.channels, 800, 1050)[3], 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("OpenAI provider transports ordinary transparent images through an opaque chroma matte", async () => {
   const originalFetch = globalThis.fetch;
   const generated = await sharp(Buffer.from(`
@@ -799,4 +921,12 @@ function rgbAt(data, width, x, y) {
 function rgbaAt(data, width, channels, x, y) {
   const offset = (y * width + x) * channels;
   return Array.from(data.subarray(offset, offset + 4));
+}
+
+function hexToRgb(value) {
+  return [
+    Number.parseInt(value.slice(1, 3), 16),
+    Number.parseInt(value.slice(3, 5), 16),
+    Number.parseInt(value.slice(5, 7), 16)
+  ];
 }

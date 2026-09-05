@@ -5,12 +5,45 @@ import { PNG } from "pngjs";
 
 import {
   alignSpriteSheetFrames,
+  composeSpriteSheetFrames,
   removeChromaBackground,
   removeTilesetChromaBackground,
   selectChromaKey,
   shouldRequestRgbaPng
 } from "../dist/provider-image-processing.js";
 import { gameAssetPrompt } from "../dist/provider.js";
+
+test("composeSpriteSheetFrames honors margins, spacing, and unused cells", async () => {
+  const colors = [
+    [180, 20, 30, 255],
+    [20, 180, 40, 255],
+    [30, 50, 180, 255]
+  ];
+  const frames = colors.map((color) => {
+    const frame = new PNG({ width: 2, height: 3 });
+    fillRect(frame, 0, 0, 2, 3, color);
+    return PNG.sync.write(frame);
+  });
+  const sheet = PNG.sync.read(await composeSpriteSheetFrames(
+    frames,
+    { width: 7, height: 9 },
+    {
+      frameWidth: 2,
+      frameHeight: 3,
+      columns: 2,
+      rows: 2,
+      frameCount: 3,
+      margin: 1,
+      spacing: 1
+    }
+  ));
+
+  assert.deepEqual(rgbaAt(sheet, 1, 1), colors[0]);
+  assert.deepEqual(rgbaAt(sheet, 4, 1), colors[1]);
+  assert.deepEqual(rgbaAt(sheet, 1, 5), colors[2]);
+  assert.equal(rgbaAt(sheet, 3, 1)[3], 0);
+  assert.equal(rgbaAt(sheet, 4, 5)[3], 0);
+});
 
 test("alignSpriteSheetFrames aligns generated rows and columns without removing pixels", () => {
   const frameWidth = 10;
@@ -392,4 +425,9 @@ function setPixel(png, x, y, rgba) {
 
 function alphaAt(png, x, y) {
   return png.data[(y * png.width + x) * 4 + 3];
+}
+
+function rgbaAt(png, x, y) {
+  const offset = (y * png.width + x) * 4;
+  return Array.from(png.data.subarray(offset, offset + 4));
 }

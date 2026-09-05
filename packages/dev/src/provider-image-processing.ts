@@ -764,6 +764,63 @@ export function resizePngToDimensions(image: Uint8Array, dimensions: AiAssetDime
   return PNG.sync.write(target);
 }
 
+export async function composeSpriteSheetFrames(
+  frameImages: Uint8Array[],
+  dimensions: AiAssetDimensions,
+  frameGrid: AiAssetFrameGrid
+): Promise<Buffer> {
+  const margin = frameGrid.margin ?? 0;
+  const spacing = frameGrid.spacing ?? 0;
+  const frameCount = Math.min(
+    frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows,
+    frameGrid.columns * frameGrid.rows
+  );
+
+  if (frameImages.length !== frameCount) {
+    throw new Error(
+      `Expected ${frameCount} generated sprite frames, received ${frameImages.length}.`
+    );
+  }
+
+  const normalizedFrames = await Promise.all(frameImages.map((image) => (
+    sharp(Buffer.from(image), { failOn: "error" })
+      .resize(frameGrid.frameWidth, frameGrid.frameHeight, {
+        fit: "fill",
+        kernel: sharp.kernel.nearest
+      })
+      .png()
+      .toBuffer()
+  )));
+  const composites = normalizedFrames.map((input, index) => {
+    const column = index % frameGrid.columns;
+    const row = Math.floor(index / frameGrid.columns);
+    const left = margin + column * (frameGrid.frameWidth + spacing);
+    const top = margin + row * (frameGrid.frameHeight + spacing);
+
+    if (
+      left < 0 ||
+      top < 0 ||
+      left + frameGrid.frameWidth > dimensions.width ||
+      top + frameGrid.frameHeight > dimensions.height
+    ) {
+      throw new Error(
+        `Sprite frame ${index + 1} lies outside the ${dimensions.width}x${dimensions.height} sheet.`
+      );
+    }
+
+    return { input, left, top };
+  });
+
+  return sharp({
+    create: {
+      width: dimensions.width,
+      height: dimensions.height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    }
+  }).composite(composites).png().toBuffer();
+}
+
 export async function resizeRasterToDimensions(
   image: Uint8Array,
   dimensions: AiAssetDimensions,
