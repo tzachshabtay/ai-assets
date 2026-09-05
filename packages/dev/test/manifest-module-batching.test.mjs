@@ -36,6 +36,10 @@ test("deferred saves refresh the watched manifest module only after an explicit 
     assets: {
       first: imageAsset("first"),
       second: imageAsset("second")
+    },
+    assetPaths: {
+      first: ["Graphics", "Characters"],
+      second: ["Graphics", "Props"]
     }
   };
   await mkdir(assetsDir, { recursive: true });
@@ -76,6 +80,9 @@ test("deferred saves refresh the watched manifest module only after an explicit 
     assert.notEqual(syncedModule, sentinel);
     assert.match(syncedModule, /batch-1/);
     assert.match(syncedModule, /batch-2/);
+    assert.match(syncedModule, /assets\.assetPaths =/);
+    assert.match(syncedModule, /"first": \[\s*"Graphics",\s*"Characters"\s*\]/);
+    assert.match(syncedModule, /"second": \[\s*"Graphics",\s*"Props"\s*\]/);
 
     await writeFile(manifestModulePath, sentinel);
     const immediateResponse = await fetch(`${origin}/__ai-assets/save`, {
@@ -84,7 +91,10 @@ test("deferred saves refresh the watched manifest module only after an explicit 
       body: JSON.stringify(saveRequest("first", "immediate", false))
     });
     assert.equal(immediateResponse.status, 200);
-    assert.notEqual(await readFile(manifestModulePath, "utf8"), sentinel);
+    const immediateModule = await readFile(manifestModulePath, "utf8");
+    assert.notEqual(immediateModule, sentinel);
+    assert.match(immediateModule, /assets\.assetPaths =/);
+    assert.match(immediateModule, /"first": \[\s*"Graphics",\s*"Characters"\s*\]/);
   } finally {
     await devServer.close();
   }

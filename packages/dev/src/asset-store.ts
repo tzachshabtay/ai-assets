@@ -635,6 +635,12 @@ export async function writeManifestModule(
   const optionsLines = Object.keys(optionsArgument).length
     ? [`, ${JSON.stringify(optionsArgument, null, 2)}`]
     : [];
+  const assetPathsLines = manifest.assetPaths
+    ? [
+        `assets.assetPaths = ${JSON.stringify(manifest.assetPaths, null, 2)};`,
+        ""
+      ]
+    : [];
 
   const temporaryPath = `${modulePath}.tmp-${randomUUID()}`;
   const source = [
@@ -644,7 +650,8 @@ export async function writeManifestModule(
       `${JSON.stringify(manifest.assets, null, 2)}`,
       ...optionsLines,
       ");",
-      ""
+      "",
+      ...assetPathsLines
     ].join("\n");
 
   try {
