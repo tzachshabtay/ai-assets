@@ -12,6 +12,7 @@ import type {
   AiAssetManifest,
   AiAssetVersion
 } from "@ai-game-assets/core";
+import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@ai-game-assets/core";
 import type { DebugStyleGuideDraft, GeneratedDebugOption } from "./debug-client.js";
 import type {
   AiAssetDesignerOptions,
@@ -42,6 +43,8 @@ export type DesignerElements = {
   frameCountField: HTMLLabelElement;
   formatSelect: HTMLSelectElement;
   formatField: HTMLLabelElement;
+  modelSelect: HTMLSelectElement;
+  modelField: HTMLLabelElement;
   audioFormatSelect: HTMLSelectElement;
   audioFormatField: HTMLLabelElement;
   audioDurationInput: HTMLInputElement;
@@ -216,6 +219,9 @@ export function createDesignerElements(
   dimensionGrid.append(widthField, heightField);
   const frameCountField = labelWrap("Frames", frameCountInput);
   const formatField = labelWrap("Format", formatSelect);
+  const modelSelect = document.createElement("select");
+  modelSelect.className = "ai-game-assets-designer__model-select";
+  const modelField = labelWrap("Image model", modelSelect);
   const audioFormatField = labelWrap("Audio format", audioFormatSelect);
   const audioDurationField = labelWrap("Length (sec)", audioDurationInput);
   const audioLoopField = labelWrap("Loop", audioLoopInput);
@@ -328,6 +334,7 @@ export function createDesignerElements(
     dimensionGrid,
     frameCountField,
     formatField,
+    modelField,
     audioFormatField,
     audioDurationField,
     audioLoopField,
@@ -364,6 +371,8 @@ export function createDesignerElements(
     frameCountField,
     formatSelect,
     formatField,
+    modelSelect,
+    modelField,
     audioFormatSelect,
     audioFormatField,
     audioDurationInput,
@@ -3664,6 +3673,53 @@ export function effectiveGenerationFormat(
   }
 
   return drafts.get(selectedAssetId) ?? selectedFormatFromDesignerOrAsset(manifest.assets[selectedAssetId]);
+}
+
+/** Resolve generation preferences independently from historical version provenance. */
+export function imageGenerationSettings(
+  asset: AiAssetDefinition,
+  modelDraft?: string,
+  format: AiAssetFormat = normalizeAssetFormat(asset.settings?.format),
+  animationKey?: string
+): AiAssetGenerationSettings | undefined {
+  if (isAudioAsset(asset) || asset.kind === "collection" || format === "svg") return undefined;
+
+  const animationSettings = animationKey
+    ? asset.versions[asset.activeVersion]?.tilesetAnimations?.[animationKey]?.settings
+    : undefined;
+  return {
+    model: modelDraft?.trim() || animationSettings?.model || asset.settings?.model || DEFAULT_IMAGE_MODEL
+  };
+}
+
+export function syncImageModelControl(
+  elements: Pick<DesignerElements, "modelSelect" | "modelField">,
+  asset: AiAssetDefinition,
+  modelDraft?: string,
+  format?: AiAssetFormat,
+  animationKey?: string
+): void {
+  const settings = imageGenerationSettings(asset, modelDraft, format, animationKey);
+  elements.modelField.hidden = !settings;
+  elements.modelSelect.disabled = !settings;
+  elements.modelSelect.replaceChildren();
+  if (!settings) return;
+
+  const selectedModel = settings.model!;
+  for (const model of IMAGE_MODELS) {
+    const option = document.createElement("option");
+    option.value = model.id;
+    option.textContent = model.label;
+    option.title = model.description;
+    elements.modelSelect.append(option);
+  }
+  if (!IMAGE_MODELS.some((model) => model.id === selectedModel)) {
+    const option = document.createElement("option");
+    option.value = selectedModel;
+    option.textContent = `${selectedModel} (configured)`;
+    elements.modelSelect.append(option);
+  }
+  elements.modelSelect.value = selectedModel;
 }
 
 export function selectedFormatFromDesignerOrAsset(asset: AiAssetDefinition | undefined): AiAssetFormat {

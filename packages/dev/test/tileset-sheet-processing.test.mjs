@@ -4,7 +4,6 @@ import test from "node:test";
 import { PNG } from "pngjs";
 import sharp from "sharp";
 
-import { removeTilesetChromaBackground } from "../dist/provider-image-processing.js";
 import {
   cropTilesetSheetFromGeneration,
   planTilesetSheetGeneration,
@@ -12,7 +11,7 @@ import {
   tilesetSheetGenerationGeometry
 } from "../dist/tileset-sheet-processing.js";
 
-const CHROMA = [255, 0, 255, 255];
+const TRANSPARENT = [0, 0, 0, 0];
 const TILE_COLORS = [
   [200, 10, 10, 255],
   [10, 200, 10, 255],
@@ -279,6 +278,16 @@ test("adaptive tileset planning jointly chooses the model canvas and packing gri
     { size: "1024x1024", columns: 2, rows: 2 }
   );
 
+  for (const model of [
+    "gpt-image-2",
+    "gpt-image-2.5-flare",
+    "gpt-image-2.5-sunburst",
+    "gpt-image-2.5-flare-snapshot",
+    "gpt-image-2.5-sunburst-snapshot"
+  ]) {
+    assert.deepEqual(planTilesetSheetGeneration(props, "auto", model), autoPropsPlan);
+  }
+
   assert.throws(
     () => planTilesetSheetGeneration(props, undefined, "gpt-image-1.5"),
     /requires an explicit generation settings\.size.*automatic canvas dimensions.*cropping/i
@@ -363,7 +372,7 @@ test("region-centered props cells recompose into the logical one-row sheet", asy
     tileCount: 4
   });
   const geometry = planTilesetSheetGeneration(asset);
-  const raw = solidPng(1024, 1024, CHROMA);
+  const raw = solidPng(1024, 1024, TRANSPARENT);
   const expectedGenerationRects = [
     { x: 32, y: 32, width: 448, height: 448 },
     { x: 544, y: 32, width: 448, height: 448 },
@@ -397,7 +406,7 @@ test("per-cell extraction drops generation gutters and preserves cell ownership"
     tileCount: 3
   });
   const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
-  const raw = solidPng(geometry.canvas.width, geometry.canvas.height, CHROMA);
+  const raw = solidPng(geometry.canvas.width, geometry.canvas.height, TRANSPARENT);
 
   for (const cell of geometry.cells) {
     fillRect(raw, cell.x, cell.y, cell.width, cell.height, TILE_COLORS[cell.index]);
@@ -416,11 +425,7 @@ test("per-cell extraction drops generation gutters and preserves cell ownership"
     geometry,
     "png"
   );
-  const cleaned = PNG.sync.read(removeTilesetChromaBackground(
-    cropped,
-    asset.tileset,
-    { red: CHROMA[0], green: CHROMA[1], blue: CHROMA[2] }
-  ));
+  const cleaned = PNG.sync.read(cropped);
 
   assert.deepEqual({ width: cleaned.width, height: cleaned.height }, asset.dimensions);
   assertCellColor(cleaned, 0, TILE_COLORS[0]);
@@ -440,7 +445,7 @@ test("per-cell extraction preserves rows when the returned raster is scaled", as
   });
   const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
   const actualCanvas = { width: 512, height: 512 };
-  const raw = solidPng(actualCanvas.width, actualCanvas.height, CHROMA);
+  const raw = solidPng(actualCanvas.width, actualCanvas.height, TRANSPARENT);
   const cells = geometry.cells.map((cell) => ({
     x: cell.x / 2,
     y: cell.y / 2,
@@ -491,7 +496,7 @@ test("crop accepts proportional returned raster scaling and rejects aspect misma
     tileCount: 1
   });
   const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
-  const proportional = solidPng(512, 512, CHROMA);
+  const proportional = solidPng(512, 512, TRANSPARENT);
   const cell = geometry.cells[0];
   fillRect(
     proportional,
@@ -510,7 +515,7 @@ test("crop accepts proportional returned raster scaling and rejects aspect misma
   assert.deepEqual({ width: cropped.width, height: cropped.height }, asset.dimensions);
   assertCellColor(cropped, 0, TILE_COLORS[0]);
 
-  const aspectMismatch = solidPng(512, 384, CHROMA);
+  const aspectMismatch = solidPng(512, 384, TRANSPARENT);
   await assert.rejects(
     cropTilesetSheetFromGeneration(PNG.sync.write(aspectMismatch), geometry, "png"),
     /Generated tileset raster is 512x384.*planned 1024x1024 canvas aspect ratio.*Refusing to stretch tile ownership regions/s
@@ -527,24 +532,22 @@ test("staged tileset references split logical cells into matching isolated recta
     tileCount: 3
   });
   const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
-  const logical = solidPng(96, 32, CHROMA);
+  const logical = solidPng(96, 32, TRANSPARENT);
   for (let index = 0; index < 3; index += 1) {
     fillRect(logical, index * 32, 0, 32, 32, TILE_COLORS[index]);
   }
+  fillRect(logical, 8, 8, 8, 8, TRANSPARENT);
+  fillRect(logical, 16, 8, 8, 8, [255, 0, 255, 128]);
 
   const stagedReference = await stageTilesetSheetReference({
     image: PNG.sync.write(logical),
     mimeType: "image/png",
     fileName: "base.png"
-  }, geometry, {
-    red: CHROMA[0],
-    green: CHROMA[1],
-    blue: CHROMA[2]
-  });
+  }, geometry);
   const staged = PNG.sync.read(stagedReference.image);
 
   assert.deepEqual({ width: staged.width, height: staged.height }, geometry.canvas);
-  assert.deepEqual(rgbaAt(staged, 0, 0), CHROMA);
+  assert.deepEqual(rgbaAt(staged, 0, 0), TRANSPARENT);
   assert.deepEqual(rgbaAt(staged, geometry.sheet.x, geometry.sheet.y), TILE_COLORS[0]);
   assert.deepEqual(
     rgbaAt(staged, geometry.cells[1].x, geometry.cells[1].y),
@@ -564,9 +567,52 @@ test("staged tileset references split logical cells into matching isolated recta
       geometry.cells[0].x + geometry.cells[0].width,
       geometry.cells[0].y
     ),
-    CHROMA
+    TRANSPARENT
+  );
+  assert.deepEqual(
+    rgbaAt(staged, geometry.cells[0].x + 10 * geometry.scale, geometry.cells[0].y + 10 * geometry.scale),
+    TRANSPARENT
+  );
+  assert.deepEqual(
+    rgbaAt(staged, geometry.cells[0].x + 18 * geometry.scale, geometry.cells[0].y + 10 * geometry.scale),
+    [255, 0, 255, 128]
   );
   assert.match(stagedReference.fileName, /\.staged\.png$/);
+});
+
+test("native alpha survives mixed opaque and transparent tiles in PNG and WebP output", async () => {
+  const asset = tilesetAsset({
+    dimensions: { width: 96, height: 32 },
+    tileWidth: 32,
+    tileHeight: 32,
+    columns: 3,
+    rows: 1,
+    tileCount: 2
+  });
+  const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
+  const raw = solidPng(geometry.canvas.width, geometry.canvas.height, TRANSPARENT);
+  const opaque = geometry.cells[0];
+  const cutout = geometry.cells[1];
+  fillRect(raw, opaque.x, opaque.y, opaque.width, opaque.height, [255, 0, 255, 255]);
+  fillRect(raw, cutout.x + 8 * geometry.scale, cutout.y + 8 * geometry.scale,
+    16 * geometry.scale, 16 * geometry.scale, [255, 0, 0, 128]);
+  fillRect(raw, cutout.x + 12 * geometry.scale, cutout.y + 12 * geometry.scale,
+    8 * geometry.scale, 8 * geometry.scale, [0, 255, 0, 255]);
+
+  for (const format of ["png", "webp"]) {
+    const output = await cropTilesetSheetFromGeneration(
+      PNG.sync.write(raw), geometry, format, { transparent: true }
+    );
+    const { data, info } = await sharp(output).ensureAlpha().raw()
+      .toBuffer({ resolveWithObject: true });
+    const pixel = (x, y) => rgbaFromRaw(data, info.channels, info.width, x, y);
+    assert.deepEqual({ width: info.width, height: info.height }, asset.dimensions);
+    assertApproxColor(pixel(16, 16), [255, 0, 255, 255], 2, format);
+    assert.equal(pixel(34, 2)[3], 0, format);
+    assert.equal(pixel(42, 10)[3], 128, format);
+    assert.equal(pixel(48, 16)[3], 255, format);
+    assert.equal(pixel(80, 16)[3], 0, format);
+  }
 });
 
 test("per-cell composition preserves declared logical margin and spacing", async () => {
@@ -591,7 +637,6 @@ test("per-cell composition preserves declared logical margin and spacing", async
     geometry,
     "png",
     {
-      color: { red: 0, green: 0, blue: 0 },
       transparent: false
     }
   ));
@@ -617,7 +662,7 @@ test("crop processing replaces unused cells with format-safe opaque padding", as
     tileCount: 2
   });
   const geometry = tilesetSheetGenerationGeometry(asset, "1024x1024");
-  const raw = solidPng(geometry.canvas.width, geometry.canvas.height, CHROMA);
+  const raw = solidPng(geometry.canvas.width, geometry.canvas.height, TRANSPARENT);
   for (const cell of geometry.cells) {
     fillRect(raw, cell.x, cell.y, cell.width, cell.height, TILE_COLORS[cell.index]);
   }
@@ -628,7 +673,6 @@ test("crop processing replaces unused cells with format-safe opaque padding", as
       geometry,
       format,
       {
-        color: { red: 0, green: 0, blue: 0 },
         transparent: false
       }
     );

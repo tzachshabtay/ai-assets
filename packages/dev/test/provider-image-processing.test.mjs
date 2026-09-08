@@ -5,11 +5,10 @@ import { PNG } from "pngjs";
 
 import {
   alignSpriteSheetFrames,
+  analyzeReferenceImage,
   composeSpriteSheetFrames,
-  removeChromaBackground,
-  removeTilesetChromaBackground,
-  selectChromaKey,
-  shouldRequestRgbaPng
+  resizePngToDimensions,
+  shouldRequestTransparency
 } from "../dist/provider-image-processing.js";
 import { gameAssetPrompt } from "../dist/provider.js";
 
@@ -101,7 +100,7 @@ test("explicit opaque background overrides transparency wording", () => {
     prompt: "Animate the subject without changing the transparent-looking checker pattern."
   });
 
-  assert.equal(shouldRequestRgbaPng(request, {
+  assert.equal(shouldRequestTransparency(request, {
     prompt: request.asset.prompt,
     model: "gpt-image-2",
     outputFormat: "png",
@@ -115,8 +114,7 @@ test("opaque spritesheet prompts preserve the background without transparency in
     prompt: request.asset.prompt,
     model: "gpt-image-2",
     outputFormat: "png",
-    requestedBackground: "opaque",
-    chromaKey: { red: 255, green: 0, blue: 255 }
+    requestedBackground: "opaque"
   });
 
   assert.match(prompt, /fully opaque from edge to edge/);
@@ -125,196 +123,146 @@ test("opaque spritesheet prompts preserve the background without transparency in
   assert.doesNotMatch(prompt, /trailing cells fully transparent/);
 });
 
-test("structured tileset tile prompts participate in chroma-key selection", () => {
-  const chromaKey = selectChromaKey({
+test("native transparency supports PNG and WebP independently of the model name", () => {
+  const request = animationRequest();
+
+  for (const model of ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2", "gpt-image-1.5"]) {
+    for (const outputFormat of ["png", "webp", "jpeg"]) {
+      assert.equal(shouldRequestTransparency(request, {
+        prompt: request.asset.prompt,
+        model,
+        outputFormat,
+        requestedBackground: "transparent"
+      }), outputFormat !== "jpeg", `${model} ${outputFormat}`);
+    }
+  }
+});
+
+test("automatic transparency follows image and structured tile prompts", () => {
+  const request = animationRequest({ prompt: "A centered parrot." });
+  const context = {
+    prompt: request.asset.prompt,
+    model: "gpt-image-2.5-sunburst",
+    outputFormat: "webp",
+    requestedBackground: "auto"
+  };
+
+  assert.equal(shouldRequestTransparency(request, context), false);
+  assert.equal(shouldRequestTransparency(request, {
+    ...context,
+    prompt: "A transparent background."
+  }), true);
+  assert.equal(shouldRequestTransparency({
+    ...request,
+    asset: { ...request.asset, prompt: "A parrot on a transparent background." }
+  }, context), true);
+  const tilesetRequest = {
     asset: {
-      id: "tileset",
+      ...request.asset,
       kind: "tileset",
-      prompt: "Legacy prompt.",
-      dimensions: { width: 16, height: 16 },
       tileset: {
         tileWidth: 16,
         tileHeight: 16,
         columns: 1,
         rows: 1,
-        tiles: [{ prompt: "A vivid magenta crystal tile." }]
-      },
-      activeVersion: "",
-      versions: {}
+        tiles: [{ prompt: "A crystal on a transparent background." }]
+      }
     }
-  });
-
-  assert.notDeepEqual(chromaKey, { red: 255, green: 0, blue: 255 });
+  };
+  assert.equal(shouldRequestTransparency(tilesetRequest, context), true);
+  assert.equal(shouldRequestTransparency(tilesetRequest, {
+    ...context,
+    requestedBackground: "opaque"
+  }), false);
 });
 
-test("style prompts participate in chroma-key selection", () => {
-  const chromaKey = selectChromaKey({
-    asset: {
-      id: "portrait",
-      kind: "image",
-      prompt: "A centered portrait.",
-      dimensions: { width: 16, height: 16 },
-      activeVersion: "",
-      versions: {}
-    },
-    stylePrompt: "Painterly shadows with vivid magenta accents."
-  });
-
-  assert.notDeepEqual(chromaKey, { red: 255, green: 0, blue: 255 });
-});
-
-test("transparent raster prompts request one opaque chroma transport", () => {
+test("transparent raster prompts request native alpha for PNG and WebP", () => {
   const request = {
     asset: {
       id: "portrait",
       kind: "image",
       prompt: "A centered portrait.",
       dimensions: { width: 16, height: 16 },
-      settings: { background: "transparent", format: "png", model: "gpt-image-2" },
       activeVersion: "",
       versions: {}
     }
   };
-  const prompt = gameAssetPrompt(request, {
-    prompt: request.asset.prompt,
-    model: "gpt-image-2",
-    outputFormat: "png",
-    requestedBackground: "transparent",
-    chromaKey: { red: 0, green: 255, blue: 0 }
-  });
 
-  assert.match(prompt, /Return a fully opaque PNG for this generation step/i);
-  assert.match(prompt, /single exact flat chroma-key color #00ff00/i);
-  assert.match(prompt, /Do not return native alpha/i);
-  assert.doesNotMatch(prompt, /Clean it into a real RGBA PNG/i);
-  assert.doesNotMatch(prompt, /Use a transparent background/i);
+  for (const outputFormat of ["png", "webp"]) {
+    const prompt = gameAssetPrompt(request, {
+      prompt: request.asset.prompt,
+      model: "gpt-image-2.5-sunburst",
+      outputFormat,
+      requestedBackground: "transparent"
+    });
+
+    assert.match(prompt, /native alpha/i);
+    assert.doesNotMatch(prompt, /chroma-key|fully opaque PNG|Do not return native alpha/i);
+  }
 });
 
-test("chroma cleanup removes high-confidence key pixels from enclosed sprite holes", () => {
-  const png = new PNG({ width: 24, height: 24 });
+test("PNG resizing preserves native alpha, enclosed holes, and saturated artwork", () => {
+  const png = new PNG({ width: 5, height: 5 });
+  fillRect(png, 1, 1, 3, 3, [255, 0, 255, 255]);
+  setPixel(png, 2, 2, [0, 0, 0, 0]);
+  setPixel(png, 1, 2, [0, 255, 0, 128]);
+  setPixel(png, 3, 2, [0, 255, 255, 64]);
 
-  fillRect(png, 0, 0, 24, 24, [0, 255, 0, 255]);
-  fillRect(png, 4, 3, 16, 18, [130, 20, 35, 255]);
-  fillRect(png, 8, 8, 8, 8, [90, 190, 80, 255]);
-  fillRect(png, 9, 9, 6, 6, [4, 248, 10, 255]);
-
-  const cleaned = PNG.sync.read(removeChromaBackground(
+  const resized = PNG.sync.read(resizePngToDimensions(
     PNG.sync.write(png),
-    { red: 0, green: 255, blue: 0 }
+    { width: 10, height: 10 }
   ));
-
-  assert.equal(alphaAt(cleaned, 0, 0), 0);
-  assert.equal(alphaAt(cleaned, 11, 11), 0);
-  assert.ok(alphaAt(cleaned, 8, 11) < 255);
-  assert.equal(alphaAt(cleaned, 5, 5), 255);
-});
-
-test("chroma cleanup learns a shifted coherent edge matte without clearing isolated detail", () => {
-  const png = new PNG({ width: 24, height: 24 });
 
   for (let y = 0; y < png.height; y += 1) {
     for (let x = 0; x < png.width; x += 1) {
-      const variation = ((x + y) % 3) * 5;
-      setPixel(png, x, y, [82 + variation, 178 + variation, 104 + variation, 255]);
+      for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+        assert.deepEqual(rgbaAt(resized, x * 2 + dx, y * 2 + dy), rgbaAt(png, x, y));
+      }
     }
   }
-
-  fillRect(png, 4, 3, 16, 18, [130, 20, 35, 255]);
-  setPixel(png, 11, 11, [87, 183, 109, 255]);
-
-  const cleaned = PNG.sync.read(removeChromaBackground(
-    PNG.sync.write(png),
-    { red: 0, green: 255, blue: 0 }
-  ));
-
-  assert.equal(alphaAt(cleaned, 0, 0), 0);
-  assert.equal(alphaAt(cleaned, 23, 23), 0);
-  assert.equal(alphaAt(cleaned, 11, 11), 255);
-  assert.equal(alphaAt(cleaned, 10, 11), 255);
 });
 
-test("chroma cleanup preserves nonuniform full-bleed art with isolated key-colored detail", () => {
-  const png = new PNG({ width: 32, height: 32 });
-
-  for (let y = 0; y < png.height; y += 1) {
-    for (let x = 0; x < png.width; x += 1) {
-      setPixel(png, x, y, [
-        70 + Math.round((160 * x) / (png.width - 1)),
-        20 + Math.round((80 * y) / (png.height - 1)),
-        40 + Math.round((150 * y) / (png.height - 1)),
-        255
-      ]);
+test("sprite composition retains partial alpha and saturated colors", async () => {
+  const png = new PNG({ width: 3, height: 3 });
+  fillRect(png, 0, 0, 3, 3, [255, 0, 255, 255]);
+  setPixel(png, 1, 1, [0, 0, 0, 0]);
+  setPixel(png, 0, 1, [0, 255, 0, 128]);
+  const sheet = PNG.sync.read(await composeSpriteSheetFrames(
+    [PNG.sync.write(png)],
+    { width: 5, height: 5 },
+    {
+      frameWidth: 3,
+      frameHeight: 3,
+      columns: 1,
+      rows: 1,
+      margin: 1
     }
+  ));
+
+  assert.deepEqual(rgbaAt(sheet, 1, 1), [255, 0, 255, 255]);
+  assert.deepEqual(rgbaAt(sheet, 1, 2), [0, 255, 0, 128]);
+  assert.equal(rgbaAt(sheet, 2, 2)[3], 0);
+  assert.equal(rgbaAt(sheet, 0, 0)[3], 0);
+});
+
+test("reference palette analysis includes colors formerly reserved for chroma keys", () => {
+  for (const color of [[255, 0, 255], [0, 255, 0], [0, 255, 255], [255, 255, 0], [0, 0, 255]]) {
+    const png = new PNG({ width: 3, height: 3 });
+    fillRect(png, 0, 0, 3, 3, [255, 255, 255, 0]);
+    setPixel(png, 1, 1, [...color, 255]);
+    const analysis = analyzeReferenceImage({
+      image: PNG.sync.write(png),
+      mimeType: "image/png",
+      fileName: "reference.png"
+    });
+
+    assert.ok(analysis);
+    assert.equal(analysis.dominantColors.length, 1);
+    assert.ok(analysis.dominantColors[0].includes(`rgb(${color.join(", ")})`));
   }
-
-  fillRect(png, 8, 8, 16, 16, [0, 255, 0, 255]);
-
-  const cleaned = PNG.sync.read(removeChromaBackground(
-    PNG.sync.write(png),
-    { red: 0, green: 255, blue: 0 }
-  ));
-
-  assert.equal(alphaAt(cleaned, 0, 0), 255);
-  assert.equal(alphaAt(cleaned, 31, 31), 255);
-  assert.equal(alphaAt(cleaned, 16, 16), 255);
 });
 
-test("tileset cleanup removes the declared chroma from any tile that uses it", () => {
-  const png = new PNG({ width: 12, height: 4 });
-
-  fillRect(png, 0, 0, 12, 4, [30, 80, 180, 255]);
-  fillRect(png, 4, 0, 4, 4, [0, 255, 0, 255]);
-  fillRect(png, 5, 1, 2, 2, [210, 40, 30, 255]);
-
-  const cleaned = PNG.sync.read(removeTilesetChromaBackground(
-    PNG.sync.write(png),
-    {
-      tileWidth: 4,
-      tileHeight: 4,
-      columns: 3,
-      rows: 1,
-      tiles: [
-        { prompt: "Opaque blue stone floor." },
-        { prompt: "L-shaped wall corner with exposed space around its arms." },
-        { prompt: "Opaque blue stone wall." }
-      ]
-    },
-    { red: 0, green: 255, blue: 0 }
-  ));
-
-  assert.equal(alphaAt(cleaned, 0, 0), 255);
-  assert.equal(alphaAt(cleaned, 4, 0), 0);
-  assert.equal(alphaAt(cleaned, 5, 1), 255);
-  assert.equal(alphaAt(cleaned, 11, 3), 255);
-});
-
-test("tileset cleanup clears declared margins and spacing", () => {
-  const png = new PNG({ width: 11, height: 6 });
-  fillRect(png, 0, 0, 11, 6, [0, 255, 0, 255]);
-  fillRect(png, 1, 1, 4, 4, [30, 80, 180, 255]);
-  fillRect(png, 6, 1, 4, 4, [210, 40, 30, 255]);
-
-  const cleaned = PNG.sync.read(removeTilesetChromaBackground(
-    PNG.sync.write(png),
-    {
-      tileWidth: 4,
-      tileHeight: 4,
-      columns: 2,
-      rows: 1,
-      margin: 1,
-      spacing: 1
-    },
-    { red: 0, green: 255, blue: 0 }
-  ));
-
-  assert.equal(alphaAt(cleaned, 0, 0), 0);
-  assert.equal(alphaAt(cleaned, 5, 3), 0);
-  assert.equal(alphaAt(cleaned, 10, 5), 0);
-  assert.equal(alphaAt(cleaned, 2, 2), 255);
-  assert.equal(alphaAt(cleaned, 7, 2), 255);
-});
-
-test("tileset prompt lets the model choose transparency using one declared chroma", () => {
+test("tileset prompts choose native transparency independently for each tile", () => {
   const asset = {
     id: "mixed.tileset",
     kind: "tileset",
@@ -334,20 +282,18 @@ test("tileset prompt lets the model choose transparency using one declared chrom
     activeVersion: "",
     versions: {}
   };
-  const request = { asset };
-  const prompt = gameAssetPrompt(request, {
+  const prompt = gameAssetPrompt({ asset }, {
     prompt: asset.prompt,
-    model: "gpt-image-2",
+    model: "gpt-image-2.5-sunburst",
     outputFormat: "png",
-    requestedBackground: "transparent",
-    chromaKey: { red: 0, green: 255, blue: 0 }
+    requestedBackground: "transparent"
   });
 
   assert.match(prompt, /Decide independently for each tile/i);
-  assert.match(prompt, /For any tile that needs transparency/i);
-  assert.match(prompt, /exact flat chroma-key color #00ff00/i);
+  assert.match(prompt, /native alpha transparency for every transparent or empty pixel/i);
+  assert.match(prompt, /native alpha/i);
   assert.match(prompt, /tile that does not need transparency/i);
-  assert.doesNotMatch(prompt, /tiles 2, 3 require transparent backgrounds/i);
+  assert.doesNotMatch(prompt, /chroma-key|tiles 2, 3 require transparent backgrounds/i);
 });
 
 function animationRequest({ prompt = "Animate only the parrot." } = {}) {
@@ -421,10 +367,6 @@ function setPixel(png, x, y, rgba) {
   png.data[offset + 1] = rgba[1];
   png.data[offset + 2] = rgba[2];
   png.data[offset + 3] = rgba[3];
-}
-
-function alphaAt(png, x, y) {
-  return png.data[(y * png.width + x) * 4 + 3];
 }
 
 function rgbaAt(png, x, y) {

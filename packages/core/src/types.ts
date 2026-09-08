@@ -2,7 +2,7 @@ export type AiAssetKind = "image" | "spritesheet" | "animation" | "tileset" | "c
 
 export type AiAssetBackground = "transparent" | "opaque" | "auto";
 
-export type AiAssetQuality = "low" | "medium" | "high" | "auto";
+export type AiAssetQuality = "low" | "medium" | "high" | "xhigh" | "max" | "auto";
 
 export type AiAssetFormat = "png" | "webp" | "jpg" | "svg";
 
@@ -77,6 +77,7 @@ export type AiAssetTileset = {
 
 export type AiTilesetAnimationVersion = {
   files: string[];
+  settings?: AiAssetGenerationSettings;
 };
 
 /**

@@ -62,7 +62,11 @@ export function createAiAssetVersion(
       ? Object.fromEntries(
           Object.entries(input.tilesetAnimations).map(([key, animation]) => [
             key,
-            { files: [...animation.files] }
+            {
+              ...animation,
+              files: [...animation.files],
+              ...(animation.settings ? { settings: { ...animation.settings } } : {})
+            }
           ])
         )
       : undefined,

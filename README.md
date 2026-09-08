@@ -63,7 +63,7 @@ export const assets = defineAiAssets({
     kind: "image",
     prompt: "Compact arcade hero spaceship, readable silhouette, transparent background.",
     dimensions: { width: 72, height: 72 },
-    settings: { model: "gpt-image-2", format: "png", quality: "low" },
+    settings: { model: "gpt-image-2.5-flare", format: "png", quality: "low" },
     activeVersion: "default",
     versions: {
       default: {
@@ -85,7 +85,7 @@ export const assets = defineAiAssets({
     dimensions: { width: 144, height: 144 },
     frameGrid: { frameWidth: 72, frameHeight: 72, columns: 2, rows: 2, frameCount: 4 },
     animations: [{ key: "idle", frames: [0, 1, 2, 3], frameRate: 8, repeat: -1 }],
-    settings: { model: "gpt-image-2", format: "png", quality: "low" },
+    settings: { model: "gpt-image-2.5-flare", format: "png", quality: "low" },
     activeVersion: "default",
     versions: {}
   }
@@ -98,7 +98,7 @@ For larger projects, keep assets as JSON files in folders and generate the TypeS
 
 A tileset is a first-class asset because its grid, generation rules, version bundle, and editor are different from an ordinary animation spritesheet. The version's `file` is the static base atlas. Each tileset animation stores one complete atlas file per temporal frame, so a logical tile keeps the same index while playback swaps aligned sheets:
 
-Tileset generation uses a temporary staging grid that is independent of the final atlas shape. For GPT Image 2, the dev provider jointly chooses that grid and a valid custom canvas close to its packed aspect. Older image models use the API's `auto` canvas for ordinary images and spritesheets; tilesets using an older model must set an explicit non-`auto` `settings.size` because deterministic tile cropping requires known generation dimensions. Every tile gets one disjoint ownership region with symmetric chroma-key guards, and the provider then recomposes the extracted tiles into the declared logical rows and columns. Do not choose a tileset's model canvas from `dimensions`: those describe the final atlas, so a wide `4×1` atlas may correctly use a square `2×2` generation canvas. For GPT Image 2, an explicit non-`auto` `settings.size` pins the model canvas while the staging grid is still planned within it.
+Tileset generation uses a temporary staging grid that is independent of the final atlas shape. For GPT Image 2.5 and GPT Image 2, the dev provider jointly chooses that grid and a valid custom canvas close to its packed aspect. Older image models use the API's `auto` canvas for ordinary images and spritesheets; tilesets using an older model must set an explicit non-`auto` `settings.size` because deterministic tile cropping requires known generation dimensions. Every tile gets one disjoint ownership region with symmetric temporary gutters, and the provider then recomposes the extracted tiles into the declared logical rows and columns. Do not choose a tileset's model canvas from `dimensions`: those describe the final atlas, so a wide `4×1` atlas may correctly use a square `2×2` generation canvas. For GPT Image 2.5 and GPT Image 2, an explicit non-`auto` `settings.size` pins the model canvas while the staging grid is still planned within it.
 
 ```ts
 "world.forest": {
@@ -168,12 +168,30 @@ normalizes the generated row and column placement without scaling individual fra
 Set `settings.background` explicitly when the asset's background is part of the artwork:
 
 ```ts
-settings: { model: "gpt-image-2", format: "png", background: "opaque" }
+settings: { model: "gpt-image-2.5-flare", format: "png", background: "opaque" }
 ```
 
-`"opaque"` keeps every image or spritesheet frame filled edge to edge, does not add transparency
-instructions to the generation prompt, and disables chroma-key transparency post-processing. Use
-`"transparent"` for cutout sprites. An explicit setting takes precedence over words in the asset prompt.
+`"opaque"` keeps every image or spritesheet frame filled edge to edge. Use `"transparent"` for
+cutout sprites: the provider requests native alpha with PNG or WebP and preserves it through resizing,
+sprite composition, and tileset extraction. JPEG uses an opaque background. An explicit background
+setting takes precedence over words in the asset prompt.
+
+The image model selector in the designer offers **GPT Image 2.5 Flare** (the default for new assets,
+fast everyday generation) and **GPT Image 2.5 Sunburst** (editing precision). The selected model is used
+for generation, edits, derived assets, and tileset animations, and is saved when a candidate is promoted.
+Existing assets with an explicit model keep that selection; choose a 2.5 model to migrate those assets.
+Historical variants keep their original model metadata. SVG and audio use their own providers.
+
+Set `settings.model` on an asset or generation request, or pass `model` to `createOpenAiImageProvider`,
+to choose a model programmatically. Request settings take precedence over asset settings, then provider
+defaults. GPT Image 2.5 supports `low`, `medium`, `high`, `xhigh`, `max`, and `auto` quality.
+
+```ts
+settings: { model: "gpt-image-2.5-sunburst", format: "png", background: "transparent" }
+```
+
+See the [OpenAI image generation guide](https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options)
+for supported formats and size constraints.
 
 ## Phaser Runtime
 

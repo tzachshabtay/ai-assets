@@ -52,6 +52,7 @@ export type SaveTilesetAnimationInput = {
   assetId: string;
   animationKey: string;
   frames: TilesetAnimationFrameInput[];
+  settings?: AiAssetDefinition["settings"];
   definition?: AiTilesetAnimation;
   versionName?: string;
   notes?: string;
@@ -336,7 +337,7 @@ export async function saveTilesetAnimation(
     tilesetSourceFile = pendingFiles.at(-1);
   }
 
-  const sequenceFiles: Record<string, { files: string[] }> = {};
+  const sequenceFiles: NonNullable<AiAssetVersion["tilesetAnimations"]> = {};
   for (const definition of assetDefinition.tileset?.animations ?? []) {
     if (definition.key === input.animationKey) {
       const publicFiles: string[] = [];
@@ -346,7 +347,11 @@ export async function saveTilesetAnimation(
         queueFile(fileName, frame.image);
         publicFiles.push(publicAssetFile(options, fileName));
       }
-      sequenceFiles[definition.key] = { files: publicFiles };
+      const sequenceSettings = input.settings ?? sourceVersion.tilesetAnimations?.[definition.key]?.settings;
+      sequenceFiles[definition.key] = {
+        files: publicFiles,
+        ...(sequenceSettings ? { settings: sequenceSettings } : {})
+      };
       continue;
     }
 
@@ -360,7 +365,7 @@ export async function saveTilesetAnimation(
       queueFile(fileName, await readStoredAssetFile(options, sourceFile));
       publicFiles.push(publicAssetFile(options, fileName));
     }
-    sequenceFiles[definition.key] = { files: publicFiles };
+    sequenceFiles[definition.key] = { ...sourceSequence, files: publicFiles };
   }
 
   await mkdir(options.assetsDir, { recursive: true });
@@ -394,6 +399,9 @@ export async function saveTilesetAnimation(
       tilesetTransforms: sourceVersion.tilesetTransforms
     });
     const updatedAsset = addVersion(assetDefinition, versionName, version, { activate: true });
+    if (input.settings?.model) {
+      updatedAsset.settings = { ...updatedAsset.settings, model: input.settings.model };
+    }
     manifest.assets[input.assetId] = updatedAsset;
     assertManifest(manifest);
     await writeManifest(options.manifestPath, manifest);

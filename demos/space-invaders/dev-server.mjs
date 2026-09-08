@@ -34,7 +34,7 @@ const assetDevServer = createAiAssetDevServer({
   publicPathPrefix: "/assets",
   port: assetApiPort,
   provider: createOpenAiImageProvider({
-    model: process.env.OPENAI_IMAGE_MODEL ?? "gpt-image-2",
+    model: process.env.OPENAI_IMAGE_MODEL,
     background: "transparent",
     quality: "low"
   }),

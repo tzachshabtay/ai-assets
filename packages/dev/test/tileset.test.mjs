@@ -206,8 +206,7 @@ test("structured tileset prompts bake geometry and preserve exact tile order", (
     prompt: asset.prompt,
     model: "gpt-image-2",
     outputFormat: "png",
-    requestedBackground: "opaque",
-    chromaKey: { red: 255, green: 0, blue: 255 }
+    requestedBackground: "opaque"
   });
   assert.equal(providerPrompt.split(basePrompt).length - 1, 1);
   assert.ok(providerPrompt.startsWith(basePrompt));
@@ -217,8 +216,7 @@ test("structured tileset prompts bake geometry and preserve exact tile order", (
     prompt: "Use a moonlit blue palette.",
     model: "gpt-image-2",
     outputFormat: "png",
-    requestedBackground: "opaque",
-    chromaKey: { red: 255, green: 0, blue: 255 }
+    requestedBackground: "opaque"
   });
   assert.match(explicitPrompt, /^Use a moonlit blue palette\./);
   assert.ok(explicitPrompt.indexOf(basePrompt) > 0);
@@ -236,7 +234,6 @@ test("base tileset variations never receive animation variation instructions", (
     model: "gpt-image-2",
     outputFormat: "png",
     requestedBackground: "transparent",
-    chromaKey: { red: 255, green: 0, blue: 255 },
     variation: "candidate-two",
     variationIndex: 1,
     variationCount: 3
@@ -262,7 +259,7 @@ test("base tileset variations never receive animation variation instructions", (
   assert.doesNotMatch(animationPrompt, /Base tileset variation direction/i);
 });
 
-test("image generation chooses a valid flexible canvas for GPT Image 2", () => {
+test("image generation chooses a valid flexible canvas for GPT Image 2 and 2.5", () => {
   assert.equal(closestImageGenerationSize({ width: 128, height: 64 }), "1440x720");
   assert.equal(closestImageGenerationSize({ width: 64, height: 128 }), "720x1440");
   assert.equal(closestImageGenerationSize({ width: 96, height: 96 }), "1024x1024");
@@ -282,6 +279,20 @@ test("image generation chooses a valid flexible canvas for GPT Image 2", () => {
     closestImageGenerationSize({ width: 960, height: 1260 }, "gpt-image-2-2026-04-21"),
     "960x1264"
   );
+  for (const model of [
+    "gpt-image-2.5-flare",
+    "gpt-image-2.5-sunburst",
+    "gpt-image-2.5-flare-snapshot",
+    "gpt-image-2.5-sunburst-snapshot"
+  ]) {
+    assert.equal(closestImageGenerationSize({ width: 128, height: 64 }, model), "1440x720");
+    assert.equal(closestImageGenerationSize(
+      { width: 960, height: 1260 }, model, { columns: 3, rows: 3 }
+    ), "960x1248");
+  }
+  for (const model of ["gpt-image-2.5", "gpt-image-2.5-unknown", "gpt-image-20"]) {
+    assert.equal(closestImageGenerationSize({ width: 128, height: 64 }, model), "auto");
+  }
   for (const dimensions of [
     { width: 960, height: 1264 },
     { width: 1024, height: 1024 },
@@ -309,15 +320,19 @@ test("tileset base generation and promotion honor tile and grid geometry overrid
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
   let generationAsset;
+  let generationSettings;
+  const selectedSettings = { model: "gpt-image-2.5-sunburst", quality: "medium" };
   const provider = {
     async generate(request) {
       generationAsset = request.asset;
+      generationSettings = request.settings;
       return [{
         image: pngImage(request.asset.dimensions.width, request.asset.dimensions.height, 12),
         mimeType: "image/png",
         prompt: request.prompt,
         dimensions: request.asset.dimensions,
-        tileset: request.asset.tileset
+        tileset: request.asset.tileset,
+        settings: request.settings
       }];
     }
   };
@@ -356,6 +371,7 @@ test("tileset base generation and promotion honor tile and grid geometry overrid
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         assetId: "forest",
+        settings: selectedSettings,
         tileset: {
           tileWidth: 24,
           tileHeight: 20,
@@ -380,6 +396,8 @@ test("tileset base generation and promotion honor tile and grid geometry overrid
     assert.deepEqual(generationAsset.dimensions, { width: 24, height: 20 });
     assert.deepEqual(generated.tileset, generationAsset.tileset);
     assert.deepEqual(generated.dimensions, generationAsset.dimensions);
+    assert.deepEqual(generationSettings, selectedSettings);
+    assert.deepEqual(generated.settings, selectedSettings);
 
     const saveResponse = await fetch(`${origin}/__ai-assets/save`, {
       method: "POST",
@@ -389,6 +407,7 @@ test("tileset base generation and promotion honor tile and grid geometry overrid
         versionName: "resized",
         dataUrl: generated.dataUrl,
         prompt: generated.prompt,
+        settings: generated.settings,
         dimensions: generated.dimensions,
         tileset: generated.tileset,
         tilesetSourceDataUrl: generated.dataUrl,
@@ -413,6 +432,8 @@ test("tileset base generation and promotion honor tile and grid geometry overrid
     assert.equal(saved.assets.forest.activeVersion, "resized");
     assert.deepEqual(saved.assets.forest.dimensions, { width: 24, height: 20 });
     assert.deepEqual(saved.assets.forest.tileset, generationAsset.tileset);
+    assert.deepEqual(saved.assets.forest.settings, selectedSettings);
+    assert.deepEqual(saveResult.version.settings, selectedSettings);
     assert.notEqual(saveResult.version.tilesetSourceFile, saveResult.version.file);
     assert.deepEqual(saveResult.version.tilesetTransforms, [
       { offsetX: 4, offsetY: -1, scaleX: 1.25, scaleY: 0.8 }
@@ -485,7 +506,6 @@ test("tileset animation generation uses three sequential candidate branches", as
     model: "gpt-image-2",
     outputFormat: "png",
     requestedBackground: "opaque",
-    chromaKey: { red: 255, green: 0, blue: 255 },
     tilesetGeometry: tilesetSheetGenerationGeometry(asset, "1536x1024")
   });
   assert.match(finalProviderPrompt, /Perform a minimal in-place edit/);
@@ -803,6 +823,11 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
   const assetsDir = path.join(root, "assets");
   const manifestPath = path.join(root, "manifest.json");
   const asset = tilesetAsset();
+  const baseSettings = { model: "gpt-image-2.5-flare", format: "webp", frameAlignment: "center" };
+  asset.settings = { ...baseSettings };
+  asset.versions.v1.settings = { ...baseSettings };
+  asset.versions.v1.model = baseSettings.model;
+  asset.versions.v1.tilesetAnimations.torch.settings = { model: "gpt-image-2" };
   const manifest = { schemaVersion: 1, assets: { forest: asset } };
   await mkdir(assetsDir, { recursive: true });
   await Promise.all([
@@ -815,6 +840,7 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
   ]);
 
   let generatedColor = 20;
+  const selectedSettings = { model: "gpt-image-2.5-sunburst", quality: "medium" };
   const providerRequests = [];
   const provider = {
     async generate(request) {
@@ -824,7 +850,8 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
         image: pngImage(32, 16, generatedColor),
         mimeType: "image/png",
         prompt: request.prompt,
-        dimensions: { width: 32, height: 16 }
+        dimensions: { width: 32, height: 16 },
+        settings: request.settings
       }];
     }
   };
@@ -848,6 +875,7 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
       body: JSON.stringify({
         assetId: "forest",
         animationKey: "water",
+        settings: selectedSettings,
         count: 1,
         frameCount: 3,
         tiles: [
@@ -880,6 +908,22 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
     assert.ok(providerRequests.every((request) =>
       Buffer.compare(request.references[0].image, providedBase) === 0
     ));
+    assert.ok(providerRequests.length > 0);
+    for (const request of providerRequests) {
+      assert.deepEqual(request.settings, {
+        ...selectedSettings,
+        format: "png",
+        frameAlignment: "none"
+      });
+    }
+    const generatedSettings = {
+      ...selectedSettings,
+      format: "png",
+      frameAlignment: "none"
+    };
+    for (const frame of branchEvents[0].option.frames) {
+      assert.deepEqual(frame.settings, generatedSettings);
+    }
 
     const frames = branchEvents[0].option.frames.map((frame) => frame.dataUrl);
     const saveResponse = await fetch(`${origin}/__ai-assets/save-tileset-animation`, {
@@ -889,6 +933,7 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
         assetId: "forest",
         animationKey: "water",
         frames,
+        settings: branchEvents[0].option.frames[0].settings,
         definition: {
           ...asset.tileset.animations[0],
           frameCount: 3,
@@ -906,9 +951,24 @@ test("tileset animation HTTP endpoints stream indexed branches and save composed
     assert.equal(saved.versionName, "http-v2");
     assert.equal(saved.asset.activeVersion, "http-v2");
     assert.equal(saved.version.tilesetAnimations.water.files.length, 3);
+    assert.deepEqual(saved.version.tilesetAnimations.water.settings, generatedSettings);
+    assert.deepEqual(saved.asset.settings, { ...baseSettings, model: selectedSettings.model });
+    assert.deepEqual(saved.version.settings, baseSettings);
+    assert.equal(saved.version.model, baseSettings.model);
+    assert.deepEqual(saved.version.tilesetAnimations.torch.settings, { model: "gpt-image-2" });
     assert.equal(saved.asset.tileset.animations[0].frameCount, 3);
     assert.equal(saved.asset.versions.v1.tilesetAnimations.water.files.length, 2);
     assert.match(saved.file, /forest\.http-v2\..+\.png$/);
+    const editedResponse = await fetch(`${origin}/__ai-assets/save-tileset-animation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assetId: "forest", animationKey: "water", frames, versionName: "http-v3" })
+    });
+    assert.equal(editedResponse.status, 200);
+    const edited = await editedResponse.json();
+    assert.deepEqual(edited.version.tilesetAnimations.water.settings, generatedSettings);
+    assert.deepEqual(edited.version.settings, baseSettings);
+    assert.deepEqual(edited.asset.settings, { ...baseSettings, model: selectedSettings.model });
   } finally {
     await devServer.close();
   }

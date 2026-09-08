@@ -1,3 +1,4 @@
+import { DEFAULT_IMAGE_MODEL } from "@ai-game-assets/core";
 import type {
   AiAssetAnimation,
   AiAssetDefinition,
@@ -15,20 +16,14 @@ import { randomUUID } from "node:crypto";
 import {
   alignSpriteSheetFrames,
   composeSpriteSheetFrames,
-  hexColor,
   referenceLockPromptLines,
-  removeChromaBackground,
-  removeTilesetChromaBackground,
   resizePngToDimensions,
   resizeRasterToDimensions,
   rasterizeSvgToPng,
   resolveRequestedBackground,
-  selectChromaKey,
-  shouldPostprocessTransparency,
-  shouldRequestRgbaPng,
+  shouldRequestTransparency,
   variationDirectionPromptLine
 } from "./provider-image-processing.js";
-import type { RgbColor } from "./provider-image-processing.js";
 import { closestImageGenerationSize } from "./image-generation-sizes.js";
 import {
   cropTilesetSheetFromGeneration,
@@ -38,17 +33,11 @@ import {
   tilesetSheetRectLabel
 } from "./tileset-sheet-processing.js";
 import type {
-  TilesetSheetGenerationGeometry,
-  TilesetSheetOutputPadding
+  TilesetSheetGenerationGeometry
 } from "./tileset-sheet-processing.js";
 
 export { closestImageGenerationSize } from "./image-generation-sizes.js";
 
-const OPAQUE_TILESET_PADDING: RgbColor = { red: 0, green: 0, blue: 0 };
-const forcedChromaKey = Symbol("forcedChromaKey");
-type InternalGenerateAssetRequest = GenerateAssetRequest & {
-  [forcedChromaKey]?: RgbColor;
-};
 export type GenerateAssetRequest = {
   asset: AiAssetDefinition;
   purpose?: "tileset-animation";
@@ -268,7 +257,7 @@ export function createOpenAiImageProvider(
         request.settings?.model ??
         request.asset.settings?.model ??
         options.model ??
-        "gpt-image-2";
+        DEFAULT_IMAGE_MODEL;
       const prompt = request.prompt ?? request.asset.prompt;
       const requestedFormat =
         request.settings?.format ?? request.asset.settings?.format ?? "png";
@@ -285,39 +274,32 @@ export function createOpenAiImageProvider(
       }
 
       const outputFormat = normalizeOutputFormat(requestedFormat);
-      const chromaKey = (request as InternalGenerateAssetRequest)[forcedChromaKey] ??
-        selectChromaKey(request);
-      const postprocessTransparency = shouldPostprocessTransparency(request, {
+      const transparentBackground = shouldRequestTransparency(request, {
         prompt,
         model,
         outputFormat,
         requestedBackground
       });
-      // Generated transparency is encoded as a visible chroma matte and removed
-      // locally. Requesting an opaque raster keeps the API-level background
-      // setting consistent with that contract instead of suggesting alpha or a
-      // visual checkerboard preview to the model.
-      const background = postprocessTransparency
+      const background = outputFormat === "jpeg"
         ? "opaque"
-        : normalizeBackgroundForModel(model, requestedBackground);
-      const persistedBackground =
+        : transparentBackground ? "transparent" : requestedBackground;
+      const persistedBackground = outputFormat === "jpeg" ? "opaque" : (
         request.settings?.background ??
         request.asset.settings?.background ??
-        requestedBackground;
+        requestedBackground
+      );
       const frameAlignment =
         request.settings?.frameAlignment ??
         request.asset.settings?.frameAlignment ??
         "center";
-      if (shouldGenerateIsolatedSpriteFrames(request, postprocessTransparency)) {
+      if (shouldGenerateIsolatedSpriteFrames(request, transparentBackground)) {
         return generateIsolatedSpriteSheetFrames(provider, request, {
           prompt,
           count: request.count ?? 1,
           model,
           outputFormat,
           persistedBackground,
-          postprocessTransparency,
-          frameAlignment,
-          chromaKey
+          frameAlignment
         }, onOption);
       }
       const configuredSize =
@@ -341,11 +323,11 @@ export function createOpenAiImageProvider(
             ));
       const generationDimensions = parseImageGenerationSize(generationSize);
       const tilesetPadding = tilesetGeometry
-        ? tilesetOutputPadding(postprocessTransparency, chromaKey)
+        ? { transparent: transparentBackground }
         : undefined;
       const assetReferences = tilesetGeometry
         ? await Promise.all((request.references ?? []).map((reference) => (
-            stageTilesetSheetReference(reference, tilesetGeometry, chromaKey)
+            stageTilesetSheetReference(reference, tilesetGeometry)
           )))
         : request.references ?? [];
       const allReferences = [
@@ -364,7 +346,6 @@ export function createOpenAiImageProvider(
           model,
           outputFormat,
           requestedBackground,
-          chromaKey,
           variation: count > 1 ? createVariationSeed(index) : undefined,
           variationIndex: index,
           variationCount: count,
@@ -404,6 +385,8 @@ export function createOpenAiImageProvider(
           }
           request.signal?.throwIfAborted();
           const image = Buffer.from(item.b64_json, "base64");
+          const alignFrames = request.asset.kind !== "tileset" &&
+            transparentBackground && request.asset.frameGrid && frameAlignment === "center";
           const resizedImage = tilesetGeometry
             ? await cropTilesetSheetFromGeneration(
                 image,
@@ -413,25 +396,16 @@ export function createOpenAiImageProvider(
               )
             : outputFormat === "png"
               ? resizePngToDimensions(
-                  postprocessTransparency
-                    ? removeChromaBackground(image, chromaKey)
-                    : image,
+                  image,
                   dimensions
                 )
-              : await resizeRasterToDimensions(image, dimensions, outputFormat);
-          const transparencyProcessedImage =
-            tilesetGeometry && postprocessTransparency && request.asset.tileset
-              ? removeTilesetChromaBackground(
-                  resizedImage,
-                  request.asset.tileset,
-                  chromaKey
-                )
-              : resizedImage;
-          const processedImage =
-            request.asset.kind !== "tileset" &&
-            postprocessTransparency && request.asset.frameGrid && frameAlignment === "center"
-              ? alignSpriteSheetFrames(transparencyProcessedImage, request.asset.frameGrid)
-              : transparencyProcessedImage;
+              : await resizeRasterToDimensions(image, dimensions, alignFrames ? "png" : outputFormat);
+          const alignedImage = alignFrames && request.asset.frameGrid
+            ? alignSpriteSheetFrames(resizedImage, request.asset.frameGrid)
+            : resizedImage;
+          const processedImage = alignFrames && outputFormat !== "png"
+            ? await resizeRasterToDimensions(alignedImage, dimensions, outputFormat)
+            : alignedImage;
 
           const option: GeneratedAssetOption = {
             image: processedImage,
@@ -448,7 +422,7 @@ export function createOpenAiImageProvider(
               model,
               background: persistedBackground,
               format: outputFormat === "jpeg" ? "jpg" : outputFormat,
-              ...(postprocessTransparency && request.asset.frameGrid ? { frameAlignment } : {})
+              ...(transparentBackground && request.asset.frameGrid ? { frameAlignment } : {})
             }
           };
 
@@ -469,7 +443,7 @@ export function createOpenAiImageProvider(
 
 function shouldGenerateIsolatedSpriteFrames(
   request: GenerateAssetRequest,
-  postprocessTransparency: boolean
+  transparentBackground: boolean
 ): boolean {
   const frameGrid = request.asset.frameGrid;
   const frameCount = frameGrid
@@ -480,7 +454,7 @@ function shouldGenerateIsolatedSpriteFrames(
     : 0;
 
   return request.asset.kind === "spritesheet" &&
-    postprocessTransparency &&
+    transparentBackground &&
     frameCount > 1;
 }
 
@@ -493,9 +467,7 @@ async function generateIsolatedSpriteSheetFrames(
     model: string;
     outputFormat: "png" | "webp" | "jpeg";
     persistedBackground: AiAssetGenerationSettings["background"];
-    postprocessTransparency: boolean;
     frameAlignment: "center" | "none";
-    chromaKey: RgbColor;
   },
   onOption?: GeneratedAssetOptionCallback
 ): Promise<GeneratedAssetOption[]> {
@@ -507,9 +479,6 @@ async function generateIsolatedSpriteSheetFrames(
     frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows,
     frameGrid.columns * frameGrid.rows
   );
-  const internalBackground = context.outputFormat === "png"
-    ? context.persistedBackground
-    : "opaque";
 
   return Promise.all(Array.from({ length: context.count }, async (_, optionIndex) => {
     const branchSeed = createVariationSeed(optionIndex);
@@ -541,7 +510,7 @@ async function generateIsolatedSpriteSheetFrames(
         ...(request.references ?? []),
         ...(priorFrame ? [priorFrame] : [])
       ];
-      const frameRequest: InternalGenerateAssetRequest = {
+      const frameRequest: GenerateAssetRequest = {
         ...request,
         asset: frameAsset,
         prompt: framePrompt,
@@ -551,12 +520,11 @@ async function generateIsolatedSpriteSheetFrames(
           model: context.model,
           size: "auto",
           format: "png",
-          background: internalBackground,
+          background: "transparent",
           frameAlignment: "none"
         },
         references
       };
-      frameRequest[forcedChromaKey] = context.chromaKey;
       const generated = await provider.generate(frameRequest);
       const frame = generated[0];
       if (!frame) {
@@ -579,7 +547,7 @@ async function generateIsolatedSpriteSheetFrames(
       dimensions,
       frameGrid
     );
-    if (context.postprocessTransparency && context.frameAlignment === "center") {
+    if (context.frameAlignment === "center") {
       processedImage = alignSpriteSheetFrames(processedImage, frameGrid);
     }
     if (context.outputFormat !== "png") {
@@ -609,7 +577,7 @@ async function generateIsolatedSpriteSheetFrames(
         model: context.model,
         background: context.persistedBackground,
         format: context.outputFormat === "jpeg" ? "jpg" : context.outputFormat,
-        ...(context.postprocessTransparency ? { frameAlignment: context.frameAlignment } : {})
+        frameAlignment: context.frameAlignment
       }
     };
 
@@ -872,7 +840,6 @@ export function gameAssetPrompt(
     model: string;
     outputFormat: "png" | "webp" | "jpeg";
     requestedBackground: AiAssetGenerationSettings["background"];
-    chromaKey: RgbColor;
     variation?: string;
     variationIndex?: number;
     variationCount?: number;
@@ -893,7 +860,7 @@ export function gameAssetPrompt(
     : context.tilesetGeometry
       ? modelTilesetArtworkPromptLines(
           request.asset,
-          shouldRequestRgbaPng(request, context) ? context.chromaKey : undefined
+          shouldRequestTransparency(request, context)
         )
       : structuredTilesetPromptLines(request.asset);
   if (
@@ -910,8 +877,7 @@ export function gameAssetPrompt(
           ? tilesetGenerationGeometryPromptLines(
               request.asset,
               context.tilesetGeometry,
-              context.chromaKey,
-              shouldRequestRgbaPng(request, context),
+              shouldRequestTransparency(request, context),
               !isTilesetAnimation && !request.references?.length
             )
           : [
@@ -925,26 +891,23 @@ export function gameAssetPrompt(
           ? tilesetGenerationGeometryPromptLines(
               request.asset,
               context.tilesetGeometry,
-              context.chromaKey,
-              shouldRequestRgbaPng(request, context),
+              shouldRequestTransparency(request, context),
               !isTilesetAnimation && !request.references?.length
             )
           : rasterGenerationCanvasPromptLines(generationDimensions, dimensions))
       ]));
 
-  if (request.asset.kind === "tileset" && shouldRequestRgbaPng(request, context)) {
+  if (request.asset.kind === "tileset" && shouldRequestTransparency(request, context)) {
     lines.push(
       "Decide independently for each tile whether its artwork should be opaque edge-to-edge or should contain transparent pixels, based on what that tile depicts.",
-      `For any tile that needs transparency, encode every transparent or empty pixel with the exact flat chroma-key color ${hexColor(context.chromaKey)}. This color is the transparency marker and will be removed after generation.`,
-      `Never use any other matte, background, checkerboard, or substitute transparency color. Do not use ${hexColor(context.chromaKey)} in visible tile artwork.`,
-      "For a tile that does not need transparency, fill the cell edge-to-edge and do not use the chroma-key color. Do not add labels, borders, or shadows outside tiles, and do not treat the entire multi-tile canvas as one centered presentation card."
+      "Return native alpha transparency for every transparent or empty pixel. Do not draw a checkerboard, a solid backdrop, or a substitute matte.",
+      "For a tile that does not need transparency, fill the cell edge-to-edge with opaque artwork. Do not add labels, borders, or shadows outside tiles, and do not treat the entire multi-tile canvas as one centered presentation card."
     );
-  } else if (shouldRequestRgbaPng(request, context)) {
+  } else if (shouldRequestTransparency(request, context)) {
     lines.push(
-      "The final game asset will have a transparent background after local processing. Use a centered subject, no text, no watermark, no cast shadow, no floor shadow, no ground plane, and no reflection. Keep the sprite readable through its shape and pose; do not darken or recolor the character to create contrast.",
-      `Return a fully opaque PNG for this generation step. Render every background and empty padding pixel as the single exact flat chroma-key color ${hexColor(context.chromaKey)}. Do not use that exact chroma-key color inside the game asset itself.`,
-      "Do not return native alpha, a checkerboard, a substitute matte color, a gradient, texture, lighting, or color variation in the chroma-key background. Local processing will remove the chroma key and create the final RGBA transparency.",
-      "Keep the asset edges crisp against the chroma-key background so it can be removed cleanly."
+      "Return an isolated sprite with native alpha transparency. Leave the background and empty padding fully transparent. Do not draw a checkerboard or a solid backdrop.",
+      "Use a centered subject, no text, no watermark, no cast shadow, no floor shadow, no ground plane, and no reflection. Keep the sprite readable through its shape and pose; do not darken or recolor the character to create contrast.",
+      "Preserve transparent backgrounds in reference images and subsequent edits, including partially transparent edge pixels."
     );
   } else if (context.tilesetGeometry) {
     lines.push(
@@ -986,11 +949,11 @@ export function gameAssetPrompt(
           ]),
       `Do not merge cells, crop cells, add extra frames beyond ${frameCount}, or change the grid layout.`,
       "Each grid cell must contain exactly one complete frame of the subject. Do not place a nested spritesheet, turnaround sheet, contact sheet, labels, thumbnails, or multiple mini-poses inside any single cell.",
-      "Keep every visible part of each subject strictly inside its own cell with chroma-key padding on every side. No head, foot, limb, shadow, or stray pixel from one frame may cross into the row or column beside it.",
+      "Keep every visible part of each subject strictly inside its own cell with empty padding on every side. No head, foot, limb, shadow, or stray pixel from one frame may cross into the row or column beside it.",
       "The grid layout is mandatory even if the animation would look nicer in another arrangement."
     );
 
-    if (shouldRequestRgbaPng(request, context)) {
+    if (shouldRequestTransparency(request, context)) {
       lines.push(
         `If the grid has more cells than ${frameCount}, leave the extra trailing cells fully transparent and empty.`,
         "Keep the character centered at a consistent scale in every cell, leaving transparent padding inside the cell."
@@ -1003,7 +966,7 @@ export function gameAssetPrompt(
       );
     }
   } else {
-    if (shouldRequestRgbaPng(request, context)) {
+    if (shouldRequestTransparency(request, context)) {
       lines.push(
         "Single-image asset contract: create exactly one complete sprite on the canvas.",
         "Do not create a spritesheet, turnaround sheet, contact sheet, sequence, grid, multiple poses, multiple variants, panels, labels, or frame divisions.",
@@ -1129,28 +1092,27 @@ function structuredTilesetPromptLines(asset: AiAssetDefinition): string[] {
 
 function modelTilesetArtworkPromptLines(
   asset: AiAssetDefinition,
-  chromaKey?: RgbColor
+  transparent: boolean
 ): string[] {
   const tileset = asset.tileset;
   if (!tileset?.tiles) return [];
 
   const tileCount = tileset.tileCount ?? tileset.columns * tileset.rows;
-  const chroma = chromaKey ? hexColor(chromaKey) : undefined;
 
   return [
     "Create one deterministic hand-authored tileset in the isolated generation-canvas tile slots declared below.",
     "Read tile slots left-to-right, then top-to-bottom.",
     "Use one cohesive visual style, palette, scale, lighting, perspective, and pixel treatment across every tile.",
-    ...(chroma
+    ...(transparent
       ? [
-          `Raster transparency encoding for every numbered tile: "transparent" or "empty" describes game alpha after post-processing. In the raster you return, paint every such pixel the exact flat chroma color ${chroma}. Never draw a checkerboard transparency preview, white/gray squares, actual-alpha preview pattern, or any other matte.`
+          'Use native alpha for every numbered tile: "transparent" or "empty" means transparent pixels. Never draw a checkerboard transparency preview or a solid matte.'
         ]
       : []),
     `Draw exactly these ${tileCount} tiles in this exact order:`,
     ...tileset.tiles.map((tile, index) => (
       `Tile ${index + 1} — ${tile.prompt.trim()}` +
-      (chroma
-        ? ` Encoding rule for Tile ${index + 1}: if any pixel should be transparent or empty, paint that pixel only ${chroma}; never represent transparency with a checkerboard or another background.`
+      (transparent
+        ? ` Transparency for Tile ${index + 1}: use native alpha for transparent or empty pixels; never represent transparency with a checkerboard or another background.`
         : "")
     ))
   ];
@@ -1187,7 +1149,6 @@ function tilesetContractPromptLines(
 function tilesetGenerationGeometryPromptLines(
   asset: AiAssetDefinition,
   geometry: TilesetSheetGenerationGeometry,
-  chromaKey: RgbColor,
   transparentPadding: boolean,
   requireSafeContentInset: boolean
 ): string[] {
@@ -1230,19 +1191,19 @@ function tilesetGenerationGeometryPromptLines(
     requireSafeContentInset
       ? "Put exactly one requested tile in each usable rectangle. Keep every visible pixel wholly inside its own rectangle. Edge-to-edge opaque terrain must fill only its own rectangle. Every isolated object that uses transparency must be complete, centered, and surrounded by empty padding. Never bridge two slots or continue artwork through a gutter."
       : "Put exactly one requested tile in each usable rectangle and preserve referenced artwork at its existing scale and position. Keep every visible pixel wholly inside its own rectangle. Never bridge two slots or continue artwork through a gutter.",
-    `Fill every pixel that is not inside an actual usable extracted tile rectangle with the exact flat hard-gutter color ${hexColor(chromaKey)}. This explicitly includes the remainder of every equal placement region, every inter-tile gap, and all outer padding around extracted rectangles. Put no artwork, shadow, outline, texture, or antialiasing there.`,
+    `Keep every pixel that is not inside an actual usable extracted tile rectangle ${transparentPadding ? "fully transparent using native alpha" : "solid opaque black"}. This explicitly includes the remainder of every equal placement region, every inter-tile gap, and all outer padding around extracted rectangles. Put no artwork, shadow, outline, texture, or antialiasing there.`,
     "The server extracts each tile rectangle independently and composes the final game sheet in row-major order. Any pixel drawn outside its rectangle is irretrievably discarded with the temporary gutter, so keep every tile complete and entirely within its own rectangle.",
     "Compatible terrain tiles must match edge colors and connectors conceptually while remaining physically isolated by the temporary gutters. The gutters are discarded during composition and are not part of the game tiles.",
     ...(transparentPadding && requireSafeContentInset
       ? [
           `For any tile that both needs transparency and depicts an isolated, non-connecting object or cutout, keep every visible pixel strictly inside its centered safe-content rectangle: ${safeRectangles}. The complete silhouette must not touch or cross the safe-content rectangle edge.`,
           "A transparent terrain, connector, wall, corner, or overlay that is explicitly meant to meet a tile edge is exempt from the safe-content inset on that required edge, but it must never cross its outer tile rectangle.",
-          `Within an isolated transparent object or cutout tile, fill every pixel outside the visible silhouette—including the entire band between its safe-content rectangle and its outer tile rectangle—with only the exact chroma-key color ${hexColor(chromaKey)}; the server converts it to transparency.`
+          "Within an isolated transparent object or cutout tile, leave every pixel outside the visible silhouette—including the entire band between its safe-content rectangle and its outer tile rectangle—fully transparent using native alpha."
         ]
       : []),
     ...(unusedRectangles
       ? [
-          `Leave these unused generation-canvas slots empty and filled only with the hard-gutter color ${hexColor(chromaKey)}: ${unusedRectangles}.`
+          `Leave these unused generation-canvas slots empty and ${transparentPadding ? "fully transparent using native alpha" : "solid opaque black"}: ${unusedRectangles}.`
         ]
       : [])
   ];
@@ -1250,16 +1211,6 @@ function tilesetGenerationGeometryPromptLines(
 
 function safeTilesetContentInset(size: number): number {
   return Math.min(Math.max(1, Math.floor(size / 8)), Math.max(0, Math.floor((size - 1) / 2)));
-}
-
-function tilesetOutputPadding(
-  transparent: boolean,
-  chromaKey: RgbColor
-): TilesetSheetOutputPadding {
-  return {
-    color: transparent ? chromaKey : OPAQUE_TILESET_PADDING,
-    transparent
-  };
 }
 
 function tilesetTileRectangle(asset: AiAssetDefinition, index: number): string {
@@ -1563,17 +1514,6 @@ function requireAssetDimensions(asset: AiAssetDefinition): AiAssetDimensions {
   }
 
   return asset.dimensions;
-}
-
-function normalizeBackgroundForModel(
-  model: string,
-  background: AiAssetGenerationSettings["background"] | undefined
-): AiAssetGenerationSettings["background"] {
-  if (model.startsWith("gpt-image-2") && background === "transparent") {
-    return "auto";
-  }
-
-  return background;
 }
 
 function mimeTypeFromOutputFormat(format: "png" | "webp" | "jpeg"): string {

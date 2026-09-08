@@ -1,6 +1,7 @@
-import type {
-  AiAssetDefinition,
-  AiAssetDimensions
+import {
+  DEFAULT_IMAGE_MODEL,
+  type AiAssetDefinition,
+  type AiAssetDimensions
 } from "@ai-game-assets/core";
 import sharp from "sharp";
 
@@ -9,7 +10,6 @@ import {
   isGptImage2Model
 } from "./image-generation-sizes.js";
 import type { GenerateAssetReference } from "./provider.js";
-import type { RgbColor } from "./provider-image-processing.js";
 
 // Every tile owns one region of the model canvas. Keeping a small, symmetric
 // guard band inside each region makes the ownership boundary unambiguous while
@@ -57,7 +57,6 @@ export type TilesetSheetGenerationGeometry = {
 };
 
 export type TilesetSheetOutputPadding = {
-  color: RgbColor;
   transparent: boolean;
 };
 
@@ -88,7 +87,7 @@ export function tilesetSheetGenerationGeometry(
 export function planTilesetSheetGeneration(
   asset: AiAssetDefinition,
   requestedSize?: string,
-  model = "gpt-image-2"
+  model = DEFAULT_IMAGE_MODEL
 ): TilesetSheetGenerationGeometry {
   if (requestedSize && requestedSize !== "auto") {
     return tilesetSheetGenerationGeometry(asset, requestedSize);
@@ -418,15 +417,8 @@ function tilesetGenerationMinimumGutter(
 
 export async function stageTilesetSheetReference(
   reference: GenerateAssetReference,
-  geometry: TilesetSheetGenerationGeometry,
-  chromaKey: RgbColor
+  geometry: TilesetSheetGenerationGeometry
 ): Promise<GenerateAssetReference> {
-  const background = {
-    r: chromaKey.red,
-    g: chromaKey.green,
-    b: chromaKey.blue,
-    alpha: 1
-  };
   const normalizedReference = await sharp(Buffer.from(reference.image), { failOn: "error" })
     .resize(geometry.logical.width, geometry.logical.height, {
       fit: "fill",
@@ -447,7 +439,6 @@ export async function stageTilesetSheetReference(
           fit: "fill",
           kernel: sharp.kernel.nearest
         })
-        .flatten({ background })
         .png()
         .toBuffer(),
       left: cell.x,
@@ -460,7 +451,7 @@ export async function stageTilesetSheetReference(
       width: geometry.canvas.width,
       height: geometry.canvas.height,
       channels: 4,
-      background
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
     }
   })
     .composite(cellOverlays)
@@ -487,14 +478,12 @@ export async function cropTilesetSheetFromGeneration(
     throw new Error("Could not read generated tileset image dimensions.");
   }
 
-  const outputBackground = padding
-    ? {
-        r: padding.color.red,
-        g: padding.color.green,
-        b: padding.color.blue,
-        alpha: padding.transparent ? 0 : 1
-      }
-    : { r: 0, g: 0, b: 0, alpha: 0 };
+  const outputBackground = {
+    r: 0,
+    g: 0,
+    b: 0,
+    alpha: padding?.transparent === false ? 1 : 0
+  };
   const actualCanvas = { width: metadata.width, height: metadata.height };
   const aspectDelta = Math.abs(Math.log(
     (actualCanvas.width / actualCanvas.height) /

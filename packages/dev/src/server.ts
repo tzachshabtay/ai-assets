@@ -76,6 +76,7 @@ export type GenerateTilesetAnimationStreamRequest = {
   tileset?: TilesetGenerationOverride;
   count?: number;
   baseDataUrl?: string;
+  settings?: AiAssetDefinition["settings"];
   styleGuide?: DebugStyleGuide;
 };
 
@@ -94,6 +95,7 @@ export type SaveTilesetAnimationRequest = {
   assetId: string;
   animationKey: string;
   frames: string[];
+  settings?: AiAssetDefinition["settings"];
   definition?: AiTilesetAnimation;
   versionName?: string;
   notes?: string;
@@ -287,6 +289,7 @@ async function routeRequest(
       await generateTilesetAnimationBranches(options.provider, {
         asset,
         animationKey: body.animationKey,
+        settings: body.settings,
         prompt: body.prompt,
         count: body.count,
         baseReference,
@@ -500,6 +503,7 @@ async function routeRequest(
         imageFromDataUrl(dataUrl, `tileset animation frame ${index + 1}`)
       ),
       definition: body.definition,
+      settings: body.settings,
       versionName: body.versionName,
       notes: body.notes
     });
@@ -566,6 +570,7 @@ type GenerateRequestBody = {
   frameCount?: number;
   tileset?: TilesetGenerationOverride;
   format?: AiAssetFormat;
+  settings?: AiAssetDefinition["settings"];
   audioSettings?: AiAudioGenerationSettings;
   voiceSettings?: AiVoiceGenerationSettings;
   styleGuide?: DebugStyleGuide;
@@ -583,6 +588,7 @@ async function generateImage(
       dataUrl: string;
     }>;
     format?: AiAssetFormat;
+    settings?: AiAssetDefinition["settings"];
     styleGuide?: DebugStyleGuide;
   },
   onOption?: GeneratedAssetOptionCallback,
@@ -607,7 +613,10 @@ async function generateImage(
     asset,
     prompt: body.prompt,
     count: body.count,
-    settings: body.format ? { format: body.format } : undefined,
+    settings: {
+      ...body.settings,
+      ...(body.format ? { format: body.format } : {})
+    },
     references: [
       ...(await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds) ?? []),
       ...referencesFromDataUrls(body.references)

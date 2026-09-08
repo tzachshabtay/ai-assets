@@ -30,6 +30,7 @@ export type GenerateDebugOptionsRequest = {
     "tileWidth" | "tileHeight" | "tileCount" | "tiles"
   > & Partial<Pick<AiAssetTileset, "columns" | "rows">>;
   format?: AiAssetGenerationSettings["format"];
+  settings?: AiAssetGenerationSettings;
   audioSettings?: AiAudioGenerationSettings;
   voiceSettings?: AiVoiceGenerationSettings;
   styleGuide?: DebugStyleGuideDraft;
@@ -92,6 +93,7 @@ export type GeneratedDebugOption = {
 export type GenerateTilesetAnimationRequest = {
   assetId: string;
   animationKey: string;
+  settings?: AiAssetGenerationSettings;
   /** Backward-compatible animation-wide prompt. Prefer `tiles`. */
   prompt?: string;
   frameCount?: number;
@@ -116,6 +118,7 @@ export type SaveTilesetAnimationRequest = {
   animationKey: string;
   frames: string[];
   definition?: AiTilesetAnimation;
+  settings?: AiAssetGenerationSettings;
   versionName?: string;
   notes?: string;
 };

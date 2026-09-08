@@ -1,4 +1,4 @@
-import type { AiAssetDimensions } from "@ai-game-assets/core";
+import { DEFAULT_IMAGE_MODEL, type AiAssetDimensions } from "@ai-game-assets/core";
 
 export type ImageGenerationSize = AiAssetDimensions & {
   value: string;
@@ -22,12 +22,14 @@ export const GPT_IMAGE_2_SIZE_CONSTRAINTS = {
 const DEFAULT_IMAGE_GENERATION_MINIMUM_PIXELS = 1_048_576;
 
 export function isGptImage2Model(model: string): boolean {
-  return model === "gpt-image-2" || model.startsWith("gpt-image-2-");
+  return ["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"].some(
+    (family) => model === family || model.startsWith(`${family}-`)
+  );
 }
 
 export function closestImageGenerationSize(
   dimensions: AiAssetDimensions,
-  model = "gpt-image-2",
+  model = DEFAULT_IMAGE_MODEL,
   grid?: ImageGenerationGrid
 ): string {
   requirePositiveDimensions(dimensions);
@@ -37,7 +39,7 @@ export function closestImageGenerationSize(
 
 export function closestImageGenerationDimensions(
   dimensions: AiAssetDimensions,
-  model = "gpt-image-2",
+  model = DEFAULT_IMAGE_MODEL,
   grid?: ImageGenerationGrid
 ): ImageGenerationSize {
   requirePositiveDimensions(dimensions);

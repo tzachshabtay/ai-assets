@@ -55,6 +55,8 @@ export {
 
 export type { CreateVersionInput } from "./generation.js";
 
+export { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "./image-models.js";
+
 export {
   registerInGameDesignerPanel,
   registerInGameDesignerToggle

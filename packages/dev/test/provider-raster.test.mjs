@@ -61,6 +61,82 @@ function propsTilesetAsset() {
   };
 }
 
+test("model selection respects request, asset, provider, and new default precedence", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp({
+    create: { width: 2, height: 2, channels: 4, background: "red" }
+  }).png().toBuffer();
+  const models = [];
+  try {
+    globalThis.fetch = async (_url, init) => {
+      models.push(JSON.parse(init.body).model);
+      return Response.json({ data: [{ b64_json: generated.toString("base64") }] });
+    };
+    const asset = imageAsset({ width: 2, height: 2 });
+    await createOpenAiImageProvider({ apiKey: "test-key" }).generate({ asset });
+    const provider = createOpenAiImageProvider({ apiKey: "test-key", model: "gpt-image-2.5-sunburst" });
+    await provider.generate({ asset });
+    const pinnedAsset = { ...asset, settings: { ...asset.settings, model: "gpt-image-2" } };
+    await provider.generate({ asset: pinnedAsset });
+    const [option] = await provider.generate({
+      asset: pinnedAsset,
+      settings: { model: "gpt-image-2.5-flare" }
+    });
+    assert.deepEqual(models, ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2", "gpt-image-2.5-flare"]);
+    assert.equal(option.model, "gpt-image-2.5-flare");
+    assert.equal(option.settings.model, option.model);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("single-frame WebP sprites align through PNG while preserving output alpha", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp(Buffer.from(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+      <rect x="1" y="1" width="4" height="4" fill="#ff00ff"/>
+    </svg>
+  `)).webp({ lossless: true }).toBuffer();
+  try {
+    globalThis.fetch = async (_url, init) => {
+      const body = JSON.parse(init.body);
+      assert.equal(body.background, "transparent");
+      assert.equal(body.output_format, "webp");
+      return Response.json({ data: [{ b64_json: generated.toString("base64") }] });
+    };
+    const [option] = await createOpenAiImageProvider({ apiKey: "test-key" }).generate({
+      asset: spritesheetAsset({ width: 16, height: 16 }, {
+        frameWidth: 16, frameHeight: 16, columns: 1, rows: 1, frameCount: 1
+      }, { background: "transparent", format: "webp" })
+    });
+    assert.equal((await sharp(option.image).metadata()).format, "webp");
+    const { data, info } = await sharp(option.image).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    assert.equal(rgbaAt(data, info.width, info.channels, 0, 0)[3], 0);
+    assert.equal(rgbaAt(data, info.width, info.channels, 8, 8)[3], 255);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("JPEG requests and persists opaque backgrounds even with a transparent default", async () => {
+  const originalFetch = globalThis.fetch;
+  const generated = await sharp({
+    create: { width: 2, height: 2, channels: 3, background: "red" }
+  }).jpeg().toBuffer();
+  try {
+    globalThis.fetch = async (_url, init) => {
+      assert.equal(JSON.parse(init.body).background, "opaque");
+      return Response.json({ data: [{ b64_json: generated.toString("base64") }] });
+    };
+    const [option] = await createOpenAiImageProvider({ apiKey: "test-key" }).generate({
+      asset: imageAsset({ width: 2, height: 2 }, { background: "transparent", format: "jpg" })
+    });
+    assert.equal(option.settings.background, "opaque");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("OpenAI provider resizes JPEG and WebP output without PNG decoding", async () => {
   const originalFetch = globalThis.fetch;
 
@@ -105,7 +181,7 @@ test("OpenAI provider resizes JPEG and WebP output without PNG decoding", async 
   }
 });
 
-test("OpenAI provider uses flexible GPT Image 2 sizes and auto for older models", async () => {
+test("OpenAI provider uses flexible GPT Image 2.5 sizes and auto for older models", async () => {
   const originalFetch = globalThis.fetch;
   const generated = await sharp({
     create: {
@@ -295,20 +371,19 @@ test("transparent spritesheets generate isolated frames and composite exact cell
       const size = isJson ? body.size : body.get("size");
       const references = isJson ? [] : body.getAll("image[]");
       const frameIndex = requests.length;
-      const chroma = /flat chroma-key color (#[0-9a-f]{6})/i.exec(prompt)?.[1];
-
-      assert.ok(chroma);
+      const background = isJson ? body.background : body.get("background");
+      assert.equal(background, "transparent");
+      assert.match(prompt, /native alpha/i);
       requests.push({
         url: String(url),
         prompt,
         size,
-        chroma,
+        background,
         referenceCount: references.length
       });
 
       const generated = await sharp(Buffer.from(`
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">
-          <rect width="16" height="16" fill="${chroma}"/>
           <rect x="4" y="4" width="8" height="8" fill="${frameColors[frameIndex]}"/>
         </svg>
       `)).png().toBuffer();
@@ -335,7 +410,7 @@ test("transparent spritesheets generate isolated frames and composite exact cell
         {
           format: "png",
           background: "transparent",
-          model: "gpt-image-2",
+          model: "gpt-image-2.5-flare",
           size: "960x1248"
         }
       )
@@ -350,7 +425,7 @@ test("transparent spritesheets generate isolated frames and composite exact cell
     )));
     assert.deepEqual(requests.map((request) => request.referenceCount), [0, 1, 1, 1, 1, 1, 1, 1]);
     assert.ok(requests.every((request) => request.size === "896x1168"));
-    assert.equal(new Set(requests.map((request) => request.chroma)).size, 1);
+    assert.ok(requests.every((request) => request.background === "transparent"));
     requests.forEach((request, index) => {
       assert.match(request.prompt, new RegExp(`Generate only animation frame ${index + 1} of 8`));
       assert.match(request.prompt, /authoritative animation has exactly 8 frames/i);
@@ -394,51 +469,52 @@ test("transparent spritesheets generate isolated frames and composite exact cell
   }
 });
 
-test("OpenAI provider transports ordinary transparent images through an opaque chroma matte", async () => {
-  const originalFetch = globalThis.fetch;
-  const generated = await sharp(Buffer.from(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">
-      <rect width="16" height="16" fill="#ff00ff"/>
-      <rect x="4" y="4" width="8" height="8" fill="#228844"/>
-    </svg>
-  `)).png().toBuffer();
-  let requestBody;
+for (const model of ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]) {
+  for (const format of ["png", "webp"]) {
+    test(`${model} requests native ${format} alpha and preserves transparent holes and colored edges`, async () => {
+      const originalFetch = globalThis.fetch;
+      const source = sharp(Buffer.from(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">
+          <path d="M2 2h12v12H2z M6 6v4h4V6z" fill="#ff00ff" fill-rule="evenodd"/>
+          <rect x="1" y="2" width="1" height="12" fill="#00ff00" opacity="0.5"/>
+        </svg>
+      `));
+      const generated = await (format === "png" ? source.png() : source.webp({ lossless: true })).toBuffer();
+      let requestBody;
 
-  try {
-    globalThis.fetch = async (_url, init) => {
-      requestBody = JSON.parse(init.body);
-      return new Response(JSON.stringify({
-        data: [{ b64_json: generated.toString("base64") }]
-      }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" }
-      });
-    };
-
-    const asset = imageAsset(
-      { width: 16, height: 16 },
-      { model: "gpt-image-2", background: "transparent", format: "png" }
-    );
-    const provider = createOpenAiImageProvider({ apiKey: "test-key" });
-    const [option] = await provider.generate({ asset });
-
-    assert.equal(requestBody.background, "opaque");
-    assert.match(requestBody.prompt, /flat chroma-key color #ff00ff/i);
-    assert.equal(option.settings.background, "transparent");
-
-    const { data, info } = await sharp(option.image)
-      .ensureAlpha()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    assert.equal(rgbaAt(data, info.width, info.channels, 0, 0)[3], 0);
-    assert.deepEqual(
-      rgbaAt(data, info.width, info.channels, 8, 8),
-      [34, 136, 68, 255]
-    );
-  } finally {
-    globalThis.fetch = originalFetch;
+      try {
+        globalThis.fetch = async (_url, init) => {
+          requestBody = JSON.parse(init.body);
+          return Response.json({ data: [{ b64_json: generated.toString("base64") }] });
+        };
+        const asset = imageAsset(
+          { width: 32, height: 32 },
+          { model, background: "transparent", format }
+        );
+        const provider = createOpenAiImageProvider({ apiKey: "test-key" });
+        const [option] = await provider.generate({ asset });
+        assert.equal(requestBody.model, model);
+        assert.equal(requestBody.background, "transparent");
+        assert.equal(requestBody.output_format, format);
+        assert.match(requestBody.prompt, /native alpha/i);
+        assert.doesNotMatch(requestBody.prompt, /chroma|matte color|fully opaque PNG/i);
+        assert.equal(option.settings.model, model);
+        assert.equal(option.settings.background, "transparent");
+        const { data, info } = await sharp(option.image).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+        assert.equal(rgbaAt(data, info.width, info.channels, 0, 0)[3], 0);
+        assert.equal(rgbaAt(data, info.width, info.channels, 16, 16)[3], 0);
+        assert.equal(rgbaAt(data, info.width, info.channels, 8, 8)[3], 255);
+        const edge = rgbaAt(data, info.width, info.channels, 2, 8);
+        assert.ok(edge[3] > 0 && edge[3] < 255);
+        if (format === "png") {
+          assert.deepEqual(rgbaAt(data, info.width, info.channels, 8, 8), [255, 0, 255, 255]);
+        }
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   }
-});
+}
 
 test("OpenAI provider leaves explicitly opaque ordinary images opaque", async () => {
   const originalFetch = globalThis.fetch;
@@ -505,7 +581,6 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
   const tileColors = ["#c81414", "#14c814", "#1414c8", "#c8c814"];
   const generated = await sharp(Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
-      <rect width="1024" height="1024" fill="#ff00ff"/>
       ${expectedGenerationCells.map((cell, index) => (
         `<rect x="${cell.x}" y="${cell.y}" width="${cell.width}" ` +
           `height="${cell.height}" fill="${tileColors[index]}"/>`
@@ -541,19 +616,19 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
     for (const body of requestBodies) {
       assert.equal(body.n, 1);
       assert.equal(body.size, "1024x1024");
-      assert.equal(body.background, "opaque");
+      assert.equal(body.background, "transparent");
       assert.match(body.prompt, /Actual returned raster canvas: 1024x1024 pixels/);
       assert.match(
         body.prompt,
-        /Raster transparency encoding for every numbered tile:.*paint every such pixel the exact flat chroma color #[0-9a-f]{6}.*Never draw a checkerboard transparency preview/i
+        /Use native alpha for every numbered tile:.*Never draw a checkerboard transparency preview/i
       );
       assert.equal(
-        body.prompt.match(/Encoding rule for Tile \d+:/g)?.length,
+        body.prompt.match(/Transparency for Tile \d+:/g)?.length,
         4
       );
       assert.match(
         body.prompt,
-        /Tile 1 — A centered wooden crate on a transparent background\. Encoding rule for Tile 1:.*never represent transparency with a checkerboard/i
+        /Tile 1 — A centered wooden crate on a transparent background\. Transparency for Tile 1:.*never represent transparency with a checkerboard/i
       );
       assert.match(
         body.prompt,
@@ -568,7 +643,7 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
       );
       assert.match(body.prompt, /Tile 1 \[x=32-479, y=32-479\]/);
       assert.match(body.prompt, /Tile 4 \[x=544-991, y=544-991\]/);
-      assert.match(body.prompt, /hard-gutter color/i);
+      assert.match(body.prompt, /fully transparent using native alpha/i);
       assert.match(body.prompt, /safe-content rectangle/i);
       assert.match(body.prompt, /complete silhouette must not touch or cross/i);
       assert.match(body.prompt, /transparent terrain, connector, wall, corner, or overlay/i);
@@ -577,7 +652,7 @@ test("OpenAI provider keeps full-sheet tileset generation to one request per can
       assert.match(body.prompt, /outside its rectangle is irretrievably discarded/i);
       assert.match(
         body.prompt,
-        /not inside an actual usable extracted tile rectangle.*hard-gutter color/i
+        /not inside an actual usable extracted tile rectangle.*fully transparent using native alpha/i
       );
       assert.doesNotMatch(body.prompt, /assigned to the neighboring tile/i);
       assert.doesNotMatch(
@@ -629,7 +704,6 @@ test("OpenAI provider preserves an explicit tileset generation canvas", async ()
   const tileColors = ["#c81414", "#14c814", "#1414c8", "#c8c814"];
   const generated = await sharp(Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024">
-      <rect width="1536" height="1024" fill="#ff00ff"/>
       ${expectedGenerationCells.map((cell, index) => (
         `<rect x="${cell.x}" y="${cell.y}" width="${cell.width}" ` +
           `height="${cell.height}" fill="${tileColors[index]}"/>`
@@ -681,7 +755,7 @@ test("OpenAI provider preserves an explicit tileset generation canvas", async ()
   }
 });
 
-test("tileset chroma transport does not persist opaque background on promotion", async () => {
+test("tileset native transparency remains enabled after promotion", async () => {
   const originalFetch = globalThis.fetch;
   const asset = propsTilesetAsset();
   const generated = await sharp({
@@ -721,9 +795,9 @@ test("tileset chroma transport does not persist opaque background on promotion",
 
     const [nextOption] = await provider.generate({ asset: promotedAsset });
     assert.equal(nextOption.settings.background, "auto");
-    assert.deepEqual(requestBodies.map((body) => body.background), ["opaque", "opaque"]);
+    assert.deepEqual(requestBodies.map((body) => body.background), ["transparent", "transparent"]);
     for (const body of requestBodies) {
-      assert.match(body.prompt, /exact flat chroma color/i);
+      assert.match(body.prompt, /native alpha/i);
       assert.match(body.prompt, /never draw a checkerboard transparency preview/i);
     }
   } finally {
@@ -738,7 +812,6 @@ test("OpenAI provider stages full-sheet tileset edit references in generation sp
   assert.equal(geometry.size, "1024x1024");
   const generated = await sharp(Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024">
-      <rect width="1024" height="1024" fill="#ff00ff"/>
       ${geometry.cells.map((cell) => (
         `<rect x="${cell.x}" y="${cell.y}" width="${cell.width}" ` +
           `height="${cell.height}" fill="#c81414"/>`
@@ -777,6 +850,7 @@ test("OpenAI provider stages full-sheet tileset edit references in generation sp
       );
       const { data, info } = await staged.raw().toBuffer({ resolveWithObject: true });
       const padding = rgbAt(data, info.width, 0, 0);
+      assert.equal(rgbaAt(data, info.width, info.channels, 0, 0)[3], 0);
       for (const [x, y] of [[256, 256], [768, 256], [256, 768], [768, 768]]) {
         assert.deepEqual(rgbAt(data, info.width, x, y), [200, 20, 20]);
       }

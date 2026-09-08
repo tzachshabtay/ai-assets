@@ -51,6 +51,10 @@ import {
 } from "./tileset-dialog.js";
 import { aiTilesetAnimationTextureKey } from "./keys.js";
 import {
+  createImageGenerationSession,
+  tilesetAnimationSettingsForEdit
+} from "./image-generation-preferences.js";
+import {
   promotedVoiceId,
   regenerateAndPromoteVoiceLines,
   voiceLineRegenerationPlan
@@ -175,6 +179,7 @@ import {
   errorMessage,
   generationOverridesFromInputs,
   hasStyleGuide,
+  imageGenerationSettings,
   imageSourceToDataUrl,
   installPromotedImageTexture,
   isAbortError,
@@ -204,6 +209,7 @@ import {
   stopStatusAnimation,
   styleGuideDraftFromManifest,
   styleGuideRequest,
+  syncImageModelControl,
   uploadedOptionFromFile,
   voiceGenerationOverridesFromInputs
 } from "./designer-support.js";
@@ -233,10 +239,12 @@ export function installAiAssetDesigner(
     inheritAnimations: boolean;
     previewedVersionName?: string;
     tilesetAnimations?: Record<string, string[]>;
+    tilesetAnimationSettings?: Record<string, AiAssetGenerationSettings>;
     animationOnlyKey?: string;
   }>();
   let styleGuideDraft = styleGuideDraftFromManifest(manifest, resolveAssetUrl);
   const formatDrafts = new Map<string, AiAssetFormat>();
+  const modelDrafts = new Map<string, string>();
   const tilesetPromptDrafts = new Map<string, string[]>();
   const tilesetAnimationPromptDrafts = new Map<string, string[]>();
   const tilesetAnimationFrameDrafts = new Map<string, Promise<string[]>>();
@@ -281,6 +289,9 @@ export function installAiAssetDesigner(
     | undefined;
   let mixingTileset = false;
 
+  const imageSettingsForAsset = (assetId: string, format?: AiAssetFormat, animationKey?: string) =>
+    imageGenerationSettings(manifest.assets[assetId], modelDrafts.get(assetId), format, animationKey);
+
   const regenerateTilesetTile = async (
     assetId: string,
     tile: number,
@@ -288,15 +299,12 @@ export function installAiAssetDesigner(
     currentTileSrc: string
   ): Promise<GeneratedDebugOption[]> => {
     const guide = await styleGuideRequest(styleGuideDraft);
+    const format = effectiveGenerationFormat(manifest, formatDrafts, selectedAssetId, assetId);
     return client.generate({
       assetId,
       count: 3,
-      format: effectiveGenerationFormat(
-        manifest,
-        formatDrafts,
-        selectedAssetId,
-        assetId
-      ),
+      settings: imageSettingsForAsset(assetId, format),
+      format,
       tileset,
       styleGuide: {
         ...guide,
@@ -427,6 +435,7 @@ export function installAiAssetDesigner(
       inheritAnimations?: boolean;
       previewedVersionName?: string;
       tilesetAnimations?: Record<string, string[]>;
+      tilesetAnimationSettings?: Record<string, AiAssetGenerationSettings>;
       animationOnlyKey?: string;
     } = {}
   ) => {
@@ -435,6 +444,7 @@ export function installAiAssetDesigner(
       inheritAnimations: Boolean(pending.inheritAnimations),
       previewedVersionName: pending.previewedVersionName,
       tilesetAnimations: pending.tilesetAnimations,
+      tilesetAnimationSettings: pending.tilesetAnimationSettings,
       animationOnlyKey: pending.animationOnlyKey
     });
     syncPromoteAllButton();
@@ -817,6 +827,13 @@ export function installAiAssetDesigner(
       assetId
     );
     elements.formatField.hidden = !canEditGenerationFormat(manifest, selectedAssetId, assetId);
+    syncImageModelControl(
+      elements,
+      asset,
+      modelDrafts.get(assetId),
+      selectedTilesetAnimationKey ? "png" : normalizeAssetFormat(elements.formatSelect.value),
+      selectedTilesetAnimationKey
+    );
     elements.audioFormatField.hidden = !isAudio;
     elements.audioDurationField.hidden = !isAudio;
     elements.audioLoopField.hidden = !isAudio;
@@ -1149,6 +1166,9 @@ export function installAiAssetDesigner(
       ) return;
 
       const latestPending = pendingOptions.get(assetId);
+      const sequenceSettings = tilesetAnimationSettingsForEdit(
+        manifest.assets[assetId], animationKey, latestPending?.tilesetAnimationSettings?.[animationKey]
+      );
       selectedOption = option;
       editedCurrentOption = option;
       rememberPendingOption(assetId, option, {
@@ -1157,6 +1177,10 @@ export function installAiAssetDesigner(
         tilesetAnimations: {
           ...(latestPending?.tilesetAnimations ?? {}),
           [animationKey]: latestPending?.tilesetAnimations?.[animationKey] ?? frames
+        },
+        tilesetAnimationSettings: {
+          ...latestPending?.tilesetAnimationSettings,
+          ...(sequenceSettings ? { [animationKey]: sequenceSettings } : {})
         },
         animationOnlyKey: latestPending?.animationOnlyKey ??
           (latestPending ? undefined : animationKey)
@@ -1191,7 +1215,8 @@ export function installAiAssetDesigner(
     assetId: string,
     definition: AiTilesetAnimation,
     frames: string[],
-    card?: HTMLElement
+    card?: HTMLElement,
+    settings?: AiAssetGenerationSettings
   ) => {
     const currentPrompts = tilesetAnimationPromptDefinitions(assetId, definition.key);
     const selectedDefinition = currentPrompts
@@ -1199,6 +1224,10 @@ export function installAiAssetDesigner(
       : definition;
     const option = await currentTilesetOption(assetId, selectedDefinition);
     const pending = pendingOptions.get(assetId);
+    const sequenceSettings = tilesetAnimationSettingsForEdit(
+      manifest.assets[assetId], selectedDefinition.key,
+      pending?.tilesetAnimationSettings?.[selectedDefinition.key], settings
+    );
     selectedOption = option;
     rememberPendingOption(assetId, option, {
       inheritAnimations: pending?.inheritAnimations,
@@ -1206,6 +1235,10 @@ export function installAiAssetDesigner(
       tilesetAnimations: {
         ...(pending?.tilesetAnimations ?? {}),
         [selectedDefinition.key]: frames
+      },
+      tilesetAnimationSettings: {
+        ...(pending?.tilesetAnimationSettings ?? {}),
+        ...(sequenceSettings ? { [selectedDefinition.key]: sequenceSettings } : {})
       },
       animationOnlyKey: pending?.animationOnlyKey ??
         (pending ? undefined : selectedDefinition.key)
@@ -1282,7 +1315,8 @@ export function installAiAssetDesigner(
             assetId,
             definition,
             candidate.frames.map((item) => item.dataUrl),
-            card
+            card,
+            candidate.frames[0]?.settings
           );
           setStatus(
             elements,
@@ -1504,6 +1538,8 @@ export function installAiAssetDesigner(
       targetId: selectedTargetId,
       assetId: logicalAssetId
     });
+    const modelDraft = modelDrafts.get(targetAssetId);
+    if (modelDraft) modelDrafts.set(result.assetId, modelDraft);
     manifest = result.manifest;
     options.onManifestUpdated?.(manifest);
     selectedTargetAssetId = result.assetId;
@@ -1606,6 +1642,7 @@ export function installAiAssetDesigner(
       const candidates = await client.generateTilesetAnimationStream({
         assetId,
         animationKey,
+        settings: imageSettingsForAsset(assetId, "png", animationKey),
         frameCount: definition.frameCount,
         tiles: definition.tiles,
         count: 3
@@ -1731,6 +1768,14 @@ export function installAiAssetDesigner(
     if (canEditGenerationFormat(manifest, selectedAssetId, selectedTargetAssetId)) {
       formatDrafts.set(selectedTargetAssetId, normalizeAssetFormat(elements.formatSelect.value));
     }
+    syncImageModelControl(elements, manifest.assets[selectedTargetAssetId],
+      modelDrafts.get(selectedTargetAssetId), normalizeAssetFormat(elements.formatSelect.value));
+  });
+
+  elements.modelSelect.addEventListener("change", () => {
+    if (!elements.modelSelect.disabled && elements.modelSelect.value) {
+      modelDrafts.set(selectedTargetAssetId, elements.modelSelect.value);
+    }
   });
 
   elements.audioFormatSelect.addEventListener("change", () => {
@@ -1840,6 +1885,7 @@ export function installAiAssetDesigner(
       const definition = animationSession.animation;
       const draftAsset = assetWithTilesetAnimationDefinition(asset, definition);
       const pending = pendingOptions.get(assetId);
+      const generationSession = createImageGenerationSession(animationSession.generated[0]?.frames[0]);
       mixingTileset = true;
       syncMixTilesetButton();
       setStatus(elements, "Opening tileset animation mixer...", "busy");
@@ -1870,9 +1916,10 @@ export function installAiAssetDesigner(
           regenerateTile: async (tile, currentTileSrc) => {
             const prompt = definition.tiles?.[tile];
             if (!prompt) throw new Error(`Tile ${tile + 1} requires an animation prompt.`);
-            return client.generateTilesetAnimationStream({
+            const generated = await client.generateTilesetAnimationStream({
               assetId,
               animationKey: definition.key,
+              settings: imageSettingsForAsset(assetId, "png", definition.key),
               count: 3,
               frameCount: definition.frameCount,
               tiles: [prompt],
@@ -1880,6 +1927,8 @@ export function installAiAssetDesigner(
               baseDataUrl: currentTileSrc,
               styleGuide: await styleGuideRequest(styleGuideDraft)
             }, () => undefined);
+            generationSession.record(generated[0]?.frames[0]);
+            return generated;
           }
         });
         if (
@@ -1895,7 +1944,8 @@ export function installAiAssetDesigner(
           );
           return;
         }
-        await selectTilesetAnimationFrames(assetId, definition, mixed.frames);
+        await selectTilesetAnimationFrames(assetId, definition, mixed.frames, undefined,
+          generationSession.settings);
         setStatus(
           elements,
           "Mixed tileset animation ready. Promote to save the selected tile combination.",
@@ -1925,6 +1975,7 @@ export function installAiAssetDesigner(
 
     const mixPanelRevision = panelRevision;
     const candidates = [...session.generated].sort((left, right) => left.index - right.index);
+    const generationSession = createImageGenerationSession(candidates[0]);
     mixingTileset = true;
     syncMixTilesetButton();
     setStatus(elements, "Opening tileset mixer...", "busy");
@@ -1948,8 +1999,11 @@ export function installAiAssetDesigner(
         assetId,
         baseSheetSrc: current.sheetSrc,
         candidates,
-        regenerateTile: (tile, tileset, currentTileSrc) =>
-          regenerateTilesetTile(assetId, tile, tileset, currentTileSrc)
+        regenerateTile: async (tile, tileset, currentTileSrc) => {
+          const generated = await regenerateTilesetTile(assetId, tile, tileset, currentTileSrc);
+          generationSession.record(generated[0]);
+          return generated;
+        }
       });
       if (
         panelRevision !== mixPanelRevision ||
@@ -1965,12 +2019,12 @@ export function installAiAssetDesigner(
       }
 
       const template = candidates[0]!;
-      const mixedOption = createMixedTilesetOption(
+      const mixedOption = generationSession.applyTo(createMixedTilesetOption(
         template,
         mixed,
         template.prompt || asset.prompt,
         Math.max(...candidates.map((option) => option.index)) + 1
-      );
+      ));
       selectedOption = mixedOption;
       rememberPendingOption(assetId, mixedOption);
       showOptionInCurrentPreview(mixedOption, "mixed tileset");
@@ -2064,7 +2118,11 @@ export function installAiAssetDesigner(
         audioSettings: audioGenerationOverridesFromInputs(elements, manifest.assets[generationAssetId]),
         voiceSettings: voiceGenerationOverridesFromInputs(elements, manifest.assets[generationAssetId]),
         styleGuide: await styleGuideRequest(styleGuideDraft),
-        ...generationOverrides
+        ...generationOverrides,
+        settings: {
+          ...generationOverrides.settings,
+          ...imageSettingsForAsset(generationAssetId, generationFormat)
+        }
       };
       await client.generateStream(generationRequest, (option) => {
         if (activeGeneration?.id !== currentGenerationId) return;
@@ -2468,6 +2526,7 @@ export function installAiAssetDesigner(
             count: options.optionCount ?? 3,
             references: [reference],
             format: generationFormat,
+            settings: imageSettingsForAsset(derivationAssetId, generationFormat),
             dimensions: deriveRequest.dimensions,
             frameCount: deriveRequest.frameCount,
             styleGuide: await styleGuideRequest(styleGuideDraft)
@@ -2549,6 +2608,7 @@ export function installAiAssetDesigner(
           animationKey: promotionAnimationKey,
           frames: animationFrames,
           definition,
+          settings: promotedPending.tilesetAnimationSettings?.[promotionAnimationKey],
           versionName,
           notes: "Promoted from a selected or mixed tileset animation preview."
         });
@@ -2592,6 +2652,7 @@ export function installAiAssetDesigner(
             assetId: promotedAssetId,
             animationKey,
             frames,
+            settings: promotedPending?.tilesetAnimationSettings?.[animationKey],
             definition: promotedOption.tileset?.animations?.find(
               (animation) => animation.key === animationKey
             ),
@@ -2695,6 +2756,7 @@ export function installAiAssetDesigner(
     }
 
     formatDrafts.delete(promotedAssetId);
+    modelDrafts.delete(promotedAssetId);
     if (isPromotionPanelCurrent()) {
       try {
         syncTargetAsset(promotedAssetId, { preserveOptions: true });
@@ -2771,6 +2833,7 @@ export function installAiAssetDesigner(
             assetId,
             animationKey: pending.animationOnlyKey,
             frames: animationOnlyFrames,
+            settings: pending.tilesetAnimationSettings?.[pending.animationOnlyKey],
             definition: pending.option.tileset?.animations?.find(
               (animation) => animation.key === pending.animationOnlyKey
             ),
@@ -2812,6 +2875,7 @@ export function installAiAssetDesigner(
               assetId,
               animationKey,
               frames,
+              settings: pending.tilesetAnimationSettings?.[animationKey],
               definition: pending.option.tileset?.animations?.find(
                 (animation) => animation.key === animationKey
               ),
@@ -2876,6 +2940,7 @@ export function installAiAssetDesigner(
         pendingOptions.delete(assetId);
         resolveDeferredVoiceLinePendingOption(assetId);
         formatDrafts.delete(assetId);
+        modelDrafts.delete(assetId);
         promotedCount += 1;
       } catch (error) {
         promotionError = { assetId, error };
@@ -3084,6 +3149,7 @@ export function installAiAssetDesigner(
         const generated = await client.generate({
           assetId,
           count: 1,
+          settings: imageSettingsForAsset(assetId),
           styleGuide
         }, {
           signal: controller.signal
@@ -3096,6 +3162,7 @@ export function installAiAssetDesigner(
         rememberPendingOption(assetId, option);
         const previewAsset = await previewBulkOption(assetId, option);
         const generatedTilesetAnimations: Record<string, string[]> = {};
+        const generatedTilesetAnimationSettings: Record<string, AiAssetGenerationSettings> = {};
         for (const animation of previewAsset.tileset?.animations ?? []) {
           setStatus(
             elements,
@@ -3106,6 +3173,7 @@ export function installAiAssetDesigner(
           const candidates = await client.generateTilesetAnimationStream({
             assetId,
             animationKey: animation.key,
+            settings: imageSettingsForAsset(assetId, "png", animation.key),
             prompt: animation.prompt,
             count: 1,
             baseDataUrl: option.dataUrl,
@@ -3122,8 +3190,12 @@ export function installAiAssetDesigner(
           }
           const frameDataUrls = candidate.frames.map((frame) => frame.dataUrl);
           generatedTilesetAnimations[animation.key] = frameDataUrls;
+          if (candidate.frames[0]?.settings) {
+            generatedTilesetAnimationSettings[animation.key] = candidate.frames[0].settings;
+          }
           rememberPendingOption(assetId, option, {
-            tilesetAnimations: { ...generatedTilesetAnimations }
+            tilesetAnimations: { ...generatedTilesetAnimations },
+            tilesetAnimationSettings: { ...generatedTilesetAnimationSettings }
           });
           await previewTilesetAnimationFrames(
             assetId,
@@ -3417,6 +3489,7 @@ export function installAiAssetDesigner(
         activeVersion,
         resolveAssetUrl
       });
+      const generationSession = createImageGenerationSession(sourceOption ?? activeVersion);
       void openTilesetEditor({
         root: elements.root,
         asset: tilesetEditorAsset,
@@ -3424,8 +3497,11 @@ export function installAiAssetDesigner(
         src: renderedSrc,
         sourceSrc: editorInitialState.sourceSrc,
         initialTransforms: editorInitialState.initialTransforms,
-        regenerateTile: (tile, tileset, currentTileSrc) =>
-          regenerateTilesetTile(assetId, tile, tileset, currentTileSrc),
+        regenerateTile: async (tile, tileset, currentTileSrc) => {
+          const generated = await regenerateTilesetTile(assetId, tile, tileset, currentTileSrc);
+          generationSession.record(generated[0]);
+          return generated;
+        },
         onConfirm: async ({ dataUrl, sourceDataUrl, transforms }) => {
           const previousOption = editedCurrentOption;
           const optionAsset = {
@@ -3438,7 +3514,7 @@ export function installAiAssetDesigner(
             }
           };
 
-          editedCurrentOption = {
+          editedCurrentOption = generationSession.applyTo({
             ...previousOption,
             index: previousOption?.index ?? -1,
             dataUrl,
@@ -3451,7 +3527,7 @@ export function installAiAssetDesigner(
             tilesetSourceDataUrl: sourceDataUrl,
             tilesetTransforms: cloneTilesetTransforms(transforms),
             settings: optionAsset.settings
-          };
+          });
           selectedOption = editedCurrentOption;
           rememberPendingOption(assetId, editedCurrentOption, {
             inheritAnimations: Boolean(previewedVersionName),
