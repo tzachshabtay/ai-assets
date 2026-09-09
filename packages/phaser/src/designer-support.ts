@@ -648,6 +648,38 @@ export function renderOptions(options: {
   }
 }
 
+const pendingCurrentImages = new WeakMap<HTMLImageElement, HTMLImageElement>();
+
+/** Keep a promoted preview visible until its saved URL can actually be displayed. */
+export function setCurrentImagePreview(
+  image: HTMLImageElement,
+  src: string,
+  promotedSrc?: string
+): void {
+  const previous = pendingCurrentImages.get(image);
+  if (previous) {
+    previous.onload = null;
+    previous.onerror = null;
+    pendingCurrentImages.delete(image);
+  }
+
+  image.src = promotedSrc ?? src;
+  if (!promotedSrc || promotedSrc === src) return;
+
+  const savedImage = new Image();
+  pendingCurrentImages.set(image, savedImage);
+  const finish = (loaded: boolean) => {
+    if (pendingCurrentImages.get(image) !== savedImage) return;
+    pendingCurrentImages.delete(image);
+    savedImage.onload = null;
+    savedImage.onerror = null;
+    if (loaded) image.src = src;
+  };
+  savedImage.onload = () => finish(true);
+  savedImage.onerror = () => finish(false);
+  savedImage.src = src;
+}
+
 const pendingImagePreviews = new WeakMap<
   AiAssetDesignerSceneLike,
   Map<string, HTMLImageElement>

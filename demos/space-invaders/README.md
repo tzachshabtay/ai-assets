@@ -49,7 +49,7 @@ ELEVENLABS_API_KEY=...
 
 Optional variables:
 
-- `OPENAI_IMAGE_MODEL`: defaults to `gpt-image-2.5-flare`; the designer can select Flare or Sunburst for each asset
+- `OPENAI_IMAGE_MODEL`: defaults to `gpt-image-2.5-sunburst`; the designer can select Sunburst or Flare for each asset
 - `OPENAI_SVG_MODEL`: text/code model used for direct SVG generation
 - `ELEVENLABS_OUTPUT_FORMAT`: audio output format requested from ElevenLabs
 - `AI_ASSET_API_PORT`: preferred asset API port, default `3977`

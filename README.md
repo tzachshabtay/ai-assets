@@ -63,7 +63,7 @@ export const assets = defineAiAssets({
     kind: "image",
     prompt: "Compact arcade hero spaceship, readable silhouette, transparent background.",
     dimensions: { width: 72, height: 72 },
-    settings: { model: "gpt-image-2.5-flare", format: "png", quality: "low" },
+    settings: { model: "gpt-image-2.5-sunburst", format: "png", quality: "low" },
     activeVersion: "default",
     versions: {
       default: {
@@ -85,7 +85,7 @@ export const assets = defineAiAssets({
     dimensions: { width: 144, height: 144 },
     frameGrid: { frameWidth: 72, frameHeight: 72, columns: 2, rows: 2, frameCount: 4 },
     animations: [{ key: "idle", frames: [0, 1, 2, 3], frameRate: 8, repeat: -1 }],
-    settings: { model: "gpt-image-2.5-flare", format: "png", quality: "low" },
+    settings: { model: "gpt-image-2.5-sunburst", format: "png", quality: "low" },
     activeVersion: "default",
     versions: {}
   }
@@ -168,7 +168,7 @@ normalizes the generated row and column placement without scaling individual fra
 Set `settings.background` explicitly when the asset's background is part of the artwork:
 
 ```ts
-settings: { model: "gpt-image-2.5-flare", format: "png", background: "opaque" }
+settings: { model: "gpt-image-2.5-sunburst", format: "png", background: "opaque" }
 ```
 
 `"opaque"` keeps every image or spritesheet frame filled edge to edge. Use `"transparent"` for
@@ -176,8 +176,8 @@ cutout sprites: the provider requests native alpha with PNG or WebP and preserve
 sprite composition, and tileset extraction. JPEG uses an opaque background. An explicit background
 setting takes precedence over words in the asset prompt.
 
-The image model selector in the designer offers **GPT Image 2.5 Flare** (the default for new assets,
-fast everyday generation) and **GPT Image 2.5 Sunburst** (editing precision). The selected model is used
+The image model selector in the designer offers **GPT Image 2.5 Sunburst** (the default for new assets,
+editing precision) and **GPT Image 2.5 Flare** (fast everyday generation). The selected model is used
 for generation, edits, derived assets, and tileset animations, and is saved when a candidate is promoted.
 Existing assets with an explicit model keep that selection; choose a 2.5 model to migrate those assets.
 Historical variants keep their original model metadata. SVG and audio use their own providers.

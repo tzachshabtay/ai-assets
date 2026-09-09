@@ -7,7 +7,7 @@ import { imageGenerationSettings, syncImageModelControl } from "../dist/designer
 import { createImageGenerationSession, tilesetAnimationSettingsForEdit } from "../dist/image-generation-preferences.js";
 import { createMixedTilesetOption } from "../dist/tileset-dialog.js";
 
-const sunburst = "gpt-image-2.5-sunburst";
+const flare = "gpt-image-2.5-flare";
 const asset = {
   id: "hero",
   kind: "image",
@@ -26,20 +26,22 @@ const asset = {
 };
 
 test("image model preferences honor explicit configuration without inferring a legacy pin from history", () => {
+  assert.equal(DEFAULT_IMAGE_MODEL, "gpt-image-2.5-sunburst");
+  assert.notEqual(DEFAULT_IMAGE_MODEL, flare);
   assert.deepEqual(imageGenerationSettings(asset), { model: DEFAULT_IMAGE_MODEL });
   assert.deepEqual(imageGenerationSettings({ ...asset, settings: { model: "gpt-image-2" } }),
     { model: "gpt-image-2" });
-  assert.deepEqual(imageGenerationSettings({ ...asset, settings: { model: "custom-image-model" } }, sunburst),
-    { model: sunburst });
+  assert.deepEqual(imageGenerationSettings({ ...asset, settings: { model: "custom-image-model" } }, flare),
+    { model: flare });
   assert.equal(asset.versions.old.model, "gpt-image-2");
 
   for (const kind of ["image", "spritesheet", "animation", "tileset"]) {
-    assert.deepEqual(imageGenerationSettings({ ...asset, kind }, sunburst, "webp"), { model: sunburst });
+    assert.deepEqual(imageGenerationSettings({ ...asset, kind }, flare, "webp"), { model: flare });
   }
   for (const kind of ["sound", "music", "voice", "voice-line", "collection"]) {
-    assert.equal(imageGenerationSettings({ ...asset, kind }, sunburst), undefined);
+    assert.equal(imageGenerationSettings({ ...asset, kind }, flare), undefined);
   }
-  assert.equal(imageGenerationSettings(asset, sunburst, "svg"), undefined);
+  assert.equal(imageGenerationSettings(asset, flare, "svg"), undefined);
 });
 
 test("tileset animation selection restores its own model and new model drafts override it", () => {
@@ -47,9 +49,9 @@ test("tileset animation selection restores its own model and new model drafts ov
   tileset.kind = "tileset";
   tileset.settings = { model: DEFAULT_IMAGE_MODEL };
   tileset.versions.old.tilesetAnimations = {
-    water: { files: ["/water.png"], settings: { model: sunburst, quality: "xhigh" } }
+    water: { files: ["/water.png"], settings: { model: flare, quality: "xhigh" } }
   };
-  assert.deepEqual(imageGenerationSettings(tileset, undefined, "png", "water"), { model: sunburst });
+  assert.deepEqual(imageGenerationSettings(tileset, undefined, "png", "water"), { model: flare });
   assert.deepEqual(imageGenerationSettings(tileset, DEFAULT_IMAGE_MODEL, "png", "water"),
     { model: DEFAULT_IMAGE_MODEL });
   assert.deepEqual(imageGenerationSettings(tileset, undefined, "png", "new-animation"),
@@ -60,7 +62,7 @@ test("tileset animation selection restores its own model and new model drafts ov
   });
   assert.deepEqual(version.tilesetAnimations, tileset.versions.old.tilesetAnimations);
   version.tilesetAnimations.water.settings.model = DEFAULT_IMAGE_MODEL;
-  assert.equal(tileset.versions.old.tilesetAnimations.water.settings.model, sunburst);
+  assert.equal(tileset.versions.old.tilesetAnimations.water.settings.model, flare);
 });
 
 test("model control preserves configured custom models and hides itself for SVG and audio", () => {
@@ -79,20 +81,22 @@ test("model control preserves configured custom models and hides itself for SVG 
     assert.equal(elements.modelField.hidden, false);
     assert.equal(elements.modelSelect.disabled, false);
     assert.deepEqual(elements.modelSelect.children.map((option) => option.value),
-      [DEFAULT_IMAGE_MODEL, sunburst, "custom-image-model"]);
+      [DEFAULT_IMAGE_MODEL, flare, "custom-image-model"]);
+    assert.deepEqual(elements.modelSelect.children.slice(0, 2).map((option) => option.textContent),
+      ["GPT Image 2.5 Sunburst", "GPT Image 2.5 Flare"]);
     assert.equal(elements.modelSelect.value, "custom-image-model");
 
-    syncImageModelControl(elements, asset, sunburst);
-    assert.equal(elements.modelSelect.value, sunburst);
+    syncImageModelControl(elements, asset, flare);
+    assert.equal(elements.modelSelect.value, flare);
     assert.equal(elements.modelSelect.children.length, 2);
 
     for (const hiddenAsset of [asset, { ...asset, kind: "music" }]) {
-      syncImageModelControl(elements, hiddenAsset, sunburst, "svg");
+      syncImageModelControl(elements, hiddenAsset, flare, "svg");
       assert.equal(elements.modelField.hidden, true);
       assert.equal(elements.modelSelect.disabled, true);
       assert.equal(elements.modelSelect.children.length, 0);
     }
-    syncImageModelControl(elements, { ...asset, kind: "voice" }, sunburst, "png");
+    syncImageModelControl(elements, { ...asset, kind: "voice" }, flare, "png");
     assert.equal(elements.modelField.hidden, true);
   } finally {
     if (previousDocument === undefined) delete globalThis.document;
@@ -110,7 +114,7 @@ test("selected model reaches image, edit, tileset-animation and promotion endpoi
   };
   try {
     const client = new AiAssetDebugClient();
-    const settings = imageGenerationSettings(asset, sunburst);
+    const settings = imageGenerationSettings(asset, flare);
     await client.generate({ assetId: asset.id, settings });
     await client.generateStream({
       assetId: asset.id, settings, references: [{ name: "source.png", dataUrl: "data:image/png;base64,reference" }]
@@ -118,7 +122,7 @@ test("selected model reaches image, edit, tileset-animation and promotion endpoi
     await client.generateTilesetAnimationStream({ assetId: asset.id, animationKey: "walk", settings }, () => {});
     await client.saveTilesetAnimation({ assetId: asset.id, animationKey: "walk", frames: [], settings });
     await client.save({ assetId: asset.id, versionName: "new", dataUrl: "data:image/png;base64,new",
-      prompt: asset.prompt, model: sunburst, settings });
+      prompt: asset.prompt, model: flare, settings });
 
     assert.deepEqual(requests.map((request) => request.path), [
       "/__ai-assets/generate",
@@ -127,8 +131,8 @@ test("selected model reaches image, edit, tileset-animation and promotion endpoi
       "/__ai-assets/save-tileset-animation",
       "/__ai-assets/save"
     ]);
-    for (const request of requests) assert.deepEqual(request.body.settings, { model: sunburst });
-    assert.equal(requests.at(-1).body.model, sunburst);
+    for (const request of requests) assert.deepEqual(request.body.settings, { model: flare });
+    assert.equal(requests.at(-1).body.model, flare);
   } finally {
     globalThis.fetch = previousFetch;
   }
@@ -137,8 +141,8 @@ test("selected model reaches image, edit, tileset-animation and promotion endpoi
 test("regenerating a tile with a new picker model carries that preference into mixed and edited output", async () => {
   const tileset = { tileWidth: 16, tileHeight: 16, columns: 1, rows: 1, tileCount: 1 };
   const candidate = {
-    index: 0, dataUrl: "data:image/png;base64,sunburst", mimeType: "image/png",
-    prompt: "Grass tile", model: sunburst, settings: { model: sunburst, format: "png" },
+    index: 0, dataUrl: "data:image/png;base64,flare", mimeType: "image/png",
+    prompt: "Grass tile", model: flare, settings: { model: flare, format: "png" },
     dimensions: { width: 16, height: 16 }, tileset
   };
   const original = structuredClone(candidate);
@@ -150,7 +154,7 @@ test("regenerating a tile with a new picker model carries that preference into m
     return Response.json({ options: [{
       ...candidate, model: body.settings.model,
       settings: { model: body.settings.model, format: "webp" },
-      dataUrl: "data:image/webp;base64,flare", mimeType: "image/webp"
+      dataUrl: "data:image/webp;base64,default-model", mimeType: "image/webp"
     }] });
   };
   try {
@@ -176,7 +180,7 @@ test("regenerating a tile with a new picker model carries that preference into m
 });
 
 test("animation mixing uses the latest completed regeneration model and manual edits preserve saved sequence settings", () => {
-  const session = createImageGenerationSession({ model: sunburst, settings: { model: sunburst, format: "png" } });
+  const session = createImageGenerationSession({ model: flare, settings: { model: flare, format: "png" } });
   const untouched = { index: 0, dataUrl: "base", mimeType: "image/png", prompt: "Base", model: "uploaded" };
   assert.strictEqual(session.applyTo(untouched), untouched, "manual-only edits never invent generation metadata");
   session.record({ ...untouched, model: DEFAULT_IMAGE_MODEL,
@@ -186,12 +190,12 @@ test("animation mixing uses the latest completed regeneration model and manual e
 
   const tilesetAsset = structuredClone(asset);
   tilesetAsset.versions.old.tilesetAnimations = {
-    water: { files: ["water.png"], settings: { model: sunburst, quality: "xhigh" } }
+    water: { files: ["water.png"], settings: { model: flare, quality: "xhigh" } }
   };
   const saved = tilesetAnimationSettingsForEdit(tilesetAsset, "water");
-  assert.deepEqual(saved, { model: sunburst, quality: "xhigh" });
+  assert.deepEqual(saved, { model: flare, quality: "xhigh" });
   saved.model = DEFAULT_IMAGE_MODEL;
-  assert.equal(tilesetAsset.versions.old.tilesetAnimations.water.settings.model, sunburst);
+  assert.equal(tilesetAsset.versions.old.tilesetAnimations.water.settings.model, flare);
   assert.deepEqual(tilesetAnimationSettingsForEdit(tilesetAsset, "water", { model: "pending-model" }),
     { model: "pending-model" });
   const mixedSettings = tilesetAnimationSettingsForEdit(tilesetAsset, "water", undefined, session.settings);

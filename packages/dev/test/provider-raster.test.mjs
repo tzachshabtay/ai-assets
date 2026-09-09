@@ -74,16 +74,16 @@ test("model selection respects request, asset, provider, and new default precede
     };
     const asset = imageAsset({ width: 2, height: 2 });
     await createOpenAiImageProvider({ apiKey: "test-key" }).generate({ asset });
-    const provider = createOpenAiImageProvider({ apiKey: "test-key", model: "gpt-image-2.5-sunburst" });
+    const provider = createOpenAiImageProvider({ apiKey: "test-key", model: "gpt-image-2.5-flare" });
     await provider.generate({ asset });
     const pinnedAsset = { ...asset, settings: { ...asset.settings, model: "gpt-image-2" } };
     await provider.generate({ asset: pinnedAsset });
     const [option] = await provider.generate({
       asset: pinnedAsset,
-      settings: { model: "gpt-image-2.5-flare" }
+      settings: { model: "gpt-image-2.5-sunburst" }
     });
-    assert.deepEqual(models, ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2", "gpt-image-2.5-flare"]);
-    assert.equal(option.model, "gpt-image-2.5-flare");
+    assert.deepEqual(models, ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2", "gpt-image-2.5-sunburst"]);
+    assert.equal(option.model, "gpt-image-2.5-sunburst");
     assert.equal(option.settings.model, option.model);
   } finally {
     globalThis.fetch = originalFetch;

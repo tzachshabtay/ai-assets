@@ -205,6 +205,7 @@ import {
   renderAudioPlayer,
   renderOptions,
   resolvePreviewDisplaySize,
+  setCurrentImagePreview,
   setStatus,
   stopStatusAnimation,
   styleGuideDraftFromManifest,
@@ -791,7 +792,7 @@ export function installAiAssetDesigner(
 
   const syncTargetAsset = (
     assetId: string,
-    syncOptions: { preserveOptions?: boolean } = {}
+    syncOptions: { preserveOptions?: boolean; imagePreviewSource?: string } = {}
   ) => {
     const asset = manifest.assets[assetId];
     const activeVersion = asset.versions[asset.activeVersion];
@@ -875,7 +876,11 @@ export function installAiAssetDesigner(
     elements.versionLabel.textContent = selectedTilesetAnimationKey
       ? `Active ${readableAssetName(assetId)} animation: ${readableAssetName(selectedTilesetAnimationKey)}`
       : `Active ${readableAssetName(assetId)}: ${asset.activeVersion}`;
-    elements.currentImage.src = activeVersionSource;
+    setCurrentImagePreview(
+      elements.currentImage,
+      activeVersionSource,
+      isAudio ? undefined : syncOptions.imagePreviewSource
+    );
     if (isAudio) {
       renderAudioPlayer({
         container: elements.currentAudio,
@@ -985,7 +990,7 @@ export function installAiAssetDesigner(
       });
     } else {
       elements.currentAudio.innerHTML = "";
-      elements.currentImage.src = option.dataUrl;
+      setCurrentImagePreview(elements.currentImage, option.dataUrl);
       elements.currentImage.alt = `${readableAssetName(selectedTargetAssetId)} ${label}`;
     }
   };
@@ -1409,7 +1414,7 @@ export function installAiAssetDesigner(
       setStatus(elements, "Reverted preview to the active version.", "info");
     } else {
       elements.currentAudio.innerHTML = "";
-      elements.currentImage.src = activeVersionSource;
+      setCurrentImagePreview(elements.currentImage, activeVersionSource);
       elements.currentImage.alt = `${readableAssetName(selectedTargetAssetId)} active version`;
       setStatus(elements, "Reverting preview in the game...", "busy");
       previewCurrentAsset({
@@ -1839,7 +1844,7 @@ export function installAiAssetDesigner(
       options.onPreview(selectedTargetAssetId, activeVersionSource, asset);
     } else {
       const activeVersionSource = resolveAssetUrl(activeVersion.file);
-      elements.currentImage.src = activeVersionSource;
+      setCurrentImagePreview(elements.currentImage, activeVersionSource);
       previewCurrentAsset({
         scene: options.scene,
         manifest,
@@ -2759,7 +2764,10 @@ export function installAiAssetDesigner(
     modelDrafts.delete(promotedAssetId);
     if (isPromotionPanelCurrent()) {
       try {
-        syncTargetAsset(promotedAssetId, { preserveOptions: true });
+        syncTargetAsset(promotedAssetId, {
+          preserveOptions: true,
+          imagePreviewSource: promotedOption.dataUrl
+        });
       } catch (error) {
         captureLiveRefreshError(error);
       }
@@ -2806,6 +2814,7 @@ export function installAiAssetDesigner(
     syncMixTilesetButton();
     let promotedCount = 0;
     let promotionError: { assetId: string; error: unknown } | undefined;
+    const promotedImageSources = new Map<string, string>();
     const liveRefreshErrors: Array<{ assetId: string; error: unknown }> = [];
 
     for (const [index, [assetId, pending]] of entries.entries()) {
@@ -2937,6 +2946,9 @@ export function installAiAssetDesigner(
           liveRefreshErrors.push({ assetId, error });
         }
 
+        if (!isAudioAsset(promotedAsset)) {
+          promotedImageSources.set(assetId, pending.option.dataUrl);
+        }
         pendingOptions.delete(assetId);
         resolveDeferredVoiceLinePendingOption(assetId);
         formatDrafts.delete(assetId);
@@ -2952,7 +2964,9 @@ export function installAiAssetDesigner(
       if (promotedCount > 0) {
         options.onManifestUpdated?.(manifest);
       }
-      syncTargetAsset(selectedTargetAssetId);
+      syncTargetAsset(selectedTargetAssetId, {
+        imagePreviewSource: promotedImageSources.get(selectedTargetAssetId)
+      });
       renderAssetBrowser();
     } catch (error) {
       liveRefreshErrors.push({ assetId: selectedTargetAssetId, error });
@@ -3052,7 +3066,7 @@ export function installAiAssetDesigner(
           });
           options.onPreview(selectedTargetAssetId, versionOption.dataUrl, optionAsset);
         } else {
-          elements.currentImage.src = versionOption.dataUrl;
+          setCurrentImagePreview(elements.currentImage, versionOption.dataUrl);
           previewImageSource({
             scene: options.scene,
             manifest,
@@ -3533,7 +3547,7 @@ export function installAiAssetDesigner(
             inheritAnimations: Boolean(previewedVersionName),
             previewedVersionName
           });
-          elements.currentImage.src = dataUrl;
+          setCurrentImagePreview(elements.currentImage, dataUrl);
           elements.currentPreview.classList.add("is-selected");
           elements.currentRevertButton.hidden = false;
           elements.promoteButton.disabled = activePromotionId !== undefined;
@@ -3581,7 +3595,7 @@ export function installAiAssetDesigner(
           inheritAnimations: Boolean(previewedVersionName),
           previewedVersionName
         });
-        elements.currentImage.src = dataUrl;
+        setCurrentImagePreview(elements.currentImage, dataUrl);
         elements.currentPreview.classList.add("is-selected");
         elements.currentRevertButton.hidden = false;
         elements.promoteButton.disabled = activePromotionId !== undefined;

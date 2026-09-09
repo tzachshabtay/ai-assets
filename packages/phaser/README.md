@@ -10,4 +10,4 @@ npm install @ai-game-assets/core @ai-game-assets/phaser phaser
 
 Use this package to load manifest assets into Phaser, react to designer previews, and install the debug-only asset designer during development.
 
-The designer's Image model selector offers GPT Image 2.5 Flare (the default) and GPT Image 2.5 Sunburst for raster generation, edits, sprites, and tileset animations. Assets with an explicit legacy or custom `settings.model` retain that choice. Promote a generated option to save its model preference; SVG and audio keep their own providers.
+The designer's Image model selector offers GPT Image 2.5 Sunburst (the default) and GPT Image 2.5 Flare for raster generation, edits, sprites, and tileset animations. Assets with an explicit legacy or custom `settings.model` retain that choice. Promote a generated option to save its model preference; SVG and audio keep their own providers.

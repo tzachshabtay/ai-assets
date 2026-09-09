@@ -4,7 +4,8 @@ import test from "node:test";
 import {
   installPromotedImageTexture,
   previewImageSource,
-  renderOptions
+  renderOptions,
+  setCurrentImagePreview
 } from "../dist/designer-support.js";
 import { AiAssetRuntime } from "../dist/runtime.js";
 
@@ -102,6 +103,68 @@ class FakeElement {
     this.listeners.get(name)?.({});
   }
 }
+
+test("the promoted thumbnail stays visible while its saved image loads or fails", () => {
+  const previousImage = globalThis.Image;
+  const requests = [];
+  globalThis.Image = class {
+    constructor() {
+      requests.push(this);
+    }
+  };
+
+  try {
+    const currentImage = {};
+    const preview = "data:image/png;base64,promoted";
+    const savedUrl = "http://localhost:3977/assets/promoted.png";
+
+    setCurrentImagePreview(currentImage, savedUrl, preview);
+
+    assert.equal(currentImage.src, preview);
+    assert.equal(requests[0].src, savedUrl);
+    requests[0].onerror();
+    assert.equal(currentImage.src, preview, "a failed saved URL must not break Current");
+
+    setCurrentImagePreview(currentImage, savedUrl, preview);
+    assert.equal(currentImage.src, preview);
+    requests[1].onload();
+    assert.equal(currentImage.src, savedUrl, "switch only once the saved image loads");
+  } finally {
+    if (previousImage === undefined) delete globalThis.Image;
+    else globalThis.Image = previousImage;
+  }
+});
+
+test("a late promoted thumbnail load cannot replace a newly selected asset or option", () => {
+  const previousImage = globalThis.Image;
+  const requests = [];
+  globalThis.Image = class {
+    constructor() {
+      requests.push(this);
+    }
+  };
+
+  try {
+    const currentImage = {};
+    setCurrentImagePreview(currentImage, "/first-saved.png", "data:image/png;base64,first");
+    const firstLoad = requests[0].onload;
+    setCurrentImagePreview(currentImage, "/second-asset.png");
+
+    assert.equal(requests[0].onload, null);
+    assert.equal(requests[0].onerror, null);
+    firstLoad();
+    assert.equal(currentImage.src, "/second-asset.png");
+
+    setCurrentImagePreview(currentImage, "/second-saved.png", "data:image/png;base64,second");
+    const secondLoad = requests[1].onload;
+    setCurrentImagePreview(currentImage, "data:image/png;base64,new-option");
+    secondLoad();
+    assert.equal(currentImage.src, "data:image/png;base64,new-option");
+  } finally {
+    if (previousImage === undefined) delete globalThis.Image;
+    else globalThis.Image = previousImage;
+  }
+});
 
 test("a cross-origin active preview supersedes an older generated preview", () => {
   const previousImage = globalThis.Image;
