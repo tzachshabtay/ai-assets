@@ -6,6 +6,10 @@ import {
 } from "@ai-game-assets/core";
 import type { GeneratedDebugOption } from "./debug-client.js";
 import {
+  createGenerationReferenceControl,
+  type GenerationReferenceControlOptions
+} from "./generation-reference.js";
+import {
   imageSourceToDataUrl,
   isSvgSource,
   loadImageElement,
@@ -46,6 +50,7 @@ type CanvasDrawable = {
 
 export async function openDeriveDialog(options: {
   root: HTMLElement;
+  reference?: GenerationReferenceControlOptions;
   asset: AiAssetDefinition;
   assetId: string;
   candidates: DeriveCandidate[];
@@ -170,6 +175,12 @@ export async function openDeriveDialog(options: {
     height: positiveIntegerInput(heightInput, defaultFrameDimensions(options.asset).height)
   });
 
+  const referenceControl = options.reference ? createGenerationReferenceControl({
+    ...options.reference,
+    getDimensions: dimensions
+  }) : undefined;
+  if (referenceControl) card.insertBefore(referenceControl.element, actions);
+
   const update = () => {
     const candidate = selectedCandidate();
     const strategy = strategySelect.value as DeriveStrategy;
@@ -196,6 +207,9 @@ export async function openDeriveDialog(options: {
     cropFields.hidden = strategySelect.value !== "crop";
     tileFields.hidden = strategySelect.value !== "tile";
     preview.hidden = strategySelect.value !== "crop";
+    if (referenceControl) {
+      referenceControl.element.hidden = !["generate", "extend"].includes(strategySelect.value);
+    }
     previewImage.src = candidate.src;
     hint.textContent = hintForStrategy(strategySelect.value as DeriveStrategy, options.format);
     updateCropBox(candidate.asset, dimensions(), cropXInput, cropYInput, previewImage, cropBox);
@@ -208,7 +222,11 @@ export async function openDeriveDialog(options: {
   cropXInput.addEventListener("input", update);
   cropYInput.addEventListener("input", update);
   previewImage.addEventListener("load", update);
-  cancelButton.addEventListener("click", () => dialog.remove());
+  const close = () => {
+    referenceControl?.destroy();
+    dialog.remove();
+  };
+  cancelButton.addEventListener("click", close);
   confirmButton.addEventListener("click", async () => {
     confirmButton.disabled = true;
     const result: DeriveDialogResult = {
@@ -225,7 +243,7 @@ export async function openDeriveDialog(options: {
       mirrorY: mirrorYInput.checked
     };
 
-    dialog.remove();
+    close();
 
     try {
       await options.onConfirm(result);

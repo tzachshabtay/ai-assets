@@ -20,6 +20,7 @@ export type GenerateDebugOptionsRequest = {
     name: string;
     dataUrl: string;
   }>;
+  priorityReference?: { name: string; dataUrl: string };
   dimensions?: {
     width: number;
     height: number;
@@ -94,6 +95,7 @@ export type GenerateTilesetAnimationRequest = {
   assetId: string;
   animationKey: string;
   settings?: AiAssetGenerationSettings;
+  priorityReference?: { name: string; dataUrl: string };
   /** Backward-compatible animation-wide prompt. Prefer `tiles`. */
   prompt?: string;
   frameCount?: number;

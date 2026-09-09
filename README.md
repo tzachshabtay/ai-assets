@@ -301,6 +301,8 @@ The designer supports:
 - breadcrumb navigation through folder-organized assets
 - target-aware editing and deriving variants from other targets
 - prompt, dimensions, format, frame-grid, audio length, and voice settings
+- unsaved field edits retained per asset, target, and animation until the page is refreshed
+- a priority reference for image and animation generation: choose from the asset tree (including animation sheets), upload from your computer, or sketch in the built-in image editor
 - streaming generation options as they complete
 - generated animation candidates contain no inherited animation metadata; temporary sheet playback is derived from the candidate frame grid, while timing, tags, and transforms are authored only after choosing a sheet
 - selecting a generated or saved option updates the Current preview without promoting it, so it can be edited in place; Revert preview restores the active promoted version
@@ -318,6 +320,17 @@ The designer supports:
 - audio editor with waveform preview, trim markers, volume, loop, and playback settings
 
 Production builds should not bundle or install the designer.
+
+Use **Add reference** beside the generation controls to guide the next image or animation. The selected
+reference takes precedence over existing asset and style references for appearance, composition, and pose,
+while the requested dimensions and frame/tile grid remain fixed. References and unpromoted field edits
+stay in memory when switching assets during the session; refreshing restores the saved asset settings.
+Remove the reference to return to the usual asset and style references. Tile editors, tileset mixers,
+and AI derivation controls use the same reference picker.
+
+Programmatically, pass `priorityReference: { name: "outline.png", dataUrl }` to the debug client's
+`generate`, `generateStream`, or `generateTilesetAnimationStream` request. Ordinary `references` remain
+available for supporting context.
 
 ## Local Dev Server
 

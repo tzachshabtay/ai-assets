@@ -10,6 +10,10 @@ import type {
   GeneratedTilesetAnimationCandidate
 } from "./debug-client.js";
 import {
+  createGenerationReferenceControl,
+  type GenerationReferenceControlOptions
+} from "./generation-reference.js";
+import {
   assetWithGeneratedGeometry,
   decimalInput,
   integerInput,
@@ -228,6 +232,7 @@ type TilesetMixerResult = {
 
 type TilesetMixerOptions = {
   root: HTMLElement;
+  reference?: GenerationReferenceControlOptions;
   assetId: string;
   ariaLabel: string;
   title: string;
@@ -350,6 +355,7 @@ export function planTilesetBaseMix(
 
 export async function openTilesetEditor(options: {
   root: HTMLElement;
+  reference?: GenerationReferenceControlOptions;
   asset: AiAssetDefinition;
   assetId: string;
   src: string;
@@ -460,6 +466,13 @@ export async function openTilesetEditor(options: {
   let busy = false;
   let childModalOpen = false;
   let closed = false;
+  const referenceControl = options.reference ? createGenerationReferenceControl({
+    ...options.reference,
+    getDimensions: () => ({ width: tileset.tileWidth, height: tileset.tileHeight }),
+    onOpen: () => { childModalOpen = true; options.reference?.onOpen?.(); },
+    onClose: () => { childModalOpen = false; options.reference?.onClose?.(); }
+  }) : undefined;
+  if (referenceControl) card.insertBefore(referenceControl.element, actions);
   const tileButtons: HTMLButtonElement[] = [];
   const tilePreviewElements: HTMLSpanElement[] = [];
 
@@ -592,6 +605,7 @@ export async function openTilesetEditor(options: {
   const close = () => {
     if (closed) return;
     closed = true;
+    referenceControl?.destroy();
     window.removeEventListener("keydown", keyHandler, true);
     dialog.remove();
   };
@@ -1226,6 +1240,7 @@ function tilesetErrorMessage(error: unknown): string {
 
 export async function openTilesetBaseMixerDialog(options: {
   root: HTMLElement;
+  reference?: GenerationReferenceControlOptions;
   asset: AiAssetDefinition;
   assetId: string;
   baseSheetSrc: string;
@@ -1264,6 +1279,7 @@ export async function openTilesetBaseMixerDialog(options: {
 
   const mixed = await openTilesetMixerDialog({
     root: options.root,
+    reference: options.reference,
     assetId: options.assetId,
     ariaLabel: `Mix ${readableAssetName(options.assetId)} base tileset`,
     title: `${readableAssetName(options.assetId)} · Base tileset`,
@@ -1318,6 +1334,7 @@ export async function openTilesetBaseMixerDialog(options: {
 
 export async function openTilesetAnimationMixerDialog(options: {
   root: HTMLElement;
+  reference?: GenerationReferenceControlOptions;
   asset: AiAssetDefinition;
   assetId: string;
   animationKey: string;
@@ -1390,6 +1407,7 @@ export async function openTilesetAnimationMixerDialog(options: {
   );
   const mixed = await openTilesetMixerDialog({
     root: options.root,
+    reference: options.reference,
     assetId: options.assetId,
     ariaLabel: `Mix ${readableAssetName(options.assetId)} ${readableAssetName(options.animationKey)}`,
     title: `${readableAssetName(options.assetId)} · ${readableAssetName(options.animationKey)}`,
@@ -1543,6 +1561,17 @@ function openTilesetMixerDialog(
     let timeout: number | undefined;
     let closed = false;
     let busy = false;
+    let referenceOpen = false;
+    const referenceControl = options.reference ? createGenerationReferenceControl({
+      ...options.reference,
+      getDimensions: () => ({
+        width: options.targetTileset.tileWidth,
+        height: options.targetTileset.tileHeight
+      }),
+      onOpen: () => { referenceOpen = true; options.reference?.onOpen?.(); },
+      onClose: () => { referenceOpen = false; options.reference?.onClose?.(); }
+    }) : undefined;
+    if (referenceControl) previewPanel.append(referenceControl.element);
     const selections = [...options.selections];
     const navigatorButtons: HTMLButtonElement[] = [];
     const choiceButtons = new Map<TilesetMixSelection, HTMLButtonElement>();
@@ -1710,6 +1739,7 @@ function openTilesetMixerDialog(
     const close = (result: TilesetMixerResult | undefined) => {
       if (closed) return;
       closed = true;
+      referenceControl?.destroy();
       if (timeout !== undefined) window.clearTimeout(timeout);
       window.removeEventListener("keydown", keyHandler, true);
       dialog.remove();
@@ -1718,7 +1748,7 @@ function openTilesetMixerDialog(
 
     const keyHandler = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (busy) return;
+      if (busy || referenceOpen) return;
       event.preventDefault();
       close(undefined);
     };

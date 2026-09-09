@@ -45,6 +45,8 @@ export type GenerateAssetRequest = {
   count?: number;
   settings?: AiAssetGenerationSettings;
   references?: GenerateAssetReference[];
+  /** Explicit visual direction that takes precedence over contextual references. */
+  priorityReference?: GenerateAssetReference;
   stylePrompt?: string;
   styleReferences?: GenerateAssetReference[];
   signal?: AbortSignal;
@@ -92,6 +94,7 @@ export type GenerateTilesetAnimationRequest = {
   count?: number;
   settings?: AiAssetGenerationSettings;
   baseReference: GenerateAssetReference;
+  priorityReference?: GenerateAssetReference;
   stylePrompt?: string;
   styleReferences?: GenerateAssetReference[];
   signal?: AbortSignal;
@@ -150,7 +153,8 @@ export async function generateTilesetAnimationBranches(
             branchIndex: index,
             branchCount,
             branchSeed,
-            priorFrameCount: previousFrameReferences.length
+            priorFrameCount: previousFrameReferences.length,
+            hasPriorityReference: Boolean(request.priorityReference)
           }),
           count: 1,
           settings: {
@@ -159,6 +163,7 @@ export async function generateTilesetAnimationBranches(
             frameAlignment: "none"
           },
           references: [request.baseReference, ...previousFrameReferences],
+          priorityReference: request.priorityReference,
           stylePrompt: request.stylePrompt,
           styleReferences: request.styleReferences,
           signal: request.signal
@@ -200,6 +205,7 @@ export function tilesetAnimationFramePrompt(
     branchCount: number;
     branchSeed: string;
     priorFrameCount: number;
+    hasPriorityReference?: boolean;
   }
 ): string {
   const brief = context.prompt?.trim() || animation.prompt?.trim() ||
@@ -218,10 +224,16 @@ export function tilesetAnimationFramePrompt(
     `Generate animation frame ${frameNumber} of ${animation.frameCount} for tileset animation "${animation.key}".`,
     `This is candidate branch ${context.branchIndex + 1} of ${context.branchCount}; branch identity seed: ${context.branchSeed}.`,
     "Edit Reference 1 in place and return one complete full-size tileset sheet, never an individual tile or a contact sheet of animation phases.",
-    "Reference 1 is the immutable spatial source of truth. Its canvas bounds, top-left origin, tile coordinates, palette, scale, cell boundaries, edge continuity, and pixel alignment have absolute precedence over every other reference and instruction.",
+    context.hasPriorityReference
+      ? "Reference 1 controls the sheet's canvas bounds, top-left origin, tile coordinates, cell boundaries, and pixel alignment. The separately labeled priority reference controls intended appearance, composition within each cell, and pose when other references conflict."
+      : "Reference 1 is the immutable spatial source of truth. Its canvas bounds, top-left origin, tile coordinates, palette, scale, cell boundaries, edge continuity, and pixel alignment have absolute precedence over every other reference and instruction.",
     priorReferenceDescription,
-    "Do not redraw or re-lay out the sheet. Preserve every tile at exactly the same index and pixel coordinates; do not shift the canvas or add, remove, reorder, resize, crop, relight, restyle, or redesign tiles.",
-    "Only change pixels explicitly required by a tile's animation instruction. Copy every other pixel from Reference 1 unchanged.",
+    context.hasPriorityReference
+      ? "Preserve each tile's index and rectangle. Adapt the artwork inside those rectangles to the priority reference and requested animation; keep unrelated base artwork unchanged."
+      : "Do not redraw or re-lay out the sheet. Preserve every tile at exactly the same index and pixel coordinates; do not shift the canvas or add, remove, reorder, resize, crop, relight, restyle, or redesign tiles.",
+    ...(context.hasPriorityReference ? [] : [
+      "Only change pixels explicitly required by a tile's animation instruction. Copy every other pixel from Reference 1 unchanged."
+    ]),
     ...(tileInstructions.length
       ? [
           "Follow these tile instructions in exact row-major sheet order. Match each tile number to the authoritative generation-canvas rectangle supplied later in the complete model prompt:",
@@ -291,7 +303,7 @@ export function createOpenAiImageProvider(
       const frameAlignment =
         request.settings?.frameAlignment ??
         request.asset.settings?.frameAlignment ??
-        "center";
+        (request.priorityReference ? "none" : "center");
       if (shouldGenerateIsolatedSpriteFrames(request, transparentBackground)) {
         return generateIsolatedSpriteSheetFrames(provider, request, {
           prompt,
@@ -332,6 +344,7 @@ export function createOpenAiImageProvider(
         : request.references ?? [];
       const allReferences = [
         ...assetReferences,
+        ...priorityImageReferences(request),
         ...(request.styleReferences ?? []).map((reference, index) => ({
           ...reference,
           fileName: `style-reference-${index + 1}-${reference.fileName}`
@@ -635,6 +648,7 @@ async function generateSvgAssets(
   const dimensions = requireAssetDimensions(request.asset);
   const references = [
     ...(request.references ?? []),
+    ...priorityImageReferences(request),
     ...(request.styleReferences ?? []).map((reference, index) => ({
       ...reference,
       fileName: `style-reference-${index + 1}-${reference.fileName}`
@@ -735,7 +749,7 @@ function svgAssetPrompt(
 
   if (request.asset.kind === "tileset") {
     lines.push(...tilesetContractPromptLines(request.asset, false));
-    if (request.references?.length) {
+    if (request.references?.length && !request.priorityReference) {
       lines.push(
         "Treat the first non-style reference as the immutable base tileset and any later non-style references as earlier animation phases. Preserve exact tile identity, indices, cell boundaries, palette, and alignment."
       );
@@ -776,11 +790,34 @@ function svgAssetPrompt(
     );
   }
 
+  lines.push(...priorityReferencePromptLines(request));
   return lines.join("\n");
 }
 
 function referencesNeedIdentity(request: GenerateAssetRequest): boolean {
-  return Boolean(request.references?.length);
+  return Boolean(request.references?.length) && !request.priorityReference;
+}
+
+function priorityImageReferences(request: GenerateAssetRequest): GenerateAssetReference[] {
+  return request.priorityReference ? [{
+    ...request.priorityReference,
+    fileName: `priority-reference-${request.priorityReference.fileName}`
+  }] : [];
+}
+
+function priorityReferencePromptLines(request: GenerateAssetRequest): string[] {
+  if (!request.priorityReference) return [];
+  const referenceNumber = (request.references?.length ?? 0) + 1;
+  return [
+    `Priority visual reference: Reference ${referenceNumber}, labeled with the priority-reference- filename prefix, is the image explicitly chosen by the user for this generation.`,
+    "Follow this priority image for intended appearance, composition, and pose. When it conflicts with base artwork, character identity references, prior frames, or style references, the priority image takes precedence. Keep those other images as supporting context only where compatible.",
+    "Preserve its intended placement instead of applying generic centering or pose suggestions, while honoring any explicitly configured frame alignment.",
+    "Apply the requested edits and animation motion to this visual direction. A sketch is guidance to interpret and finish as artwork, not an extra panel to reproduce.",
+    "The declared output dimensions, frame count, tile indices, grid cell boundaries, and transparency requirements remain mandatory. Adapt the priority image inside the assigned canvas or cells; its own image dimensions and any drawn guides do not replace the asset's geometry.",
+    ...(request.asset.kind === "tileset" && request.references?.length ? [
+      "Reference 1 remains the base sheet for tile coordinates and unchanged context; it does not override the priority image's intended appearance or pose inside each tile rectangle."
+    ] : [])
+  ];
 }
 
 async function createSvgResponse(
@@ -871,7 +908,9 @@ export function gameAssetPrompt(
   }
   lines.push(...(isTilesetAnimation
     ? [
-        "Perform a minimal in-place edit of the immutable base tileset reference; do not redraw the sheet.",
+        request.priorityReference
+          ? "Edit the base tileset within its fixed tile rectangles, adapting its artwork to the priority visual reference and requested animation."
+          : "Perform a minimal in-place edit of the immutable base tileset reference; do not redraw the sheet.",
         `Asset kind: ${request.asset.kind}.`,
         ...(context.tilesetGeometry
           ? tilesetGenerationGeometryPromptLines(
@@ -980,7 +1019,9 @@ export function gameAssetPrompt(
     }
   }
 
-  if (request.references?.length && request.asset.kind === "tileset" && isTilesetAnimation) {
+  if (request.priorityReference) {
+    lines.push("Keep existing base, identity, motion, and style references as context subject to the priority visual reference rules below.");
+  } else if (request.references?.length && request.asset.kind === "tileset" && isTilesetAnimation) {
     lines.push(
       "Reference 1 always controls sheet geometry and unchanged artwork. Use later non-style references only to understand chronological motion; never copy a shifted grid, changed cell boundary, or unintended redraw from them.",
       "Keep Reference 1's top-left origin and exact tile rectangles. Change only pixels explicitly requested by the animation tile instructions."
@@ -1028,6 +1069,7 @@ export function gameAssetPrompt(
     );
   }
 
+  lines.push(...priorityReferencePromptLines(request));
   return lines.join("\n");
 }
 

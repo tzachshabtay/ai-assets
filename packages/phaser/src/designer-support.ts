@@ -1095,10 +1095,19 @@ export async function openFrameTouchUpEditor(options: {
   frameSlot?: number;
   frame?: number;
   displaySize: AiAssetPreviewDisplaySize;
+  signal?: AbortSignal;
   onSave(dataUrl: string): void | Promise<void>;
   onClose?(): void;
 }): Promise<void> {
+  if (options.signal?.aborted) {
+    options.onClose?.();
+    return;
+  }
   const sourceImage = await loadImageElement(options.frameSrc);
+  if (options.signal?.aborted) {
+    options.onClose?.();
+    return;
+  }
   const dialog = document.createElement("div");
   dialog.className = "ai-game-assets-designer__touchup";
   dialog.setAttribute("role", "dialog");
@@ -1826,6 +1835,7 @@ export async function openFrameTouchUpEditor(options: {
   const close = () => {
     if (disposed) return;
     disposed = true;
+    options.signal?.removeEventListener("abort", close);
     if (animationTimeout !== undefined) window.clearTimeout(animationTimeout);
     window.removeEventListener("keydown", keyHandler, true);
     window.removeEventListener("pointerup", finishPointer, true);
@@ -2108,6 +2118,12 @@ export async function openFrameTouchUpEditor(options: {
     close();
   });
   window.addEventListener("keydown", keyHandler, true);
+
+  if (options.signal?.aborted) {
+    close();
+    return;
+  }
+  options.signal?.addEventListener("abort", close, { once: true });
 
   updateZoom();
   updateToolButtons();

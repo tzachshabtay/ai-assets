@@ -55,6 +55,19 @@ import {
   tilesetAnimationSettingsForEdit
 } from "./image-generation-preferences.js";
 import {
+  DesignerSessionDrafts,
+  DesignerDraftInputSnapshot,
+  designerDraftContextKey,
+  savedDesignerDraftValues,
+  type DesignerDraftContext
+} from "./session-drafts.js";
+import {
+  createGenerationReferenceControl,
+  type GenerationReference,
+  type GenerationReferenceControl,
+  type GenerationReferenceControlOptions
+} from "./generation-reference.js";
+import {
   promotedVoiceId,
   regenerateAndPromoteVoiceLines,
   voiceLineRegenerationPlan
@@ -174,7 +187,6 @@ import {
   bindKeyboardCapture,
   canEditGenerationFormat,
   createDesignerElements,
-  effectiveGenerationFormat,
   ensureDesignerStyles,
   errorMessage,
   generationOverridesFromInputs,
@@ -244,10 +256,9 @@ export function installAiAssetDesigner(
     animationOnlyKey?: string;
   }>();
   let styleGuideDraft = styleGuideDraftFromManifest(manifest, resolveAssetUrl);
-  const formatDrafts = new Map<string, AiAssetFormat>();
-  const modelDrafts = new Map<string, string>();
-  const tilesetPromptDrafts = new Map<string, string[]>();
-  const tilesetAnimationPromptDrafts = new Map<string, string[]>();
+  const sessionDrafts = new DesignerSessionDrafts();
+  let renderedDraftContext: DesignerDraftContext | undefined;
+  let renderedFormatEditable = false;
   const tilesetAnimationFrameDrafts = new Map<string, Promise<string[]>>();
   let tilesetAnimationPromptRevision = 0;
   let displayedTilesetAnimationOptions:
@@ -290,8 +301,31 @@ export function installAiAssetDesigner(
     | undefined;
   let mixingTileset = false;
 
+  const draftContextFor = (
+    assetId: string,
+    animationKey?: string,
+    targetId = selectedTargetId
+  ): DesignerDraftContext => ({ assetId, targetId, animationKey });
+
+  const draftValuesFor = (
+    assetId: string,
+    animationKey?: string,
+    targetId = selectedTargetId
+  ) => {
+    const asset = manifest.assets[assetId];
+    return sessionDrafts.resolve(
+      draftContextFor(assetId, animationKey, targetId),
+      savedDesignerDraftValues(asset, animationKey),
+      asset.activeVersion
+    );
+  };
+
+  const generationFormatForAsset = (assetId: string): AiAssetFormat =>
+    draftValuesFor(canEditGenerationFormat(manifest, selectedAssetId, assetId)
+      ? assetId : selectedAssetId).format;
+
   const imageSettingsForAsset = (assetId: string, format?: AiAssetFormat, animationKey?: string) =>
-    imageGenerationSettings(manifest.assets[assetId], modelDrafts.get(assetId), format, animationKey);
+    imageGenerationSettings(manifest.assets[assetId], draftValuesFor(assetId, animationKey).model, format, animationKey);
 
   const regenerateTilesetTile = async (
     assetId: string,
@@ -299,11 +333,13 @@ export function installAiAssetDesigner(
     tileset: TilesetTileGenerationOverride,
     currentTileSrc: string
   ): Promise<GeneratedDebugOption[]> => {
+    const priorityReference = referenceForAsset(assetId);
     const guide = await styleGuideRequest(styleGuideDraft);
-    const format = effectiveGenerationFormat(manifest, formatDrafts, selectedAssetId, assetId);
+    const format = generationFormatForAsset(assetId);
     return client.generate({
       assetId,
       count: 3,
+      priorityReference,
       settings: imageSettingsForAsset(assetId, format),
       format,
       tileset,
@@ -338,6 +374,78 @@ export function installAiAssetDesigner(
   mount.append(elements.root);
   const unbindInputBoundary = bindDesignerInputBoundary(elements.root, elements.toggle);
   bindKeyboardCapture(elements.root, options.scene);
+
+  const referenceDrafts = new Map<string, GenerationReference>();
+  let mainReferenceControl: GenerationReferenceControl | undefined;
+  let mainReferenceKey: string | undefined;
+  const referenceSlot = document.createElement("div");
+  elements.promptField.after(referenceSlot);
+
+  const referenceForAsset = (assetId: string, animationKey?: string) => {
+    const reference = referenceDrafts.get(designerDraftContextKey(draftContextFor(assetId, animationKey)));
+    return reference ? { ...reference } : undefined;
+  };
+
+  const referenceOptionsFor = (
+    context: DesignerDraftContext,
+    syncMain = true
+  ): GenerationReferenceControlOptions => {
+    const key = designerDraftContextKey(context);
+    return {
+      root: elements.root,
+      getManifest: () => manifest,
+      resolveAssetUrl,
+      getAsset: () => manifest.assets[context.assetId],
+      getDimensions: () => {
+        const asset = manifest.assets[context.assetId];
+        return {
+          width: asset.frameGrid?.frameWidth ?? asset.tileset?.tileWidth ?? asset.dimensions?.width ?? 512,
+          height: asset.frameGrid?.frameHeight ?? asset.tileset?.tileHeight ?? asset.dimensions?.height ?? 512
+        };
+      },
+      initialValue: referenceDrafts.get(key),
+      onChange: (reference) => {
+        if (reference) referenceDrafts.set(key, { ...reference });
+        else referenceDrafts.delete(key);
+        if (syncMain && mainReferenceKey === key) mainReferenceControl?.setValue(reference);
+      }
+    };
+  };
+
+  const syncReferenceControl = (context: DesignerDraftContext) => {
+    mainReferenceControl?.destroy();
+    mainReferenceControl = undefined;
+    referenceSlot.replaceChildren();
+    mainReferenceKey = designerDraftContextKey(context);
+    referenceSlot.hidden = isAudioAsset(manifest.assets[context.assetId]);
+    if (referenceSlot.hidden) return;
+    mainReferenceControl = createGenerationReferenceControl({
+      ...referenceOptionsFor(context, false),
+      getDimensions: () => ({
+        width: positiveIntegerInput(elements.widthInput, 512),
+        height: positiveIntegerInput(elements.heightInput, 512)
+      })
+    });
+    referenceSlot.append(mainReferenceControl.element);
+  };
+
+  const panelDraftInputs = () => ({
+    prompt: elements.promptInput.value,
+    width: elements.widthInput.value,
+    height: elements.heightInput.value,
+    frameCount: elements.frameCountInput.value,
+    ...(renderedFormatEditable ? { format: normalizeAssetFormat(elements.formatSelect.value) } : {}),
+    ...(!elements.modelSelect.disabled ? { model: elements.modelSelect.value } : {}),
+    audioFormat: normalizeAudioFormat(elements.audioFormatSelect.value),
+    audioDuration: elements.audioDurationInput.value,
+    audioLoop: elements.audioLoopInput.checked,
+    voiceText: elements.voiceTextInput.value
+  });
+  const panelInputSnapshot = new DesignerDraftInputSnapshot();
+  const capturePanelDraft = () => {
+    if (!renderedDraftContext) return;
+    sessionDrafts.update(renderedDraftContext, panelInputSnapshot.capture(panelDraftInputs()));
+  };
 
   const setVoiceLineBatchControlsLocked = (locked: boolean) => {
     if (locked) {
@@ -641,49 +749,19 @@ export function installAiAssetDesigner(
     );
   };
 
-  const tilePromptDraftsForAsset = (assetId: string): string[] => {
-    const existing = tilesetPromptDrafts.get(assetId);
-    if (existing) return existing;
-
-    const configured = tilesetMetadataForAsset(manifest.assets[assetId])?.tiles
-      ?.map((tile) => tile.prompt) ?? [];
-    tilesetPromptDrafts.set(assetId, configured);
-    return configured;
-  };
-
-  const tilesetAnimationPromptDraftKey = (assetId: string, animationKey: string) => (
-    `${assetId}\u0000${animationKey}`
-  );
+  const tilePromptDraftsForAsset = (assetId: string): string[] =>
+    draftValuesFor(assetId).tilePrompts;
 
   const animationTilePromptDraftsForAsset = (
     assetId: string,
     animationKey: string
-  ): string[] => {
-    const draftKey = tilesetAnimationPromptDraftKey(assetId, animationKey);
-    const existing = tilesetAnimationPromptDrafts.get(draftKey);
-    if (existing) return existing;
-
-    const asset = manifest.assets[assetId];
-    const tileset = tilesetMetadataForAsset(asset);
-    const animation = tilesetAnimationForKey(asset, animationKey);
-    const tileCount = tileset
-      ? Math.min(tileset.tileCount ?? tileset.columns * tileset.rows, tileset.columns * tileset.rows)
-      : 0;
-    const configured = animation?.tiles?.map((tile) => tile.prompt) ??
-      Array.from({ length: tileCount }, (_, tile) => {
-        const basePrompt = tileset?.tiles?.[tile]?.prompt?.trim();
-        return basePrompt
-          ? `Keep this ${basePrompt} tile unchanged unless this animation needs it to move.`
-          : "Keep this tile unchanged unless this animation needs it to move.";
-      });
-    tilesetAnimationPromptDrafts.set(draftKey, configured);
-    return configured;
-  };
+  ): string[] => draftValuesFor(assetId, animationKey).tilePrompts;
 
   const renderTilesetPromptInputs = (assetId: string) => {
     const asset = manifest.assets[assetId];
     const tileset = tilesetMetadataForAsset(asset);
     const isAnimation = Boolean(selectedTilesetAnimationKey);
+    const draftContext = draftContextFor(assetId, selectedTilesetAnimationKey);
     const tileCount = isAnimation && tileset
       ? Math.min(tileset.tileCount ?? tileset.columns * tileset.rows, tileset.columns * tileset.rows)
       : effectiveTilesetTileCount(asset);
@@ -713,9 +791,11 @@ export function installAiAssetDesigner(
       input.setAttribute("aria-label", `Tile ${tileIndex + 1} prompt`);
       input.addEventListener("input", () => {
         drafts[tileIndex] = input.value;
-        if (isAnimation && selectedTilesetAnimationKey) {
+        sessionDrafts.update(draftContext, { tilePrompts: drafts });
+        if (isAnimation && draftContext.animationKey && renderedDraftContext &&
+          designerDraftContextKey(renderedDraftContext) === designerDraftContextKey(draftContext)) {
           elements.promoteButton.disabled = true;
-          void stageTilesetAnimationPromptDraft(assetId, selectedTilesetAnimationKey);
+          void stageTilesetAnimationPromptDraft(assetId, draftContext.animationKey);
         }
       });
 
@@ -794,44 +874,31 @@ export function installAiAssetDesigner(
     assetId: string,
     syncOptions: { preserveOptions?: boolean; imagePreviewSource?: string } = {}
   ) => {
+    capturePanelDraft();
+    const draftContext = draftContextFor(assetId, selectedTilesetAnimationKey);
+    renderedDraftContext = draftContext;
+    const draft = draftValuesFor(assetId, selectedTilesetAnimationKey);
     const asset = manifest.assets[assetId];
     const activeVersion = asset.versions[asset.activeVersion];
     const isAudio = isAudioAsset(asset);
     const isVoice = isVoiceAsset(asset);
     const isVoiceLine = asset.kind === "voice-line";
     const tileset = tilesetMetadataForAsset(asset);
-    const tilesetAnimation = selectedTilesetAnimationKey
-      ? tilesetAnimationForKey(asset, selectedTilesetAnimationKey)
-      : undefined;
     stopCurrentAnimationPreview?.();
     stopCurrentAnimationPreview = undefined;
-    elements.promptInput.value = tilesetAnimation?.prompt ?? asset.prompt;
-    elements.widthInput.value = String(
-      asset.frameGrid?.frameWidth ?? tileset?.tileWidth ?? asset.dimensions?.width ?? 1
-    );
-    elements.heightInput.value = String(
-      asset.frameGrid?.frameHeight ?? tileset?.tileHeight ?? asset.dimensions?.height ?? 1
-    );
-    elements.audioFormatSelect.value = asset.audioSettings?.format ?? "mp3";
-    elements.audioDurationInput.value = String(asset.audioSettings?.durationSeconds ?? activeVersion?.durationSeconds ?? "");
-    elements.audioLoopInput.checked = Boolean(asset.audioSettings?.loop);
-    elements.voiceTextInput.value =
-      activeVersion?.voiceSettings?.text ??
-      activeVersion?.voiceSettings?.previewText ??
-      asset.voiceSettings?.text ??
-      asset.voiceSettings?.previewText ??
-      "";
-    elements.formatSelect.value = effectiveGenerationFormat(
-      manifest,
-      formatDrafts,
-      selectedAssetId,
-      assetId
-    );
+    elements.promptInput.value = draft.prompt;
+    elements.widthInput.value = draft.width;
+    elements.heightInput.value = draft.height;
+    elements.audioFormatSelect.value = draft.audioFormat;
+    elements.audioDurationInput.value = draft.audioDuration;
+    elements.audioLoopInput.checked = draft.audioLoop;
+    elements.voiceTextInput.value = draft.voiceText;
+    elements.formatSelect.value = generationFormatForAsset(assetId);
     elements.formatField.hidden = !canEditGenerationFormat(manifest, selectedAssetId, assetId);
     syncImageModelControl(
       elements,
       asset,
-      modelDrafts.get(assetId),
+      draft.model,
       selectedTilesetAnimationKey ? "png" : normalizeAssetFormat(elements.formatSelect.value),
       selectedTilesetAnimationKey
     );
@@ -842,6 +909,7 @@ export function installAiAssetDesigner(
     elements.voiceTextField.firstChild!.textContent = isVoiceLine ? "Text to say" : "Demo sentence";
     elements.formatField.hidden = isAudio || Boolean(selectedTilesetAnimationKey) ||
       elements.formatField.hidden;
+    renderedFormatEditable = !elements.formatField.hidden;
     const isTilesetAnimation = Boolean(tileset && selectedTilesetAnimationKey);
     const isBaseTileset = Boolean(tileset && !selectedTilesetAnimationKey);
     elements.promptField.hidden = Boolean(tileset);
@@ -853,13 +921,7 @@ export function installAiAssetDesigner(
       : tileset ? "Tiles" : "Frames";
     elements.dimensionGrid.hidden = isAudio || isTilesetAnimation;
     syncTargetVariantLabel(assetId);
-    elements.frameCountInput.value = String(isTilesetAnimation
-      ? tilesetAnimation?.frameCount ?? 1
-      : asset.frameGrid?.frameCount ??
-        (asset.frameGrid
-          ? asset.frameGrid.columns * asset.frameGrid.rows
-          : tileset?.tileCount ?? (tileset ? tileset.columns * tileset.rows : 1))
-    );
+    elements.frameCountInput.value = draft.frameCount;
     if (tileset && !isTilesetAnimation) {
       elements.frameCountInput.max = String(tileset.columns * tileset.rows);
     } else {
@@ -870,6 +932,7 @@ export function installAiAssetDesigner(
     } else {
       elements.tilesetPromptsList.replaceChildren();
     }
+    syncReferenceControl(draftContext);
     const activeVersionSource = activeVersion?.file ? resolveAssetUrl(activeVersion.file) : "";
     elements.frameCountField.hidden = !isTilesetAnimation &&
       (!tileset && (asset.kind === "image" || !asset.frameGrid));
@@ -940,6 +1003,7 @@ export function installAiAssetDesigner(
       elements.promoteButton.disabled = activePromotionId !== undefined;
     }
     syncPromoteAllButton();
+    panelInputSnapshot.reset(panelDraftInputs());
   };
 
   const showOptionInCurrentPreview = (
@@ -1524,8 +1588,11 @@ export function installAiAssetDesigner(
     return candidates;
   };
 
-  const ensureTargetVariantForDerive = async (targetAssetId: string): Promise<string> => {
+  const ensureTargetVariantForDerive = async (targetAssetId: string): Promise<string | undefined> => {
     if (!selectedTargetId) return targetAssetId;
+    capturePanelDraft();
+    const sourceContext = draftContextFor(targetAssetId, selectedTilesetAnimationKey);
+    const workflowPanelRevision = panelRevision;
 
     const logicalAssetId = logicalAssetIdForTargetAsset(targetAssetId) ?? targetAssetId;
     const target = manifest.targets?.[selectedTargetId];
@@ -1540,13 +1607,21 @@ export function installAiAssetDesigner(
       "busy"
     );
     const result = await client.ensureTargetVariant({
-      targetId: selectedTargetId,
+      targetId: sourceContext.targetId!,
       assetId: logicalAssetId
     });
-    const modelDraft = modelDrafts.get(targetAssetId);
-    if (modelDraft) modelDrafts.set(result.assetId, modelDraft);
+    capturePanelDraft();
     manifest = result.manifest;
+    const variantContext = { ...sourceContext, assetId: result.assetId };
+    draftValuesFor(result.assetId, sourceContext.animationKey, sourceContext.targetId);
+    sessionDrafts.copyChanges(sourceContext, variantContext);
+    const sourceReference = referenceDrafts.get(designerDraftContextKey(sourceContext));
+    const variantReferenceKey = designerDraftContextKey(variantContext);
+    if (sourceReference && !referenceDrafts.has(variantReferenceKey)) {
+      referenceDrafts.set(variantReferenceKey, { ...sourceReference });
+    }
     options.onManifestUpdated?.(manifest);
+    if (panelRevision !== workflowPanelRevision) return undefined;
     selectedTargetAssetId = result.assetId;
     syncAsset(selectedAssetId);
     return result.assetId;
@@ -1603,7 +1678,9 @@ export function installAiAssetDesigner(
   };
 
   const invalidatePanelWork = () => {
+    capturePanelDraft();
     panelRevision += 1;
+    tilesetAnimationPromptRevision += 1;
     if (!activeGeneration) return;
 
     const { controller, id } = activeGeneration;
@@ -1647,6 +1724,7 @@ export function installAiAssetDesigner(
       const candidates = await client.generateTilesetAnimationStream({
         assetId,
         animationKey,
+        priorityReference: referenceForAsset(assetId, animationKey),
         settings: imageSettingsForAsset(assetId, "png", animationKey),
         frameCount: definition.frameCount,
         tiles: definition.tiles,
@@ -1770,26 +1848,14 @@ export function installAiAssetDesigner(
   elements.frameCountInput.addEventListener("blur", syncTilesetPromptCount);
 
   elements.formatSelect.addEventListener("change", () => {
-    if (canEditGenerationFormat(manifest, selectedAssetId, selectedTargetAssetId)) {
-      formatDrafts.set(selectedTargetAssetId, normalizeAssetFormat(elements.formatSelect.value));
-    }
+    capturePanelDraft();
     syncImageModelControl(elements, manifest.assets[selectedTargetAssetId],
-      modelDrafts.get(selectedTargetAssetId), normalizeAssetFormat(elements.formatSelect.value));
+      draftValuesFor(selectedTargetAssetId, selectedTilesetAnimationKey).model,
+      normalizeAssetFormat(elements.formatSelect.value), selectedTilesetAnimationKey);
   });
 
-  elements.modelSelect.addEventListener("change", () => {
-    if (!elements.modelSelect.disabled && elements.modelSelect.value) {
-      modelDrafts.set(selectedTargetAssetId, elements.modelSelect.value);
-    }
-  });
-
-  elements.audioFormatSelect.addEventListener("change", () => {
-    const asset = manifest.assets[selectedTargetAssetId];
-    asset.audioSettings = {
-      ...asset.audioSettings,
-      format: normalizeAudioFormat(elements.audioFormatSelect.value)
-    };
-  });
+  elements.panel.addEventListener("input", capturePanelDraft);
+  elements.panel.addEventListener("change", capturePanelDraft);
 
   elements.currentPreview.addEventListener("click", () => {
     const asset = manifest.assets[selectedTargetAssetId];
@@ -1911,6 +1977,7 @@ export function installAiAssetDesigner(
 
         const mixed = await openTilesetAnimationMixerDialog({
           root: elements.root,
+          reference: referenceOptionsFor(draftContextFor(assetId, definition.key)),
           asset: draftAsset,
           assetId,
           animationKey: definition.key,
@@ -1924,6 +1991,7 @@ export function installAiAssetDesigner(
             const generated = await client.generateTilesetAnimationStream({
               assetId,
               animationKey: definition.key,
+              priorityReference: referenceForAsset(assetId, definition.key),
               settings: imageSettingsForAsset(assetId, "png", definition.key),
               count: 3,
               frameCount: definition.frameCount,
@@ -2000,6 +2068,7 @@ export function installAiAssetDesigner(
 
       const mixed = await openTilesetBaseMixerDialog({
         root: elements.root,
+        reference: referenceOptionsFor(draftContextFor(assetId)),
         asset: current.asset,
         assetId,
         baseSheetSrc: current.sheetSrc,
@@ -2076,12 +2145,8 @@ export function installAiAssetDesigner(
     const currentGenerationId = generationId + 1;
     const generationAssetId = selectedTargetAssetId;
     const generationAsset = manifest.assets[generationAssetId];
-    const generationFormat = effectiveGenerationFormat(
-      manifest,
-      formatDrafts,
-      selectedAssetId,
-      generationAssetId
-    );
+    capturePanelDraft();
+    const generationFormat = generationFormatForAsset(generationAssetId);
     const generationOverrides = generationOverridesFromInputs(
       elements,
       generationAsset,
@@ -2117,6 +2182,7 @@ export function installAiAssetDesigner(
     try {
       const generationRequest = {
         assetId: generationAssetId,
+        priorityReference: referenceForAsset(generationAssetId),
         prompt: isBaseTilesetGeneration ? undefined : elements.promptInput.value,
         count: options.optionCount ?? 3,
         format: generationFormat,
@@ -2298,7 +2364,6 @@ export function installAiAssetDesigner(
       for (const saved of result.promoted) {
         pendingOptions.delete(saved.asset.id);
         resolveDeferredVoiceLinePendingOption(saved.asset.id);
-        formatDrafts.delete(saved.asset.id);
         try {
           (options.onAssetReady ?? options.onPreview)(
             saved.asset.id,
@@ -2452,24 +2517,25 @@ export function installAiAssetDesigner(
 
   elements.deriveButton.addEventListener("click", async () => {
     const derivationAssetId = await ensureTargetVariantForDerive(selectedTargetAssetId);
+    if (!derivationAssetId) return;
     const asset = manifest.assets[derivationAssetId];
-    const generationFormat = effectiveGenerationFormat(
-      manifest,
-      formatDrafts,
-      selectedAssetId,
-      derivationAssetId
-    );
+    capturePanelDraft();
+    const generationFormat = generationFormatForAsset(derivationAssetId);
+    const generationContext = draftContextFor(derivationAssetId);
 
     if (isAudioAsset(asset)) return;
 
     await openDeriveDialog({
       root: elements.root,
+      reference: referenceOptionsFor(generationContext),
       asset,
       assetId: derivationAssetId,
       candidates: deriveCandidatesForAsset(derivationAssetId),
       prompt: elements.promptInput.value,
       format: generationFormat,
       onConfirm: async (deriveRequest) => {
+        const priorityReference = referenceDrafts.get(designerDraftContextKey(generationContext));
+        const settings = imageSettingsForAsset(derivationAssetId, generationFormat);
         clearGeneratedOptions();
         elements.promoteButton.disabled = true;
         selectedOption = undefined;
@@ -2530,8 +2596,9 @@ export function installAiAssetDesigner(
             prompt,
             count: options.optionCount ?? 3,
             references: [reference],
+            priorityReference,
             format: generationFormat,
-            settings: imageSettingsForAsset(derivationAssetId, generationFormat),
+            settings,
             dimensions: deriveRequest.dimensions,
             frameCount: deriveRequest.frameCount,
             styleGuide: await styleGuideRequest(styleGuideDraft)
@@ -2693,12 +2760,6 @@ export function installAiAssetDesigner(
     }
 
     forgetPendingOption(promotedAssetId);
-    if (isDesignerTilesetAsset(promotedAsset)) {
-      tilesetPromptDrafts.set(
-        promotedAssetId,
-        promotedAsset.tileset?.tiles?.map((tile) => tile.prompt) ?? []
-      );
-    }
     let promotedTextureKey: string | undefined;
     let liveRefreshError: unknown;
     const captureLiveRefreshError = (error: unknown) => {
@@ -2760,8 +2821,6 @@ export function installAiAssetDesigner(
       captureLiveRefreshError(error);
     }
 
-    formatDrafts.delete(promotedAssetId);
-    modelDrafts.delete(promotedAssetId);
     if (isPromotionPanelCurrent()) {
       try {
         syncTargetAsset(promotedAssetId, {
@@ -2894,12 +2953,6 @@ export function installAiAssetDesigner(
             promotedAsset = animationSaved.asset;
           }
         }
-        if (isDesignerTilesetAsset(promotedAsset)) {
-          tilesetPromptDrafts.set(
-            assetId,
-            promotedAsset.tileset?.tiles?.map((tile) => tile.prompt) ?? []
-          );
-        }
         for (const [animationKey, frames] of Object.entries(
           pending.tilesetAnimations ?? {}
         )) {
@@ -2951,8 +3004,6 @@ export function installAiAssetDesigner(
         }
         pendingOptions.delete(assetId);
         resolveDeferredVoiceLinePendingOption(assetId);
-        formatDrafts.delete(assetId);
-        modelDrafts.delete(assetId);
         promotedCount += 1;
       } catch (error) {
         promotionError = { assetId, error };
@@ -3149,6 +3200,17 @@ export function installAiAssetDesigner(
     syncPromoteAllButton();
     const failures: Array<{ assetId: string; error: unknown }> = [];
     let generatedCount = 0;
+    const generationPlan = new Map(assetIds.map((assetId) => [assetId, {
+      priorityReference: referenceForAsset(assetId),
+      settings: imageSettingsForAsset(assetId),
+      animations: new Map((manifest.assets[assetId].tileset?.animations ?? []).map((animation) => [
+        animation.key,
+        {
+          priorityReference: referenceForAsset(assetId, animation.key),
+          settings: imageSettingsForAsset(assetId, "png", animation.key)
+        }
+      ]))
+    }]));
 
     for (const [index, assetId] of assetIds.entries()) {
       if (activeGeneration?.id !== currentGenerationId) return;
@@ -3160,10 +3222,12 @@ export function installAiAssetDesigner(
       );
 
       try {
+        const planned = generationPlan.get(assetId)!;
         const generated = await client.generate({
           assetId,
           count: 1,
-          settings: imageSettingsForAsset(assetId),
+          priorityReference: planned.priorityReference,
+          settings: planned.settings,
           styleGuide
         }, {
           signal: controller.signal
@@ -3187,7 +3251,8 @@ export function installAiAssetDesigner(
           const candidates = await client.generateTilesetAnimationStream({
             assetId,
             animationKey: animation.key,
-            settings: imageSettingsForAsset(assetId, "png", animation.key),
+            priorityReference: planned.animations.get(animation.key)?.priorityReference,
+            settings: planned.animations.get(animation.key)?.settings,
             prompt: animation.prompt,
             count: 1,
             baseDataUrl: option.dataUrl,
@@ -3506,6 +3571,7 @@ export function installAiAssetDesigner(
       const generationSession = createImageGenerationSession(sourceOption ?? activeVersion);
       void openTilesetEditor({
         root: elements.root,
+        reference: referenceOptionsFor(draftContextFor(assetId)),
         asset: tilesetEditorAsset,
         assetId,
         src: renderedSrc,
@@ -3668,6 +3734,7 @@ export function installAiAssetDesigner(
     close: () => setOpen(false),
     destroy: () => {
       destroyed = true;
+      mainReferenceControl?.destroy();
       activeGeneration?.controller.abort();
       activeVoiceLineRegeneration?.controller.abort();
       stopStatusAnimation(elements.status);

@@ -77,6 +77,7 @@ export type GenerateTilesetAnimationStreamRequest = {
   count?: number;
   baseDataUrl?: string;
   settings?: AiAssetDefinition["settings"];
+  priorityReference?: { name: string; dataUrl: string };
   styleGuide?: DebugStyleGuide;
 };
 
@@ -293,6 +294,9 @@ async function routeRequest(
         prompt: body.prompt,
         count: body.count,
         baseReference,
+        priorityReference: body.priorityReference
+          ? referencesFromDataUrls([body.priorityReference])[0]
+          : undefined,
         stylePrompt: body.styleGuide
           ? body.styleGuide.prompt?.trim() || undefined
           : manifest.styleGuide?.prompt,
@@ -562,6 +566,7 @@ type GenerateRequestBody = {
   assetId: string;
   prompt?: string;
   count?: number;
+  priorityReference?: { name: string; dataUrl: string };
   references?: Array<{
     name: string;
     dataUrl: string;
@@ -583,6 +588,7 @@ async function generateImage(
   body: {
     prompt?: string;
     count?: number;
+    priorityReference?: { name: string; dataUrl: string };
     references?: Array<{
       name: string;
       dataUrl: string;
@@ -621,6 +627,9 @@ async function generateImage(
       ...(await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds) ?? []),
       ...referencesFromDataUrls(body.references)
     ],
+    priorityReference: body.priorityReference
+      ? referencesFromDataUrls([body.priorityReference])[0]
+      : undefined,
     stylePrompt: body.styleGuide
       ? body.styleGuide.prompt?.trim() || undefined
       : manifest.styleGuide?.prompt,
@@ -790,7 +799,7 @@ function referencesFromDataUrls(images: DebugStyleGuide["images"] = []) {
     const match = /^data:(.+);base64,(.+)$/.exec(image.dataUrl);
 
     if (!match) {
-      throw new Error(`Style image "${image.name}" is not a base64 data URL.`);
+      throw new Error(`Reference image "${image.name}" is not a base64 data URL.`);
     }
 
     return {
