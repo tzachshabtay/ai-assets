@@ -530,12 +530,25 @@ export function installAiAssetDesigner(
                     : `Generate and promote one new option for ${lineAssetIds.length} linked line${lineAssetIds.length === 1 ? "" : "s"}.`;
   };
 
+  const hasDeferredVoiceLineOption = () =>
+    [...deferredVoiceLinePendingAssetIds].some((assetId) => pendingOptions.has(assetId));
+  const canRetryManifestSync = () => !destroyed && deferredVoiceLineManifestSync &&
+    !hasDeferredVoiceLineOption() && !deferredVoiceLineManifestSyncPromise &&
+    !activeFirstDrafts && !activeGeneration && !activeVoiceLineRegeneration &&
+    activePromotionId === undefined && !mixingTileset;
+  const syncManifestRetryButton = () => {
+    if (destroyed) return;
+    elements.retryManifestSyncButton.hidden = !deferredVoiceLineManifestSync || hasDeferredVoiceLineOption();
+    elements.retryManifestSyncButton.disabled = !canRetryManifestSync();
+  };
+
   const syncPromoteAllButton = () => {
     elements.promoteAllButton.disabled =
       pendingOptions.size === 0 ||
       Boolean(activeGeneration) ||
       activePromotionId !== undefined;
     syncRegenerateAllLinesButton();
+    syncManifestRetryButton();
   };
   const rememberPendingOption = (
     assetId: string,
@@ -559,10 +572,9 @@ export function installAiAssetDesigner(
     syncPromoteAllButton();
   };
   const flushDeferredVoiceLineManifest = (): Promise<boolean> => {
+    if (destroyed) return Promise.resolve(false);
     if (!deferredVoiceLineManifestSync) return Promise.resolve(true);
-    if (
-      [...deferredVoiceLinePendingAssetIds].some((assetId) => pendingOptions.has(assetId))
-    ) {
+    if (hasDeferredVoiceLineOption()) {
       return Promise.resolve(false);
     }
     if (deferredVoiceLineManifestSyncPromise) {
@@ -598,10 +610,22 @@ export function installAiAssetDesigner(
         return false;
       } finally {
         deferredVoiceLineManifestSyncPromise = undefined;
+        syncManifestRetryButton();
       }
     })();
+    syncManifestRetryButton();
     return deferredVoiceLineManifestSyncPromise;
   };
+  elements.retryManifestSyncButton.addEventListener("click", async () => {
+    if (!canRetryManifestSync()) return;
+    const message = "Syncing promoted voice lines...";
+    setStatus(elements, message, "busy");
+    const synced = await flushDeferredVoiceLineManifest();
+    if (!destroyed && synced && elements.status.dataset.kind === "busy" &&
+      elements.status.textContent === message) {
+      setStatus(elements, "Promoted voice lines synced.", "success");
+    }
+  });
   const resolveDeferredVoiceLinePendingOption = (assetId: string) => {
     if (!deferredVoiceLinePendingAssetIds.delete(assetId)) return;
     if (deferredVoiceLinePendingAssetIds.size === 0) {
@@ -1060,6 +1084,7 @@ export function installAiAssetDesigner(
   };
 
   const syncMixTilesetButton = () => {
+    syncManifestRetryButton();
     const session = displayedOptions;
     const asset = session ? manifest.assets[session.assetId] : undefined;
     const baseVisible = Boolean(
@@ -2420,7 +2445,7 @@ export function installAiAssetDesigner(
               ? ` ${unattemptedCount} remaining line${unattemptedCount === 1 ? " was" : "s were"} not generated to avoid further paid requests while promotion is unavailable.`
               : ""}` +
             `${result.manifestModuleSyncDeferred
-              ? " The generated option remains selected; promote or revert it before restarting."
+              ? " The generated option remains selected; promote or revert it before refreshing the page."
               : ""}`,
           "error"
         );
@@ -2434,7 +2459,7 @@ export function installAiAssetDesigner(
         setStatus(
           elements,
           `Regenerated all ${promotedCount} lines, but ${readableAssetName(liveRefreshError.assetId)} ` +
-            `could not refresh live. Restart to load it. ${errorMessage(liveRefreshError.error)}`,
+            `could not refresh live. Refresh the page to load it. ${errorMessage(liveRefreshError.error)}`,
           "error"
         );
       } else {
@@ -2835,7 +2860,7 @@ export function installAiAssetDesigner(
         setStatus(
           elements,
           `Promoted ${promotedAssetId}, but the live game could not refresh. ` +
-            `Restart to load it. ${errorMessage(liveRefreshError)}`,
+            `Refresh the page to load it. ${errorMessage(liveRefreshError)}`,
           "error"
         );
       } else {
@@ -3041,7 +3066,7 @@ export function installAiAssetDesigner(
       setStatus(
         elements,
         `Promoted all ${promotedCount} assets, but ${readableAssetName(firstError.assetId)} ` +
-          `could not refresh live. Restart to load it. ${errorMessage(firstError.error)}`,
+          `could not refresh live. Refresh the page to load it. ${errorMessage(firstError.error)}`,
         "error"
       );
     } else {
@@ -3051,25 +3076,6 @@ export function installAiAssetDesigner(
     if (options.restartOnPromote && promotedCount > 0) {
       window.location.reload();
     }
-  });
-
-  elements.restartButton.addEventListener("click", async () => {
-    if (
-      deferredVoiceLineManifestSync &&
-      [...deferredVoiceLinePendingAssetIds].some((assetId) => pendingOptions.has(assetId))
-    ) {
-      setStatus(
-        elements,
-        "Promote or revert the pending generated voice line before restarting.",
-        "error"
-      );
-      return;
-    }
-    if (deferredVoiceLineManifestSync) {
-      setStatus(elements, "Refreshing the generated manifest module...", "busy");
-      if (!await flushDeferredVoiceLineManifest()) return;
-    }
-    if (!destroyed) window.location.reload();
   });
 
   elements.versionsButton.addEventListener("click", () => {

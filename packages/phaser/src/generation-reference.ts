@@ -39,19 +39,24 @@ export function createGenerationReferenceControl(
   element.className = "ai-game-assets-reference";
   element.setAttribute("role", "group");
   element.setAttribute("aria-label", "Generation reference");
-  element.style.cssText = "display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0";
+  const preview = document.createElement("div");
+  preview.className = "ai-game-assets-reference__preview";
   const thumbnail = document.createElement("img");
   thumbnail.alt = "Selected generation reference";
-  thumbnail.style.cssText = "width:48px;height:48px;object-fit:contain;border:1px solid #384251;border-radius:5px;background:repeating-conic-gradient(#253041 0% 25%,#18202d 0% 50%) 0/12px 12px";
+  thumbnail.className = "ai-game-assets-reference__thumbnail";
   const name = document.createElement("span");
-  name.style.cssText = "flex:1;min-width:80px;overflow:hidden;text-overflow:ellipsis;font-size:12px";
+  name.className = "ai-game-assets-reference__name";
+  preview.append(thumbnail, name);
+  const actions = document.createElement("div");
+  actions.className = "ai-game-assets-reference__actions";
   const add = button("Add reference");
   const remove = button("Remove");
   remove.setAttribute("aria-label", "Remove generation reference");
+  actions.append(add, remove);
   const status = document.createElement("span");
+  status.className = "ai-game-assets-reference__status";
   status.setAttribute("role", "status");
-  status.style.cssText = "flex-basis:100%;font-size:12px;color:#fca5a5";
-  element.append(thumbnail, name, add, remove, status);
+  element.append(preview, actions, status);
 
   let value = copyReference(options.initialValue);
   let revision = 0;
@@ -60,12 +65,15 @@ export function createGenerationReferenceControl(
   let sketchController: AbortController | undefined;
 
   const render = () => {
+    element.dataset.selected = String(Boolean(value));
+    preview.hidden = !value;
     thumbnail.hidden = !value;
     if (value) thumbnail.src = value.dataUrl;
     else thumbnail.removeAttribute("src");
     name.textContent = value?.name ?? "No reference selected";
     name.title = value?.name ?? "";
-    add.textContent = value ? "Replace reference" : "Add reference";
+    add.textContent = value ? "Replace" : "Add reference";
+    add.setAttribute("aria-label", value ? "Replace reference" : "Add reference");
     remove.hidden = !value;
     status.hidden = !status.textContent;
   };
@@ -319,6 +327,6 @@ function button(label: string): HTMLButtonElement {
   const result = document.createElement("button");
   result.type = "button";
   result.textContent = label;
-  result.style.cssText = "border:1px solid #465469;border-radius:5px;padding:7px 10px;color:#f5f7fb;background:#253041;cursor:pointer;font:inherit";
+  result.className = "ai-game-assets-reference__button";
   return result;
 }

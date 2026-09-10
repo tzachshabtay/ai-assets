@@ -72,7 +72,7 @@ export type DesignerElements = {
   versionsButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
   promoteAllButton: HTMLButtonElement;
-  restartButton: HTMLButtonElement;
+  retryManifestSyncButton: HTMLButtonElement;
   versionLabel: HTMLDivElement;
   options: HTMLDivElement;
   status: HTMLDivElement;
@@ -298,10 +298,6 @@ export function createDesignerElements(
   promoteAllButton.textContent = "Promote all";
   promoteAllButton.disabled = true;
 
-  const restartButton = document.createElement("button");
-  restartButton.type = "button";
-  restartButton.textContent = "Restart";
-
   const actions = document.createElement("div");
   actions.className = "ai-game-assets-designer__actions";
   actions.append(
@@ -312,8 +308,7 @@ export function createDesignerElements(
     deriveButton,
     versionsButton,
     promoteButton,
-    promoteAllButton,
-    restartButton
+    promoteAllButton
   );
 
   const versionLabel = document.createElement("div");
@@ -324,6 +319,13 @@ export function createDesignerElements(
 
   const status = document.createElement("div");
   status.className = "ai-game-assets-designer__status";
+  const retryManifestSyncButton = document.createElement("button");
+  retryManifestSyncButton.type = "button";
+  retryManifestSyncButton.className = "ai-game-assets-designer__retry-sync";
+  retryManifestSyncButton.textContent = "Retry sync";
+  retryManifestSyncButton.title = "Retry syncing promoted voice lines.";
+  retryManifestSyncButton.hidden = true;
+  retryManifestSyncButton.disabled = true;
 
   panel.append(
     header,
@@ -345,7 +347,8 @@ export function createDesignerElements(
     actions,
     versionLabel,
     optionsGrid,
-    status
+    status,
+    retryManifestSyncButton
   );
   root.append(toggle, panel);
 
@@ -400,7 +403,7 @@ export function createDesignerElements(
     versionsButton,
     promoteButton,
     promoteAllButton,
-    restartButton,
+    retryManifestSyncButton,
     versionLabel,
     options: optionsGrid,
     status
@@ -4513,7 +4516,9 @@ export function ensureDesignerStyles(): void {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
-.ai-game-assets-designer__actions button {
+.ai-game-assets-designer__actions button,
+.ai-game-assets-designer__retry-sync,
+.ai-game-assets-reference__button {
   border: 1px solid #58657a;
   border-radius: 6px;
   background: #273142;
@@ -4523,9 +4528,64 @@ export function ensureDesignerStyles(): void {
   cursor: pointer;
 }
 .ai-game-assets-designer__actions button:last-child { grid-column: 1 / -1; }
-.ai-game-assets-designer__actions button:disabled {
+.ai-game-assets-designer__actions button:disabled,
+.ai-game-assets-designer__retry-sync:disabled,
+.ai-game-assets-reference__button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+.ai-game-assets-designer__retry-sync {
+  width: 100%;
+  margin-top: 8px;
+}
+.ai-game-assets-reference {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+.ai-game-assets-reference [hidden] { display: none !important; }
+.ai-game-assets-reference__preview {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #303949;
+  border-radius: 6px;
+  background: #101319;
+}
+.ai-game-assets-reference__thumbnail {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  border: 1px solid #384251;
+  border-radius: 5px;
+  background: repeating-conic-gradient(#253041 0% 25%, #18202d 0% 50%) 0/12px 12px;
+}
+.ai-game-assets-reference__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #b9c1cf;
+  font-size: 13px;
+}
+.ai-game-assets-reference__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.ai-game-assets-reference[data-selected="false"] .ai-game-assets-reference__actions {
+  grid-template-columns: 1fr;
+}
+.ai-game-assets-reference__button:focus-visible {
+  outline: 2px solid #6ed3ff;
+  outline-offset: 2px;
+}
+.ai-game-assets-reference__status {
+  color: #fca5a5;
+  font-size: 12px;
 }
 .ai-game-assets-designer__meta,
 .ai-game-assets-designer__status {

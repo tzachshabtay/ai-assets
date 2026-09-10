@@ -24,7 +24,7 @@ test("reference control preserves drafts on cancellation, supports replacement, 
     control.getValue().name = "Should not mutate the draft";
     assert.equal(control.getValue().name, initial.name);
 
-    dom.button("Replace reference").click();
+    dom.button("Replace").click();
     assert.deepEqual(dom.buttons().filter((button) => ["Existing asset", "Computer", "Sketch"].includes(button.textContent))
       .map((button) => button.textContent), ["Existing asset", "Computer", "Sketch"]);
     dom.button("Cancel").click();
@@ -32,12 +32,12 @@ test("reference control preserves drafts on cancellation, supports replacement, 
     assert.equal(changes.length, 0);
     assert.equal(opened, closed);
 
-    dom.button("Replace reference").click();
+    dom.button("Replace").click();
     dom.button("Computer").click();
     await settle();
     assert.deepEqual(control.getValue(), initial, "cancelling the native picker preserves the reference");
     dom.setUpload(new File(["image"], "drawing.png", { type: "image/png" }));
-    dom.button("Replace reference").click();
+    dom.button("Replace").click();
     dom.button("Computer").click();
     await settle();
     assert.equal(control.getValue().name, "drawing.png");
@@ -101,7 +101,7 @@ test("existing reference browser includes linked animation and target images and
     assert.equal(changes.length, 0, "a download from a closed dialog cannot replace a newer draft");
 
     globalThis.fetch = async () => ({ ok: true, blob: async () => new Blob(["image"], { type: "image/png" }) });
-    dom.button("Replace reference").click();
+    dom.button("Replace").click();
     dom.button("Existing asset").click();
     dom.button("Hero Walk").click();
     await settle();
