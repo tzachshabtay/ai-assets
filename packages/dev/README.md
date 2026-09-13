@@ -12,7 +12,7 @@ Use this package during development to generate, edit, promote, and build game a
 
 ## Scaled variants
 
-`POST /__ai-assets/scaled-variant` creates, regenerates, touches up, or deletes a version-scoped resolution. Requests include `assetId`, `versionName`, `sourceFile`, `action`, and, for existing variants, `id` and `expectedFile`. Generate accepts `width`, `height`, and `method` (`nearest`, `resample`, or `ai-upscale`); touch-up accepts a PNG `dataUrl` with unchanged variant dimensions. Width/height describe each frame or tile when the source is a sheet. Responses include the updated manifest and variant.
+`POST /__ai-assets/scaled-variant` creates, regenerates, touches up, or deletes a version-scoped resolution. Requests include `assetId`, `versionName`, `sourceFile`, `action`, and, for existing variants, `id` and `expectedFile`. Generate accepts `width`, `height`, and `method` (`nearest`, `resample`, or `ai-upscale`); touch-up accepts a PNG `dataUrl` with unchanged variant dimensions. Width/height describe each frame or tile when the source is a sheet. Responses include the updated manifest and variant. Generate and touch-up also return `previewDataUrl` containing the saved PNG, allowing immediate previews before public-file watchers expose the new URL.
 
 The server validates image dimensions and frame geometry, rejects stale updates, reads only local source files within `assetsDir`, and saves immutable PNGs. Failed generation leaves existing variants unchanged. Variant files and metadata are retained in production manifest builds. Replaced files are retained because other target assets or provenance may reference them.
 

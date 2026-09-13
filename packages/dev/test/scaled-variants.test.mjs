@@ -361,12 +361,12 @@ test("HTTP CRUD persists variants and serves generated PNGs without an image-gen
   });
   assert.equal(response.status, 200);
   const result = await response.json();
+  assert.ok(result.previewDataUrl.startsWith("data:image/png;base64,"));
   const png = await fetch(base + "/" + result.variant.file);
   assert.equal(png.status, 200);
-  assert.equal(
-    (await sharp(Buffer.from(await png.arrayBuffer())).metadata()).width,
-    6,
-  );
+  const savedPng = Buffer.from(await png.arrayBuffer());
+  assert.deepEqual(Buffer.from(result.previewDataUrl.split(",")[1], "base64"), savedPng);
+  assert.equal((await sharp(savedPng).metadata()).width, 6);
   const saved = await (await fetch(base + "/__ai-assets/manifest")).json();
   assert.equal(
     saved.assets.hero.versions.v1.scaledVariants[result.variant.id].file,

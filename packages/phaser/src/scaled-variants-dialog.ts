@@ -16,6 +16,7 @@ export function openScaledVariantsDialog(options: {
   onManifest(manifest: AiAssetManifest): void | Promise<void>;
 }): () => void {
   let asset = options.asset;
+  const savedPreviews = new Map<string, string>();
   const versionName = asset.activeVersion,
     sourceFile = asset.versions[versionName]?.file;
   if (!sourceFile) return () => {};
@@ -181,6 +182,12 @@ export function openScaledVariantsDialog(options: {
         signal: operation.signal,
       });
       if (operation.signal.aborted) return;
+      if (result.variant && result.previewDataUrl?.startsWith("data:image/png;base64,")) {
+        if (data.expectedFile) savedPreviews.delete(data.expectedFile);
+        savedPreviews.set(result.variant.file, result.previewDataUrl);
+      } else if (data.action === "delete" && data.expectedFile) {
+        savedPreviews.delete(data.expectedFile);
+      }
       asset = result.manifest.assets[asset.id]!;
       await options.onManifest(result.manifest);
       status.textContent =
@@ -231,7 +238,7 @@ export function openScaledVariantsDialog(options: {
       row.style.cssText =
         "display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-top:1px solid #384251;padding:12px 0";
       const preview = document.createElement("img");
-      preview.src = options.resolveAssetUrl(variant.file);
+      preview.src = savedPreviews.get(variant.file) ?? options.resolveAssetUrl(variant.file);
       preview.alt = "";
       preview.style.cssText =
         "width:96px;height:96px;object-fit:contain;image-rendering:pixelated;background:repeating-conic-gradient(#26303b 0% 25%,#19212c 0% 50%) 0/16px 16px";
@@ -262,7 +269,7 @@ export function openScaledVariantsDialog(options: {
             tileset: undefined,
             animations: undefined,
           },
-          frameSrc: options.resolveAssetUrl(variant.file),
+          frameSrc: savedPreviews.get(variant.file) ?? options.resolveAssetUrl(variant.file),
           displaySize: {
             width: variant.dimensions.width,
             height: variant.dimensions.height,

@@ -3097,7 +3097,10 @@ export function installAiAssetDesigner(
         onManifest: updated => {
           capturePanelDraft(); manifest = updated;
           options.onManifestUpdated?.(manifest);
-          syncAsset(selectedAssetId);
+          // Scaled variants do not change animation choices. Refresh this
+          // target without resetting its parent character to the base image.
+          syncTargetAsset(selectedTargetAssetId);
+          renderAssetBrowser();
         },
       });
     })().catch(error => setStatus(elements, error instanceof Error ? error.message : String(error), "error"));

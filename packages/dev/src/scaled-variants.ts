@@ -231,7 +231,14 @@ export async function saveScaledVariant(
       throw error;
     }
     // Older files remain immutable: other target assets or variant provenance may refer to them.
-    return { manifest, asset: manifest.assets[input.assetId]!, variant };
+    return {
+      manifest,
+      asset: manifest.assets[input.assetId]!,
+      variant,
+      // A public-file watcher may not have exposed the new URL yet. Let the
+      // designer display the exact saved pixels without another HTTP request.
+      previewDataUrl: image ? `data:image/png;base64,${Buffer.from(image).toString("base64")}` : undefined,
+    };
   });
 }
 
