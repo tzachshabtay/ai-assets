@@ -179,7 +179,18 @@ export function openScaledVariantsDialog(options: {
       }
     }
   });
+  function replacementVariant() {
+    // Reuse an existing resolution whether it was reached through Edit, the
+    // default dimensions, or typing a size directly into the form.
+    return Object.values(asset.versions[versionName]?.scaledVariants ?? {}).find(variant => {
+      const size = scaledVariantFrameSize(variant);
+      return size.width === Number(width.field.value) && size.height === Number(height.field.value);
+    }) ?? selected;
+  }
   function updateSource() {
+    const replacement = replacementVariant();
+    title.textContent = replacement ? `Regenerate ${width.field.value} × ${height.field.value}` : "Add variant";
+    generate.textContent = replacement ? "Regenerate" : "Generate";
     try {
       const candidate = selectScaledVariant(
         asset,
@@ -187,11 +198,11 @@ export function openScaledVariantsDialog(options: {
           width: Number(width.field.value),
           height: Number(height.field.value),
         },
-        { version: asset.versions[versionName], excludeId: selected?.id },
+        { version: asset.versions[versionName], excludeId: replacement?.id },
       );
       const size = candidate && scaledVariantFrameSize(candidate);
       source.textContent = size
-        ? `Closest source: ${size.width} × ${size.height}${candidate!.id ? " variant" : " original"}. ${methods.value === "ai-upscale" ? "Enlargement uses OpenAI with preservation instructions and may refine details. Reduction uses smooth resizing." : "No image-generation prompt or creative changes."}`
+        ? `${replacement ? "The existing variant stays active until you save a replacement. " : ""}Closest source: ${size.width} × ${size.height}${candidate!.id ? " variant" : " original"}. ${methods.value === "ai-upscale" ? "Enlargement uses OpenAI with preservation instructions and may refine details. Reduction uses smooth resizing." : "No image-generation prompt or creative changes."}`
         : "";
     } catch {
       source.textContent = "Enter a positive width and height.";
@@ -434,7 +445,7 @@ export function openScaledVariantsDialog(options: {
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     void generateCandidates({
-      ...identity(selected),
+      ...identity(replacementVariant()),
       action: "generate",
       width: Number(width.field.value),
       height: Number(height.field.value),
