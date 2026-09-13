@@ -61,7 +61,7 @@ export function openScaledVariantsDialog(options: {
   for (const [value, text] of [
     ["nearest", "Strict pixels (nearest-neighbor)"],
     ["resample", "Smooth resize (no AI)"],
-    ["ai-upscale", "AI super-resolution (may infer detail)"],
+    ["ai-upscale", "OpenAI image upscale"],
   ]) {
     const option = document.createElement("option");
     option.value = value!;
@@ -148,7 +148,7 @@ export function openScaledVariantsDialog(options: {
       );
       const size = candidate && scaledVariantFrameSize(candidate);
       source.textContent = size
-        ? `Closest source: ${size.width} × ${size.height}${candidate!.id ? " variant" : " original"}. ${methods.value === "ai-upscale" ? "Enlargement uses a dedicated upscaler; reduction uses smooth resizing." : "No image-generation prompt or creative changes."}`
+        ? `Closest source: ${size.width} × ${size.height}${candidate!.id ? " variant" : " original"}. ${methods.value === "ai-upscale" ? "Enlargement uses OpenAI with preservation instructions and may refine details. Reduction uses smooth resizing." : "No image-generation prompt or creative changes."}`
         : "";
     } catch {
       source.textContent = "Enter a positive width and height.";

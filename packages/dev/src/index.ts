@@ -70,5 +70,5 @@ export {
   referencedAssetFiles
 } from "./build-manifest.js";
 
-export { saveScaledVariant, resizeScaledSource, createReplicateUpscaleProvider } from "./scaled-variants.js";
+export { saveScaledVariant, resizeScaledSource, createOpenAiUpscaleProvider } from "./scaled-variants.js";
 export type { ScaledVariantRequest, ScaledVariantStoreOptions, AiAssetUpscaleProvider } from "./scaled-variants.js";

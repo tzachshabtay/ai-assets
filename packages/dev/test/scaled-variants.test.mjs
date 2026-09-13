@@ -20,7 +20,7 @@ import { createAiAssetDevServer } from "../dist/server.js";
 import {
   saveScaledVariant,
   resizeScaledSource,
-  createReplicateUpscaleProvider,
+  createOpenAiUpscaleProvider,
 } from "../dist/scaled-variants.js";
 import {
   normalizeAssetUrls,
@@ -204,7 +204,7 @@ test("strict resizing preserves colors, alpha, cell order, and grid spacing neve
       );
 });
 
-test("dedicated AI provider receives image and dimensions without prompts; original alpha is retained", async () => {
+test("AI provider receives each frame and target dimensions; returned alpha is retained", async () => {
   const pixels = Buffer.from([255, 0, 0, 0, 255, 0, 0, 255]);
   const image = await sharp(pixels, {
     raw: { width: 2, height: 1, channels: 4 },
@@ -228,7 +228,7 @@ test("dedicated AI provider receives image and dimensions without prompts; origi
           "width",
         ]);
         return sharp({
-          create: { width: 4, height: 2, channels: 3, background: "#00ff00" },
+          create: { width: 4, height: 2, channels: 4, background: { r: 0, g: 255, b: 0, alpha: 0.5 } },
         })
           .png()
           .toBuffer();
@@ -237,8 +237,8 @@ test("dedicated AI provider receives image and dimensions without prompts; origi
   );
   assert.equal(called, 1);
   const data = await sharp(output).raw().toBuffer();
-  assert.equal(data[3], 0);
-  assert.equal(data[15], 255);
+  assert.equal(data[3], 128);
+  assert.equal(data[15], 128);
   assert.equal(data[13], 255);
   await resizeScaledSource(
     image,
@@ -405,35 +405,81 @@ test("concurrent generation merges results; failed module writes roll back the m
   assert.deepEqual((await readdir(f.options.assetsDir)).sort(), files);
 });
 
-test("Replicate adapter uses a dedicated upscaler and cancels its upstream job on abort", async (t) => {
-  const f = await fixture(t),
-    controller = new AbortController(),
-    calls = [];
-  const provider = createReplicateUpscaleProvider({
-    apiToken: "test-token",
+test("OpenAI adapter sends the source with preservation instructions and a supported canvas", async (t) => {
+  const f = await fixture(t);
+  const provider = createOpenAiUpscaleProvider({
+    apiKey: "test-key",
     fetch: async (url, options) => {
-      calls.push([String(url), options]);
-      if (String(url).endsWith("/cancel")) return new Response("{}");
-      const body = JSON.parse(options.body);
-      assert.equal(body.input.face_enhance, false);
-      assert.equal(body.input.scale, 4);
-      assert.equal(body.input.prompt, undefined);
-      controller.abort(new Error("stop"));
-      return new Response(
-        JSON.stringify({ id: "job-123", status: "processing" }),
-      );
+      assert.equal(url, "https://api.openai.com/v1/images/edits");
+      assert.equal(options.headers.Authorization, "Bearer test-key");
+      assert.equal(options.method, "POST");
+      const form = options.body;
+      assert.equal(form.get("model"), "gpt-image-2.5-sunburst");
+      assert.equal(form.get("quality"), "high");
+      assert.equal(form.get("background"), "opaque");
+      assert.equal(form.get("output_format"), "png");
+      assert.equal(form.get("n"), "1");
+      assert.match(form.get("prompt"), /192 by 256/);
+      assert.match(form.get("prompt"), /not a redesign/);
+      const [w, h] = form.get("size").split("x").map(Number);
+      assert.equal(w % 16, 0);
+      assert.equal(h % 16, 0);
+      assert.ok(w * h >= 655360 && w * h <= 8294400);
+      assert.ok(Math.abs(w / h - 3 / 4) < 0.02);
+      assert.deepEqual(Buffer.from(await form.get("image").arrayBuffer()), f.image);
+      return Response.json({ data: [{ b64_json: f.image.toString("base64") }] });
     },
   });
-  await assert.rejects(
-    provider.upscale({
-      image: f.image,
-      width: 8,
-      height: 8,
-      signal: controller.signal,
-    }),
-    /stop/,
-  );
-  assert.equal(calls.length, 2);
-  assert.ok(calls[1][0].endsWith("/job-123/cancel"));
-  assert.equal(calls[1][1].signal.aborted, false);
+  assert.deepEqual(await provider.upscale({ image: f.image, width: 192, height: 256 }), f.image);
+});
+
+test("OpenAI adapter requests transparent PNGs and forwards cancellation", async (t) => {
+  const image = await sharp({ create: { width: 2, height: 2, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0.5 } } }).png().toBuffer();
+  const controller = new AbortController();
+  let called = 0;
+  const provider = createOpenAiUpscaleProvider({
+    apiKey: "test-key",
+    fetch: async (_url, options) => {
+      called++;
+      assert.equal(options.body.get("background"), "transparent");
+      assert.match(options.body.get("prompt"), /semi-transparent/);
+      controller.abort(new Error("stop"));
+      assert.equal(options.signal.aborted, true);
+      return Response.json({ data: [{ b64_json: image.toString("base64") }] });
+    },
+  });
+  await assert.rejects(provider.upscale({ image, width: 8, height: 8, signal: controller.signal }), /stop/);
+  await assert.rejects(provider.upscale({ image, width: 8, height: 8, signal: controller.signal }), /stop/);
+  assert.equal(called, 1);
+});
+
+test("default AI generation uses OPENAI_API_KEY, fits exact dimensions and retains method and provenance", async (t) => {
+  const f = await fixture(t);
+  const previous = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = "existing-openai-key";
+  t.after(() => { if (previous === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = previous; });
+  let called = 0;
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    called++;
+    assert.equal(url, "https://api.openai.com/v1/images/edits");
+    assert.equal(options.headers.Authorization, "Bearer existing-openai-key");
+    return Response.json({ data: [{ b64_json: f.image.toString("base64") }] });
+  });
+  const result = await f.generate({ method: "ai-upscale", width: 192, height: 256 });
+  assert.equal(called, 1);
+  assert.equal(result.variant.method, "ai-upscale");
+  assert.equal(result.variant.sourceFile, "art/source.png");
+  const saved = await sharp(await readFile(path.join(f.options.assetsDir, path.basename(result.variant.file)))).metadata();
+  assert.deepEqual([saved.width, saved.height], [192, 256]);
+});
+
+test("OpenAI errors and missing output do not save variants", async (t) => {
+  const f = await fixture(t);
+  const before = await readFile(f.options.manifestPath, "utf8");
+  for (const [response, message] of [[new Response("quota", { status: 429 }), /429/], [Response.json({ data: [] }), /no image/]]) {
+    f.options.upscaleProvider = createOpenAiUpscaleProvider({ apiKey: "test-key", fetch: async () => response });
+    await assert.rejects(f.generate({ method: "ai-upscale" }), message);
+  }
+  assert.equal(await readFile(f.options.manifestPath, "utf8"), before);
+  assert.deepEqual(await readdir(f.options.assetsDir), ["source.png"]);
 });

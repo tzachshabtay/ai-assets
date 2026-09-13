@@ -4,6 +4,7 @@ import path from "node:path";
 import sharp from "sharp";
 import {
   assertManifest,
+  DEFAULT_IMAGE_MODEL,
   scaledVariantGeometry,
   scaledVariantFrameSize,
   scaledVariantSources,
@@ -18,8 +19,9 @@ import {
   writeManifestModule,
   type AssetStoreOptions,
 } from "./asset-store.js";
+import { closestImageGenerationSize } from "./image-generation-sizes.js";
 
-/** A dedicated super-resolution provider; no prompt, style, or image-generation API. */
+/** An image enlargement provider. AI editing may refine details and transparency. */
 export type AiAssetUpscaleProvider = {
   upscale(input: {
     image: Uint8Array;
@@ -154,9 +156,9 @@ export async function saveScaledVariant(
     } else {
       const provider =
         options.upscaleProvider ??
-        (process.env.REPLICATE_API_TOKEN
-          ? createReplicateUpscaleProvider({
-              apiToken: process.env.REPLICATE_API_TOKEN,
+        (process.env.OPENAI_API_KEY
+          ? createOpenAiUpscaleProvider({
+              apiKey: process.env.OPENAI_API_KEY,
             })
           : undefined);
       image = await resizeScaledSource(
@@ -262,7 +264,7 @@ export async function resizeScaledSource(
     method === "ai-upscale" && (width > sourceWidth || height > sourceHeight);
   if (upscale && !provider)
     throw new Error(
-      "AI upscaling requires an upscaleProvider or REPLICATE_API_TOKEN. Strict resizing works without an API key.",
+      "AI upscaling requires an upscaleProvider or OPENAI_API_KEY. Strict resizing works without an API key.",
     );
   const output = Buffer.alloc(
     target.dimensions.width * target.dimensions.height * 4,
@@ -299,20 +301,12 @@ export async function resizeScaledSource(
           signal,
         });
         pixels = await sharp(enhanced, { limitInputPixels: 33554432 })
-          .resize(width, height, { fit: "fill", kernel: "lanczos3" })
+          .resize(width, height, { fit: "fill", kernel: "nearest" })
           .ensureAlpha()
           .raw()
           .toBuffer();
-        // Preserve source coverage: AI cannot add a background or fill transparent sprite borders.
-        for (let y = 0; y < height; y++)
-          for (let x = 0; x < width; x++)
-            pixels[(y * width + x) * 4 + 3] =
-              original[
-                (Math.floor((y * sourceHeight) / height) * sourceWidth +
-                  Math.floor((x * sourceWidth) / width)) *
-                  4 +
-                  3
-              ]!;
+        // Keep the returned alpha: imposing the low-resolution source mask can
+        // clip refined edges and misalign transparency with the edited sprite.
       } else if (method === "nearest" || upscale) {
         pixels = Buffer.alloc(width * height * 4);
         for (let y = 0; y < height; y++)
@@ -343,97 +337,58 @@ export async function resizeScaledSource(
     .toBuffer();
 }
 
-export function createReplicateUpscaleProvider(options: {
-  apiToken: string;
+/** Uses the OpenAI Images edit endpoint with a fixed preservation prompt. */
+export function createOpenAiUpscaleProvider(options: {
+  apiKey?: string;
+  model?: string;
   fetch?: typeof fetch;
-}): AiAssetUpscaleProvider {
+} = {}): AiAssetUpscaleProvider {
   const request = options.fetch ?? fetch;
   return {
     async upscale({ image, width, height, signal }) {
-      const metadata = await sharp(image).metadata();
-      const scale = Math.min(
-        10,
-        Math.max(
-          2,
-          Math.ceil(
-            Math.max(width / metadata.width!, height / metadata.height!),
-          ),
-        ),
-      );
-      const headers = {
-        Authorization: `Bearer ${options.apiToken}`,
-        "Content-Type": "application/json",
-      };
-      const deadline = AbortSignal.timeout(180000),
-        combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
-      let response = await request("https://api.replicate.com/v1/predictions", {
+      signal?.throwIfAborted();
+      const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("OPENAI_API_KEY is required for AI scaled variants.");
+      const model = options.model ?? DEFAULT_IMAGE_MODEL;
+      const size = closestImageGenerationSize({ width, height }, model);
+      const { data, info } = await sharp(image, { limitInputPixels: 33554432 })
+        .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const transparent = data.some((alpha, index) => index % 4 === 3 && alpha < 255);
+      const form = new FormData();
+      form.append("model", model);
+      form.append("size", size);
+      form.append("quality", "high");
+      form.append("background", transparent ? "transparent" : "opaque");
+      form.append("output_format", "png");
+      form.append("n", "1");
+      form.append("prompt", [
+        `Upscale the attached ${info.width} by ${info.height} image for a game asset.`,
+        `The final asset must be ${width} by ${height} pixels. Generate on the ${size} canvas; the result will be resized to the final dimensions afterward.`,
+        "This is an image-preservation task, not a redesign. Only enlarge the existing image.",
+        "Keep the original full-canvas composition, pose, silhouette, proportions, facial features, clothing, equipment, colors, highlights, shadows and art style.",
+        "Preserve pixel-art structure when present. Do not smooth, sharpen, invent details, add or remove objects, move, crop, reframe or change lighting.",
+        transparent
+          ? "Preserve transparency and semi-transparent edges. Keep the background transparent; do not draw a checkerboard or a new background."
+          : "Preserve the existing opaque background exactly.",
+        "No text or watermark."
+      ].join(" "));
+      form.append("image", new Blob([Uint8Array.from(image)], { type: "image/png" }), "source.png");
+      const deadline = AbortSignal.timeout(180000);
+      const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+      const response = await request("https://api.openai.com/v1/images/edits", {
         method: "POST",
-        headers,
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
         signal: combined,
-        body: JSON.stringify({
-          version:
-            "350d32041630ffbe63c8352783a26d94126809164e54085352f8326e53999085",
-          input: {
-            image: `data:image/png;base64,${Buffer.from(image).toString("base64")}`,
-            scale,
-            face_enhance: false,
-          },
-        }),
       });
+      combined.throwIfAborted();
       if (!response.ok)
-        throw new Error(`AI upscale request failed (${response.status}).`);
-      let result = (await response.json()) as {
-        id: string;
-        status: string;
-        output?: string;
-        error?: string;
-      };
-      try {
-        while (!["succeeded", "failed", "canceled"].includes(result.status)) {
-          await new Promise<void>((resolve, reject) => {
-            const timer = setTimeout(done, 1000);
-            function done() {
-              combined.removeEventListener("abort", abort);
-              resolve();
-            }
-            function abort() {
-              clearTimeout(timer);
-              combined.removeEventListener("abort", abort);
-              reject(combined.reason);
-            }
-            if (combined.aborted) abort();
-            else combined.addEventListener("abort", abort, { once: true });
-          });
-          response = await request(
-            `https://api.replicate.com/v1/predictions/${encodeURIComponent(result.id)}`,
-            { headers, signal: combined },
-          );
-          if (!response.ok)
-            throw new Error(`AI upscale polling failed (${response.status}).`);
-          result = (await response.json()) as typeof result;
-        }
-        if (result.status !== "succeeded" || !result.output)
-          throw new Error("AI upscaling failed.");
-        const outputUrl = new URL(result.output);
-        if (outputUrl.protocol !== "https:")
-          throw new Error("Invalid upscale output URL.");
-        const output = await request(outputUrl, { signal: combined });
-        if (!output.ok)
-          throw new Error(`AI upscale download failed (${output.status}).`);
-        return new Uint8Array(await output.arrayBuffer());
-      } catch (error) {
-        if (
-          combined.aborted &&
-          result.id &&
-          !["succeeded", "failed", "canceled"].includes(result.status)
-        ) {
-          await request(
-            `https://api.replicate.com/v1/predictions/${encodeURIComponent(result.id)}/cancel`,
-            { method: "POST", headers, signal: AbortSignal.timeout(5000) },
-          ).catch(() => {});
-        }
-        throw error;
-      }
+        throw new Error(`OpenAI scaled variant request failed (${response.status}).`);
+      const result = await response.json() as { data?: { b64_json?: string }[] };
+      combined.throwIfAborted();
+      const encoded = result.data?.[0]?.b64_json;
+      if (!encoded) throw new Error("OpenAI returned no image for the scaled variant.");
+      return Buffer.from(encoded, "base64");
     },
   };
 }
