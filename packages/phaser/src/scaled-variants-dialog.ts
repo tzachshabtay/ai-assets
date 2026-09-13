@@ -8,6 +8,12 @@ import {
 import type { AiAssetDebugClient, ScaledVariantCandidate } from "./debug-client.js";
 import { openFrameTouchUpEditor, startSpritesheetPreview } from "./designer-support.js";
 
+type VariantRequest = Parameters<AiAssetDebugClient["scaledVariant"]>[0];
+type VariantDraft = { request: VariantRequest; candidates: ScaledVariantCandidate[]; chosenIndex?: number };
+// Keep paid candidate batches when a dialog is closed or the designer switches
+// panels. Scope drafts to this client and exact source version.
+const drafts = new WeakMap<AiAssetDebugClient, Map<string, VariantDraft>>();
+
 export function openScaledVariantsDialog(options: {
   root: HTMLElement;
   asset: AiAssetDefinition;
@@ -19,12 +25,15 @@ export function openScaledVariantsDialog(options: {
   const savedPreviews = new Map<string, string>();
   const savedAnimations = new Set<() => void>();
   const candidateAnimations = new Set<() => void>();
-  type Request = Parameters<AiAssetDebugClient["scaledVariant"]>[0];
+  type Request = VariantRequest;
   let pendingRequest: Request | undefined;
   let chosen: ScaledVariantCandidate | undefined;
   const versionName = asset.activeVersion,
     sourceFile = asset.versions[versionName]?.file;
   if (!sourceFile) return () => {};
+  const draftKey = JSON.stringify([asset.id, versionName, sourceFile]);
+  const clientDrafts = drafts.get(options.client) ?? new Map<string, VariantDraft>();
+  drafts.set(options.client, clientDrafts);
   const previousFocus = document.activeElement as HTMLElement | null;
   const operation = new AbortController();
   const dialog = document.createElement("div");
@@ -38,7 +47,7 @@ export function openScaledVariantsDialog(options: {
   const heading = document.createElement("h2");
   heading.textContent = "Scaled variants";
   const intro = document.createElement("p");
-  intro.textContent = `${asset.id} · Create another resolution of the current image. Generate three candidates, preview them, then promote your choice. The displayed size and animation timing stay unchanged.`;
+  intro.textContent = `${asset.id} · Create another resolution of the current image. Generate three candidates, preview them, then use Promote or Save and close to apply your choice. The displayed size and animation timing stay unchanged.`;
   const list = document.createElement("div");
   list.className = "ai-game-assets-designer__scaled-list";
   const form = document.createElement("form");
@@ -93,14 +102,22 @@ export function openScaledVariantsDialog(options: {
   };
   let selected: AiAssetScaledVariant | undefined,
     busy = false;
-  const close = () => {
+  const dispose = () => {
     operation.abort();
     stopAnimations(savedAnimations);
     stopAnimations(candidateAnimations);
     dialog.remove();
     previousFocus?.focus();
   };
-  const closeButton = button("Close", close);
+  const close = async () => {
+    // Never abort an in-flight save: it may already have reached the server.
+    if (saving) return;
+    if (pendingRequest && chosen) {
+      if (await saveChosen()) dispose();
+    } else dispose();
+  };
+  let saving = false;
+  const closeButton = button("Close", () => { void close(); });
   const cancelEdit = button("Cancel edit", () => reset());
   cancelEdit.hidden = true;
   const generate = document.createElement("button");
@@ -123,12 +140,13 @@ export function openScaledVariantsDialog(options: {
   candidatesHeading.textContent = "Choose a candidate";
   const candidatesList = document.createElement("div");
   candidatesList.style.cssText = "display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px";
-  const promote = button("Promote", () => {
-    if (!pendingRequest || !chosen) return;
-    void request({ ...pendingRequest, action: "select", dataUrl: chosen.dataUrl,
+  const saveChosen = () => {
+    if (!pendingRequest || !chosen) return Promise.resolve(false);
+    return request({ ...pendingRequest, action: "select", dataUrl: chosen.dataUrl,
       candidateSourceFile: chosen.sourceFile,
       method: chosen.method === "touch-up" ? "nearest" : chosen.method });
-  });
+  };
+  const promote = button("Promote", () => { void saveChosen(); });
   promote.disabled = true;
   const discard = button("Discard candidates", () => { clearCandidates(); status.textContent = "Candidates discarded."; });
   candidatesSection.append(candidatesHeading, candidatesList, promote, discard);
@@ -142,7 +160,7 @@ export function openScaledVariantsDialog(options: {
     event.stopPropagation();
     if (event.key === "Escape") {
       event.preventDefault();
-      close();
+      void close();
     }
     if (event.key === "Tab") {
       const fields = [
@@ -194,14 +212,15 @@ export function openScaledVariantsDialog(options: {
     data: Parameters<AiAssetDebugClient["scaledVariant"]>[0],
     propagateError = false,
   ) {
-    if (busy) return;
+    if (busy) return false;
+    saving = true;
     setBusy(true);
     status.textContent = "Saving scaled variant…";
     try {
       const result = await options.client.scaledVariant(data, {
         signal: operation.signal,
       });
-      if (operation.signal.aborted) return;
+      if (operation.signal.aborted) return false;
       if (result.variant && result.previewDataUrl?.startsWith("data:image/png;base64,")) {
         if (data.expectedFile) savedPreviews.delete(data.expectedFile);
         savedPreviews.set(result.variant.file, result.previewDataUrl);
@@ -216,12 +235,15 @@ export function openScaledVariantsDialog(options: {
           : "Variant saved. The runtime will use it at the appropriate display size.";
       reset();
       render();
+      return true;
     } catch (error) {
       if (!operation.signal.aborted)
         status.textContent =
           error instanceof Error ? error.message : String(error);
       if (propagateError) throw error;
+      return false;
     } finally {
+      saving = false;
       setBusy(false);
     }
   }
@@ -231,6 +253,7 @@ export function openScaledVariantsDialog(options: {
     else card.removeAttribute("aria-busy");
     for (const control of card.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>("button,input,select"))
       if (control !== closeButton) control.disabled = value;
+    closeButton.disabled = saving;
     promote.disabled = value || !chosen;
   }
   function stopAnimations(stops: Set<() => void>) {
@@ -238,6 +261,8 @@ export function openScaledVariantsDialog(options: {
     stops.clear();
   }
   function clearCandidates() {
+    clientDrafts.delete(draftKey);
+    closeButton.textContent = "Close";
     stopAnimations(candidateAnimations);
     pendingRequest = undefined;
     chosen = undefined;
@@ -280,37 +305,44 @@ export function openScaledVariantsDialog(options: {
     try {
       const result = await options.client.scaledVariantOptions(data, { signal: operation.signal });
       if (operation.signal.aborted) return;
-      pendingRequest = data;
-      for (const candidate of result.candidates) {
-        const candidateCard = document.createElement("div");
-        candidateCard.className = "ai-game-assets-designer__option";
-        candidateCard.setAttribute("aria-label", `Candidate ${candidate.index + 1}`);
-        const select = button(`Select option ${candidate.index + 1}`, () => {
-          chosen = candidate;
-          for (const card of candidatesList.children) {
-            card.classList.toggle("is-selected", card === candidateCard);
-            card.querySelector("button")?.setAttribute("aria-pressed", String(card === candidateCard));
-          }
-          promote.disabled = busy;
-          status.textContent = `Option ${candidate.index + 1} selected. Promote to save this variant.`;
-        });
-        select.setAttribute("aria-label", `Select option ${candidate.index + 1}`);
-        select.setAttribute("aria-pressed", "false");
-        const image = document.createElement("img");
-        image.src = candidate.dataUrl;
-        image.alt = `Option ${candidate.index + 1}`;
-        image.style.cssText = "display:block;width:100%;height:144px;object-fit:contain;image-rendering:pixelated;background:repeating-conic-gradient(#26303b 0% 25%,#19212c 0% 50%) 0/16px 16px";
-        select.append(image);
-        candidateCard.append(select);
-        addAnimation(candidateCard, image, candidate, candidate.dataUrl, candidateAnimations);
-        candidatesList.append(candidateCard);
-      }
-      candidatesSection.hidden = false;
-      candidatesSection.scrollIntoView({ block: "nearest" });
-      status.textContent = "Choose one of the 3 candidates, then promote it.";
+      showCandidates({ request: data, candidates: result.candidates });
     } catch (error) {
       if (!operation.signal.aborted) status.textContent = error instanceof Error ? error.message : String(error);
     } finally { setBusy(false); }
+  }
+  function showCandidates(draft: VariantDraft) {
+    pendingRequest = draft.request;
+    clientDrafts.set(draftKey, draft);
+    for (const candidate of draft.candidates) {
+      const candidateCard = document.createElement("div");
+      candidateCard.className = "ai-game-assets-designer__option";
+      candidateCard.setAttribute("aria-label", `Candidate ${candidate.index + 1}`);
+      const select = button(`Select option ${candidate.index + 1}`, () => {
+        chosen = candidate;
+        draft.chosenIndex = candidate.index;
+        closeButton.textContent = "Save and close";
+        for (const card of candidatesList.children) {
+          card.classList.toggle("is-selected", card === candidateCard);
+          card.querySelector("button")?.setAttribute("aria-pressed", String(card === candidateCard));
+        }
+        promote.disabled = busy;
+        status.textContent = `Option ${candidate.index + 1} selected. Promote or Save and close to apply this variant.`;
+      });
+      select.setAttribute("aria-label", `Select option ${candidate.index + 1}`);
+      select.setAttribute("aria-pressed", "false");
+      const image = document.createElement("img");
+      image.src = candidate.dataUrl;
+      image.alt = `Option ${candidate.index + 1}`;
+      image.style.cssText = "display:block;width:100%;height:144px;object-fit:contain;image-rendering:pixelated;background:repeating-conic-gradient(#26303b 0% 25%,#19212c 0% 50%) 0/16px 16px";
+      select.append(image);
+      candidateCard.append(select);
+      addAnimation(candidateCard, image, candidate, candidate.dataUrl, candidateAnimations);
+      candidatesList.append(candidateCard);
+      if (draft.chosenIndex === candidate.index) select.click();
+    }
+    candidatesSection.hidden = false;
+    candidatesSection.scrollIntoView({ block: "nearest" });
+    if (!chosen) status.textContent = "Choose a candidate, then Promote or Save and close. Closing without a selection keeps these candidates for later in this session.";
   }
   function identity(variant?: AiAssetScaledVariant) {
     return {
@@ -413,8 +445,20 @@ export function openScaledVariantsDialog(options: {
   width.field.addEventListener("input", change);
   height.field.addEventListener("input", change);
   methods.addEventListener("change", change);
+  const draft = clientDrafts.get(draftKey);
   render();
   reset();
+  if (draft && (!draft.request.id || asset.versions[versionName]?.scaledVariants?.[draft.request.id]?.file === draft.request.expectedFile)) {
+    selected = draft.request.id ? asset.versions[versionName]?.scaledVariants?.[draft.request.id] : undefined;
+    width.field.value = String(draft.request.width);
+    height.field.value = String(draft.request.height);
+    methods.value = draft.request.method ?? "nearest";
+    title.textContent = selected ? `Edit ${draft.request.width} × ${draft.request.height}` : "Add variant";
+    generate.textContent = selected ? "Regenerate" : "Generate";
+    cancelEdit.hidden = !selected;
+    updateSource();
+    showCandidates(draft);
+  }
   width.field.focus();
-  return close;
+  return dispose;
 }
