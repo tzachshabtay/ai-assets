@@ -27,6 +27,8 @@ export type AiAssetUpscaleProvider = {
     image: Uint8Array;
     width: number;
     height: number;
+    /** Whole animation sheet, packed without margins or spacing. */
+    frameGrid?: AiAssetScaledSource["frameGrid"];
     signal?: AbortSignal;
   }): Promise<Uint8Array>;
 };
@@ -319,6 +321,35 @@ export async function resizeScaledSource(
     throw new Error(
       "AI upscaling requires an upscaleProvider or OPENAI_API_KEY. Strict resizing works without an API key.",
     );
+  // Give the model every pose together so it can preserve one character across
+  // the animation. Pack source gutters away before editing; runtime variants
+  // use the same compact grid, including transparent unused cells.
+  if (upscale && sourceGrid && targetGrid) {
+    const packedGrid = { ...sourceGrid, margin: 0, spacing: 0 };
+    const packedSource = {
+      ...source,
+      dimensions: {
+        width: sourceWidth * sourceGrid.columns,
+        height: sourceHeight * sourceGrid.rows,
+      },
+      frameGrid: packedGrid,
+    };
+    const packed = await resizeScaledSource(image, source, packedSource, "nearest", undefined, signal);
+    const enhanced = await provider!.upscale({
+      image: packed,
+      width: target.dimensions.width,
+      height: target.dimensions.height,
+      frameGrid: packedGrid,
+      signal,
+    });
+    signal?.throwIfAborted();
+    const fitted = await sharp(enhanced, { limitInputPixels: 33554432 })
+      .resize(target.dimensions.width, target.dimensions.height, { fit: "fill", kernel: "nearest" })
+      .ensureAlpha().png().toBuffer();
+    // Clear unused cells even if the model painted in them; retain all valid
+    // frame pixels and their returned alpha without applying a source mask.
+    return resizeScaledSource(fitted, { ...source, ...target }, target, "nearest", undefined, signal);
+  }
   const output = Buffer.alloc(
     target.dimensions.width * target.dimensions.height * 4,
   );
@@ -399,12 +430,12 @@ export function createOpenAiUpscaleProvider(options: {
 } = {}): AiAssetUpscaleProvider {
   const request = options.fetch ?? fetch;
   return {
-    async upscale({ image, width, height, signal }) {
+    async upscale({ image, width, height, frameGrid, signal }) {
       signal?.throwIfAborted();
       const apiKey = options.apiKey ?? process.env.OPENAI_API_KEY;
       if (!apiKey) throw new Error("OPENAI_API_KEY is required for AI scaled variants.");
       const model = options.model ?? DEFAULT_IMAGE_MODEL;
-      const size = closestImageGenerationSize({ width, height }, model);
+      const size = closestImageGenerationSize({ width, height }, model, frameGrid);
       const { data, info } = await sharp(image, { limitInputPixels: 33554432 })
         .ensureAlpha().raw().toBuffer({ resolveWithObject: true });
       const transparent = data.some((alpha, index) => index % 4 === 3 && alpha < 255);
@@ -418,6 +449,11 @@ export function createOpenAiUpscaleProvider(options: {
       form.append("prompt", [
         `Upscale the attached ${info.width} by ${info.height} image for a game asset.`,
         `The final asset must be ${width} by ${height} pixels. Generate on the ${size} canvas; the result will be resized to the final dimensions afterward.`,
+        ...(frameGrid ? [
+          `The attachment is ONE animation spritesheet: ${frameGrid.columns} columns by ${frameGrid.rows} rows, ${frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows} frames in left-to-right, top-to-bottom order. Each source cell is ${frameGrid.frameWidth} by ${frameGrid.frameHeight} pixels; each final cell must be ${width / frameGrid.columns} by ${height / frameGrid.rows} pixels.`,
+          "Edit the entire spritesheet together. Every frame depicts the SAME character or object: keep identical identity, face, clothing, equipment, palette, proportions and rendering style across all frames. Preserve each frame's distinct pose and original animation motion; do not replace all frames with the same pose.",
+          "Keep the exact grid, frame order, cell boundaries, relative placement and alignment within each cell. No gutters, margins, labels, grid lines, extra frames, rearrangement or overlapping cells. Leave unused cells transparent."
+        ] : []),
         "This is an image-preservation task, not a redesign. Only enlarge the existing image.",
         "Keep the original full-canvas composition, pose, silhouette, proportions, facial features, clothing, equipment, colors, highlights, shadows and art style.",
         "Preserve pixel-art structure when present. Do not smooth, sharpen, invent details, add or remove objects, move, crop, reframe or change lighting.",

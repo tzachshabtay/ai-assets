@@ -205,7 +205,7 @@ test("strict resizing preserves colors, alpha, cell order, and grid spacing neve
       );
 });
 
-test("AI provider receives each frame and target dimensions; returned alpha is retained", async () => {
+test("AI provider receives a static image and target dimensions; returned alpha is retained", async () => {
   const pixels = Buffer.from([255, 0, 0, 0, 255, 0, 0, 255]);
   const image = await sharp(pixels, {
     raw: { width: 2, height: 1, channels: 4 },
@@ -549,12 +549,70 @@ test("HTTP candidate generation is read-only and promotion uses the selected can
   assert.equal(Object.keys((await response2.json()).asset.versions.v1.scaledVariants).length, 1);
 });
 
-test("AI animation candidates process populated frames and leave unused grid cells empty", async () => {
-  const image = await sharp({ create: { width: 3, height: 1, channels: 4, background: "#ff0000" } }).png().toBuffer();
-  const grid = { columns: 3, rows: 1, frameCount: 2, frameWidth: 1, frameHeight: 1 };
+test("animation upscale sends one packed sheet, preserves frame order and alpha, and clears unused cells", async () => {
+  const grid = { columns: 2, rows: 2, frameCount: 3, frameWidth: 1, frameHeight: 1, margin: 1, spacing: 1 };
+  // Bright gutters and junk in the unused fourth cell must not reach the model.
+  const raw = Buffer.alloc(5 * 5 * 4, 255);
+  const colors = [[255, 0, 0, 255], [0, 255, 0, 128], [0, 0, 255, 255]];
+  for (let i = 0; i < 3; i++) raw.set(colors[i], ((1 + Math.floor(i / 2) * 2) * 5 + 1 + i % 2 * 2) * 4);
+  const image = await sharp(raw, { raw: { width: 5, height: 5, channels: 4 } }).png().toBuffer();
+  const source = { file: "sheet.png", dimensions: { width: 5, height: 5 }, frameGrid: grid };
+  const target = scaledVariantGeometry({ id: "hero", kind: "animation", ...source }, { width: 3, height: 2 });
   let calls = 0;
-  const output = await resizeScaledSource(image, { file: "sheet.png", dimensions: { width: 3, height: 1 }, frameGrid: grid }, { dimensions: { width: 6, height: 2 }, frameGrid: { ...grid, frameWidth: 2, frameHeight: 2 } }, "ai-upscale", { async upscale({ image }) { calls++; return image; } });
-  assert.equal(calls, 2);
-  const pixels = await sharp(output).raw().toBuffer();
-  for (let y = 0; y < 2; y++) for (let x = 4; x < 6; x++) assert.equal(pixels[(y * 6 + x) * 4 + 3], 0);
+  const output = await resizeScaledSource(image, source, target, "ai-upscale", { async upscale(input) {
+    calls++;
+    assert.deepEqual([input.width, input.height], [6, 4]);
+    assert.deepEqual(input.frameGrid, { ...grid, margin: 0, spacing: 0 });
+    const { data, info } = await sharp(input.image).raw().toBuffer({ resolveWithObject: true });
+    assert.deepEqual([info.width, info.height], [2, 2]);
+    assert.deepEqual([...data], [...colors.flat(), 0, 0, 0, 0]);
+    // Simulate the provider painting in the unused cell. It must be cleared.
+    data.set([255, 255, 0, 255], 12);
+    return sharp(data, { raw: { width: 2, height: 2, channels: 4 } }).png().toBuffer();
+  } });
+  assert.equal(calls, 1);
+  const { data, info } = await sharp(output).raw().toBuffer({ resolveWithObject: true });
+  assert.deepEqual([info.width, info.height], [6, 4]);
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 6; x++) {
+    const cell = Math.floor(y / 2) * 2 + Math.floor(x / 3);
+    assert.deepEqual([...data.subarray((y * 6 + x) * 4, (y * 6 + x + 1) * 4)], colors[cell] ?? [0, 0, 0, 0]);
+  }
+});
+
+test("three animation candidates make exactly three whole-sheet OpenAI requests with consistency instructions", async (t) => {
+  const f = await fixture(t);
+  const grid = { columns: 2, rows: 2, frameCount: 3, frameWidth: 1, frameHeight: 1 };
+  Object.assign(f.asset, { kind: "animation", frameGrid: grid });
+  await writeFile(f.options.manifestPath, JSON.stringify(f.manifest));
+  let calls = 0;
+  f.options.upscaleProvider = createOpenAiUpscaleProvider({ apiKey: "test-key", fetch: async (_url, options) => {
+    calls++;
+    const prompt = options.body.get("prompt");
+    const [canvasWidth, canvasHeight] = options.body.get("size").split("x").map(Number);
+    assert.equal(canvasWidth % grid.columns, 0);
+    assert.equal(canvasHeight % grid.rows, 0);
+    assert.match(prompt, /ONE animation spritesheet: 2 columns by 2 rows, 3 frames/);
+    assert.match(prompt, /SAME character or object/);
+    assert.match(prompt, /each final cell must be 4 by 3/);
+    assert.match(prompt, /distinct pose and original animation motion/);
+    assert.match(prompt, /Leave unused cells transparent/);
+    const image = Buffer.from(await options.body.get("image").arrayBuffer());
+    const { data, info } = await sharp(image).raw().toBuffer({ resolveWithObject: true });
+    assert.deepEqual([info.width, info.height], [2, 2]);
+    assert.equal(data[3], 255);
+    assert.equal(data[7], 255);
+    assert.equal(data[11], 255);
+    assert.equal(data[15], 0);
+    return Response.json({ data: [{ b64_json: image.toString("base64") }] });
+  } });
+  const before = await readFile(f.options.manifestPath, "utf8");
+  const { candidates } = await generateScaledVariantOptions(f.options, { assetId: "hero", versionName: "v1", sourceFile: "art/source.png", action: "generate", width: 4, height: 3, method: "ai-upscale" });
+  assert.equal(calls, 3);
+  assert.equal(candidates.length, 3);
+  for (const candidate of candidates) {
+    assert.deepEqual(candidate.dimensions, { width: 8, height: 6 });
+    assert.equal(candidate.frameGrid.frameCount, 3);
+  }
+  assert.equal(await readFile(f.options.manifestPath, "utf8"), before);
+  assert.deepEqual(await readdir(f.options.assetsDir), ["source.png"]);
 });
