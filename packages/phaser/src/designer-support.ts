@@ -4209,6 +4209,7 @@ export function stopStatusAnimation(status: HTMLDivElement): void {
 }
 
 export function startGeneratingStatusAnimation(status: HTMLDivElement, message: string): void {
+  stopStatusAnimation(status);
   let offset = 0;
   const highlightLength = 3;
   const maxOffset = Math.max(1, message.length - highlightLength + 1);

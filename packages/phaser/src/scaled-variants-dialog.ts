@@ -6,7 +6,7 @@ import {
   type AiAssetScaledVariant,
 } from "@ai-game-assets/core";
 import type { AiAssetDebugClient, ScaledVariantCandidate } from "./debug-client.js";
-import { openFrameTouchUpEditor, startSpritesheetPreview } from "./designer-support.js";
+import { openFrameTouchUpEditor, startSpritesheetPreview, startGeneratingStatusAnimation, stopStatusAnimation } from "./designer-support.js";
 
 type VariantRequest = Parameters<AiAssetDebugClient["scaledVariant"]>[0];
 type VariantDraft = { request: VariantRequest; candidates: ScaledVariantCandidate[]; chosenIndex?: number };
@@ -90,7 +90,8 @@ export function openScaledVariantsDialog(options: {
   methodLabel.append(methods);
   const source = document.createElement("p");
   source.setAttribute("aria-live", "polite");
-  const status = document.createElement("p");
+  const status = document.createElement("div");
+  status.className = "ai-game-assets-designer__status";
   status.setAttribute("role", "status");
   const button = (label: string, action: () => void) => {
     const b = document.createElement("button");
@@ -104,6 +105,7 @@ export function openScaledVariantsDialog(options: {
     busy = false;
   const dispose = () => {
     operation.abort();
+    stopStatusAnimation(status);
     stopAnimations(savedAnimations);
     stopAnimations(candidateAnimations);
     dialog.remove();
@@ -301,8 +303,7 @@ export function openScaledVariantsDialog(options: {
         const scale = Math.min(128 / frame.frameWidth, 128 / frame.frameHeight);
         stop = startSpritesheetPreview({ element: stage, src,
           asset: { ...asset, ...geometry, tileset: undefined },
-          displaySize: { width: frame.frameWidth * scale, height: frame.frameHeight * scale },
-          applyFrameTransforms: false });
+          displaySize: { width: frame.frameWidth * scale, height: frame.frameHeight * scale } });
         stops.add(stop);
       }
     });
@@ -312,14 +313,17 @@ export function openScaledVariantsDialog(options: {
     if (busy) return;
     clearCandidates();
     setBusy(true);
-    status.textContent = "Generating 3 candidates…";
+    status.dataset.kind = "busy";
+    startGeneratingStatusAnimation(status, "Generating 3 candidates…");
     try {
       const result = await options.client.scaledVariantOptions(data, { signal: operation.signal });
       if (operation.signal.aborted) return;
+      stopStatusAnimation(status);
+      status.dataset.kind = "info";
       showCandidates({ request: data, candidates: result.candidates });
     } catch (error) {
       if (!operation.signal.aborted) status.textContent = error instanceof Error ? error.message : String(error);
-    } finally { setBusy(false); }
+    } finally { stopStatusAnimation(status); status.dataset.kind = "info"; setBusy(false); }
   }
   function showCandidates(draft: VariantDraft) {
     pendingRequest = draft.request;

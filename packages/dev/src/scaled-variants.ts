@@ -20,6 +20,7 @@ import {
   writeManifestModule,
   type AssetStoreOptions,
 } from "./asset-store.js";
+import { alignSpriteSheetFrames } from "./provider-image-processing.js";
 import { closestImageGenerationSize } from "./image-generation-sizes.js";
 
 /** An image enlargement provider. AI editing may refine details and transparency. */
@@ -203,7 +204,7 @@ async function processScaledVariant(
           : undefined);
       image = await resizeScaledSource(
         await readFile(localFile(options, source.file)),
-        { ...source, kind: asset.kind },
+        { ...source, kind: asset.kind, frameAlignment: version.settings?.frameAlignment ?? asset.settings?.frameAlignment },
         geometry,
         input.method ?? "nearest",
         provider,
@@ -293,7 +294,7 @@ async function processScaledVariant(
 
 export async function resizeScaledSource(
   image: Uint8Array,
-  source: AiAssetScaledSource & { kind?: AiAssetDefinition["kind"] },
+  source: AiAssetScaledSource & { kind?: AiAssetDefinition["kind"]; frameAlignment?: "center" | "none" },
   target: {
     dimensions: AiAssetDimensions;
     frameGrid?: AiAssetScaledSource["frameGrid"];
@@ -349,7 +350,10 @@ export async function resizeScaledSource(
       .ensureAlpha().png().toBuffer();
     // Clear unused cells even if the model painted in them; retain all valid
     // frame pixels and their returned alpha without applying a source mask.
-    return resizeScaledSource(fitted, { ...source, ...target }, target, "nearest", undefined, signal);
+    const cleared = await resizeScaledSource(fitted, { ...source, ...target }, target, "nearest", undefined, signal);
+    // Match normal sheet generation: correct row/column drift together, keeping
+    // the relative motion of poses within each row and column intact.
+    return source.frameAlignment === "none" ? cleared : alignSpriteSheetFrames(cleared, targetGrid);
   }
   const output = Buffer.alloc(
     target.dimensions.width * target.dimensions.height * 4,
