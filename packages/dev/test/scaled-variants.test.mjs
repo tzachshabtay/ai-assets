@@ -616,3 +616,20 @@ test("three animation candidates make exactly three whole-sheet OpenAI requests 
   assert.equal(await readFile(f.options.manifestPath, "utf8"), before);
   assert.deepEqual(await readdir(f.options.assetsDir), ["source.png"]);
 });
+
+
+test("tilesets retain independent tile upscaling rather than animation identity instructions", async (t) => {
+  const f = await fixture(t);
+  Object.assign(f.asset, { kind: "tileset", tileset: { tileWidth: 1, tileHeight: 1, columns: 2, rows: 2, tileCount: 4 } });
+  await writeFile(f.options.manifestPath, JSON.stringify(f.manifest));
+  let calls = 0;
+  f.options.upscaleProvider = { async upscale(input) {
+    calls++;
+    assert.equal(input.frameGrid, undefined);
+    const metadata = await sharp(input.image).metadata();
+    assert.deepEqual([metadata.width, metadata.height], [1, 1]);
+    return input.image;
+  } };
+  await f.generate({ method: "ai-upscale" });
+  assert.equal(calls, 4);
+});

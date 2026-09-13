@@ -10,6 +10,7 @@ import {
   scaledVariantSources,
   selectScaledVariant,
   type AiAssetDimensions,
+  type AiAssetDefinition,
   type AiAssetScaledVariant,
   type AiAssetScaledSource,
 } from "@ai-game-assets/core";
@@ -202,7 +203,7 @@ async function processScaledVariant(
           : undefined);
       image = await resizeScaledSource(
         await readFile(localFile(options, source.file)),
-        source,
+        { ...source, kind: asset.kind },
         geometry,
         input.method ?? "nearest",
         provider,
@@ -292,7 +293,7 @@ async function processScaledVariant(
 
 export async function resizeScaledSource(
   image: Uint8Array,
-  source: AiAssetScaledSource,
+  source: AiAssetScaledSource & { kind?: AiAssetDefinition["kind"] },
   target: {
     dimensions: AiAssetDimensions;
     frameGrid?: AiAssetScaledSource["frameGrid"];
@@ -324,7 +325,7 @@ export async function resizeScaledSource(
   // Give the model every pose together so it can preserve one character across
   // the animation. Pack source gutters away before editing; runtime variants
   // use the same compact grid, including transparent unused cells.
-  if (upscale && sourceGrid && targetGrid) {
+  if (upscale && sourceGrid && targetGrid && source.kind !== "tileset") {
     const packedGrid = { ...sourceGrid, margin: 0, spacing: 0 };
     const packedSource = {
       ...source,
