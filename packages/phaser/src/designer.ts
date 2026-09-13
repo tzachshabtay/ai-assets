@@ -1,3 +1,4 @@
+import { openScaledVariantsDialog } from "./scaled-variants-dialog.js";
 import type {
   AiAssetAnimation,
   AiAssetAnimationFrameTiming,
@@ -990,6 +991,8 @@ export function installAiAssetDesigner(
     elements.currentAnimationButton.textContent = isTilesetAnimation
       ? "Edit animation..."
       : "Edit...";
+    elements.scaledVariantsButton.hidden = !asset.versions[asset.activeVersion]?.file ||
+      !["image", "spritesheet", "animation", "tileset"].includes(asset.kind) || Boolean(selectedTilesetAnimationKey);
     elements.currentTouchUpButton.textContent = isBaseTileset ? "Edit tileset..." : "Touch up...";
     elements.currentRevertButton.hidden = true;
     elements.currentPreview.classList.add("is-selected");
@@ -1057,6 +1060,8 @@ export function installAiAssetDesigner(
     elements.currentAnimationButton.hidden = isTilesetAnimation && selectedTilesetAnimationKey
       ? !hasEditableTilesetAnimationFrames(selectedTargetAssetId, selectedTilesetAnimationKey)
       : !optionAsset.frameGrid && !isAudio;
+    elements.scaledVariantsButton.hidden = !asset.versions[asset.activeVersion]?.file ||
+      !["image", "spritesheet", "animation", "tileset"].includes(asset.kind) || Boolean(selectedTilesetAnimationKey);
     elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(optionAsset)
       ? "Edit tileset..."
       : "Touch up...";
@@ -1474,6 +1479,8 @@ export function installAiAssetDesigner(
           selectedTilesetAnimationKey
         )
       : !asset.frameGrid && !isAudio;
+    elements.scaledVariantsButton.hidden = !asset.versions[asset.activeVersion]?.file ||
+      !["image", "spritesheet", "animation", "tileset"].includes(asset.kind) || Boolean(selectedTilesetAnimationKey);
     elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(asset)
       ? "Edit tileset..."
       : "Touch up...";
@@ -3078,6 +3085,24 @@ export function installAiAssetDesigner(
     }
   });
 
+  let closeScaledVariants: (() => void) | undefined;
+  elements.scaledVariantsButton.addEventListener("click", event => {
+    event.stopPropagation();
+    void (async () => {
+      const assetId = await ensureTargetVariantForDerive(selectedTargetAssetId);
+      if (!assetId) return;
+      closeScaledVariants?.();
+      closeScaledVariants = openScaledVariantsDialog({
+        root: elements.root, asset: manifest.assets[assetId]!, client, resolveAssetUrl,
+        onManifest: updated => {
+          capturePanelDraft(); manifest = updated;
+          options.onManifestUpdated?.(manifest);
+          syncAsset(selectedAssetId);
+        },
+      });
+    })().catch(error => setStatus(elements, error instanceof Error ? error.message : String(error), "error"));
+  });
+
   elements.versionsButton.addEventListener("click", () => {
     const asset = manifest.assets[selectedTargetAssetId];
 
@@ -3746,6 +3771,7 @@ export function installAiAssetDesigner(
       stopStatusAnimation(elements.status);
       unbindInputBoundary();
       dockPanel.destroy();
+      closeScaledVariants?.();
       elements.root.remove();
     }
   };

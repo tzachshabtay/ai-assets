@@ -63,6 +63,7 @@ export type DesignerElements = {
   currentAnimationButton: HTMLButtonElement;
   currentRevertButton: HTMLButtonElement;
   currentTouchUpButton: HTMLButtonElement;
+  scaledVariantsButton: HTMLButtonElement;
   currentPreview: HTMLDivElement;
   uploadButton: HTMLButtonElement;
   deriveButton: HTMLButtonElement;
@@ -248,6 +249,11 @@ export function createDesignerElements(
   currentTouchUpButton.className = "ai-game-assets-designer__animate-button";
   currentTouchUpButton.textContent = "Touch up...";
   currentTouchUpButton.hidden = true;
+  const scaledVariantsButton = document.createElement("button");
+  scaledVariantsButton.type = "button";
+  scaledVariantsButton.className = "ai-game-assets-designer__animate-button";
+  scaledVariantsButton.textContent = "Scaled variants...";
+  scaledVariantsButton.hidden = true;
   const currentRevertButton = document.createElement("button");
   currentRevertButton.type = "button";
   currentRevertButton.className = "ai-game-assets-designer__animate-button";
@@ -259,6 +265,7 @@ export function createDesignerElements(
     currentAnimation,
     currentAnimationButton,
     currentTouchUpButton,
+    scaledVariantsButton,
     currentRevertButton
   );
 
@@ -394,6 +401,7 @@ export function createDesignerElements(
     currentAnimationButton,
     currentRevertButton,
     currentTouchUpButton,
+    scaledVariantsButton,
     currentPreview,
     uploadButton,
     deriveButton,
@@ -2116,9 +2124,16 @@ export async function openFrameTouchUpEditor(options: {
   undoButton.addEventListener("click", undo);
   redoButton.addEventListener("click", redo);
   saveButton.addEventListener("click", async () => {
-    await options.onSave(canvas.toDataURL("image/png"));
-    setDirty(false);
-    close();
+    saveButton.disabled = true;
+    try {
+      await options.onSave(canvas.toDataURL("image/png"));
+      setDirty(false);
+      close();
+    } catch (error) {
+      dirtyLabel.hidden = false;
+      dirtyLabel.setAttribute("role", "alert");
+      dirtyLabel.textContent = error instanceof Error ? error.message : String(error);
+    } finally { saveButton.disabled = false; }
   });
   window.addEventListener("keydown", keyHandler, true);
 
@@ -4708,6 +4723,15 @@ export function ensureDesignerStyles(): void {
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
   padding: 14px;
 }
+.ai-game-assets-designer__scaled-card h2 { margin: 0 0 10px; font-size: 20px; }
+.ai-game-assets-designer__scaled-card p { color: #b9c1cf; font-size: 13px; line-height: 1.5; }
+.ai-game-assets-designer__scaled-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.ai-game-assets-designer__scaled-form > h3,
+.ai-game-assets-designer__scaled-form > p,
+.ai-game-assets-designer__scaled-form > .ai-game-assets-designer__scaled-method { grid-column: 1 / -1; margin: 0; }
+.ai-game-assets-designer__scaled-form .ai-game-assets-designer__field { margin: 0; min-width: 0; }
+.ai-game-assets-designer__scaled-form > button { justify-self: start; }
+.ai-game-assets-designer__scaled-card button:disabled { opacity: .45; cursor: wait; }
 .ai-game-assets-designer__tileset-mixer-card {
   width: min(980px, calc(100vw - 36px));
 }

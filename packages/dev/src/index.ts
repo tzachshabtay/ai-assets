@@ -69,3 +69,6 @@ export {
   readManifestDirectory,
   referencedAssetFiles
 } from "./build-manifest.js";
+
+export { saveScaledVariant, resizeScaledSource, createReplicateUpscaleProvider } from "./scaled-variants.js";
+export type { ScaledVariantRequest, ScaledVariantStoreOptions, AiAssetUpscaleProvider } from "./scaled-variants.js";

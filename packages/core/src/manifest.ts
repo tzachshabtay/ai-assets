@@ -1,3 +1,4 @@
+import { assertScaledVariants } from "./scaled-variants.js";
 import type {
   AiAssetDefinition,
   AiAssetManifest,
@@ -439,6 +440,7 @@ function assertVersion(
   versionName: string,
   version: AiAssetVersion
 ): void {
+  assertScaledVariants(asset, version);
   const assetId = asset.id;
   assertNonEmpty(versionName, `${assetId}.versions key`);
   assertNonEmpty(version.name, `${assetId}.versions.${versionName}.name`);

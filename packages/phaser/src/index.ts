@@ -140,3 +140,6 @@ export type {
   PhaserSceneLike,
   PhaserTextureManagerLike
 } from "./phaser-types.js";
+
+export { aiScaledVariantTextureKey, applyAiScaledVariant, loadAiScaledVariants } from "./scaled-variants.js";
+export type { AiScaledTextureTarget } from "./scaled-variants.js";

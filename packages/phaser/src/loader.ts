@@ -1,3 +1,4 @@
+import { loadAiScaledVariants } from "./scaled-variants.js";
 import {
   expandAiAssetIds,
   resolveAiAsset,
@@ -120,6 +121,7 @@ export function loadAiAsset(
       : resolved.versionName
   });
   const url = joinUrl(options.baseUrl, resolved.version.file);
+  loadAiScaledVariants(scene, resolved.asset, resolved.version, key, options.baseUrl);
 
   if (resolved.asset.kind === "tileset") {
     if (!resolved.asset.tileset) {

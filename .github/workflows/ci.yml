@@ -27,6 +27,9 @@ jobs:
       - name: Build library packages
         run: npm run build:packages
 
+      - name: Test asset storage and Phaser runtime
+        run: node --test packages/dev/test/*.test.mjs packages/phaser/test/*.test.mjs
+
       - name: Typecheck workspaces
         run: npm run typecheck --workspaces --if-present
 

@@ -140,6 +140,10 @@ export function normalizeAssetUrls(manifest: AiAssetManifest): void {
       if (typeof version.tilesetSourceFile === "string") {
         version.tilesetSourceFile = productionAssetUrl(version.tilesetSourceFile);
       }
+      for (const variant of Object.values(version.scaledVariants ?? {})) {
+        variant.file = productionAssetUrl(variant.file);
+        variant.sourceFile = productionAssetUrl(variant.sourceFile);
+      }
       for (const sequence of Object.values(version.tilesetAnimations ?? {})) {
         sequence.files = sequence.files.map(productionAssetUrl);
       }
@@ -164,6 +168,7 @@ export function referencedAssetFiles(manifest: AiAssetManifest): string[] {
       if (typeof version.tilesetSourceFile === "string") {
         files.add(version.tilesetSourceFile);
       }
+      for (const variant of Object.values(version.scaledVariants ?? {})) files.add(variant.file);
       for (const sequence of Object.values(version.tilesetAnimations ?? {})) {
         for (const file of sequence.files) {
           files.add(file);

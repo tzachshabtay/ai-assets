@@ -1,3 +1,4 @@
+import { saveScaledVariant, type ScaledVariantRequest, type AiAssetUpscaleProvider } from "./scaled-variants.js";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import {
   assertAsset,
@@ -39,6 +40,7 @@ import path from "node:path";
 
 export type AiAssetDevServerOptions = AssetStoreOptions & {
   provider?: AiImageProvider;
+  upscaleProvider?: AiAssetUpscaleProvider;
   audioProvider?: AiAudioProvider;
   host?: string;
   port?: number;
@@ -410,6 +412,14 @@ async function routeRequest(
       await writeManifestModule(options.manifestModulePath, manifest);
     }
     sendJson(response, 200, { manifest });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/__ai-assets/scaled-variant") {
+    const body = await readJson<ScaledVariantRequest>(request);
+    const operation = abortOnClientDisconnect(request, response);
+    try { sendJson(response, 200, await saveScaledVariant(options, body, operation.signal)); }
+    finally { operation.dispose(); }
     return;
   }
 

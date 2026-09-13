@@ -165,7 +165,20 @@ export type AiAudioPlaybackSettings = {
   };
 };
 
+/** A resolution of one immutable source version, with unchanged frame ordering. */
+export type AiAssetScaledVariant = {
+  id: string;
+  dimensions: AiAssetDimensions;
+  frameGrid?: AiAssetFrameGrid;
+  file: string;
+  method: "nearest" | "resample" | "ai-upscale" | "touch-up";
+  sourceFile: string;
+  createdAt: string;
+};
+
 export type AiAssetVersion = {
+  scaledVariants?: Record<string, AiAssetScaledVariant>;
+  scaledVariantSource?: { dimensions: AiAssetDimensions; frameGrid?: AiAssetFrameGrid };
   name: string;
   file: string;
   prompt: string;

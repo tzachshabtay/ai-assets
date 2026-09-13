@@ -715,6 +715,7 @@ async function deleteUnreferencedVersionFiles(
 function versionFiles(version: AiAssetVersion): string[] {
   return [
     version.file,
+    ...Object.values(version.scaledVariants ?? {}).map(variant => variant.file),
     ...(version.tilesetSourceFile ? [version.tilesetSourceFile] : []),
     ...Object.values(version.tilesetAnimations ?? {}).flatMap((sequence) => sequence.files)
   ];

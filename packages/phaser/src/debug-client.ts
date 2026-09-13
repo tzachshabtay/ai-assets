@@ -220,6 +220,18 @@ export class AiAssetDebugClient {
     return `${this.endpoint}/${file.replace(/^\//, "")}`;
   }
 
+  async scaledVariant(request: {
+    assetId: string; versionName: string; sourceFile: string; id?: string; expectedFile?: string;
+    action: "generate" | "touch-up" | "delete"; width?: number; height?: number;
+    method?: "nearest" | "resample" | "ai-upscale"; dataUrl?: string;
+  }, options: AiAssetDebugClientRequestOptions = {}): Promise<{ manifest: AiAssetManifest }> {
+    const response = await fetchDebugEndpoint(`${this.endpoint}/__ai-assets/scaled-variant`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request), signal: options.signal,
+    });
+    if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? "Scaled variant request failed.");
+    return response.json() as Promise<{ manifest: AiAssetManifest }>;
+  }
+
   async generate(
     request: GenerateDebugOptionsRequest,
     options: AiAssetDebugClientRequestOptions = {}

@@ -1,3 +1,4 @@
+import { aiScaledVariantTextureKey, applyAiScaledVariant, scaledVariantUrl, type AiScaledTextureTarget } from "./scaled-variants.js";
 import {
   resolveAiAsset,
   resolveTargetAssetId,
@@ -31,6 +32,8 @@ import {
 export type AiAssetRuntimeOptions = {
   baseUrl?: string;
   targetId?: string;
+  /** Automatically select available scaled variants for bound sprites. Defaults to true. */
+  scaledVariants?: boolean;
 };
 
 export type AiAssetTextureBinding = {
@@ -125,6 +128,28 @@ export class AiAssetRuntime {
   readonly manifest: AiAssetManifest;
   readonly baseUrl?: string;
   readonly targetId?: string;
+  private readonly variantsEnabled: boolean;
+  private readonly variantBindings = new Set<{ target: PhaserImageLike; selection: AiAssetSelection | string }>();
+  private readonly loadingVariants = new Set<string>();
+  private disposed = false;
+  // Phaser animation frames reference the original sheet. Restore its geometry
+  // before simulation so normal setScale and animation updates keep their meaning.
+  private readonly onScaledReset = () => {
+    const reset = (binding: { target: PhaserImageLike; selection: AiAssetSelection | string }) => {
+      const target = binding.target as AiScaledTextureTarget;
+      const key = this.key(binding.selection);
+      if (!target.texture?.key.startsWith(key + "::scaled::")) return;
+      const width = target.displayWidth, height = target.displayHeight;
+      target.setTexture(key, target.frame?.name);
+      target.setDisplaySize(width, height);
+    };
+    for (const binding of this.textureBindings) reset(binding);
+    for (const binding of this.variantBindings) reset(binding);
+  };
+  private readonly onScaledUpdate = () => {
+    for (const binding of this.textureBindings) this.updateScaledTarget(binding.target, binding.selection);
+    for (const binding of this.variantBindings) this.updateScaledTarget(binding.target, binding.selection);
+  };
   private readonly textureBindings = new Set<StoredTextureBinding>();
   private readonly tilesetAnimationBindings = new Set<StoredTilesetAnimationBinding>();
   private readonly previewTilesetAnimations = new Map<string, StoredTilesetAnimationPreview>();
@@ -141,6 +166,55 @@ export class AiAssetRuntime {
     this.manifest = manifest;
     this.baseUrl = options.baseUrl;
     this.targetId = options.targetId;
+    this.variantsEnabled = options.scaledVariants !== false;
+    const events = (scene as PhaserSceneLike & { events?: { on(event: string, listener: () => void): void; off(event: string, listener: () => void): void; once(event: string, listener: () => void): void } }).events;
+    if (this.variantsEnabled) {
+      events?.on("preupdate", this.onScaledReset);
+      events?.on("postupdate", this.onScaledUpdate);
+      events?.once("shutdown", () => { this.disposed = true; events.off("preupdate", this.onScaledReset); events.off("postupdate", this.onScaledUpdate); this.variantBindings.clear(); this.textureBindings.clear(); });
+    }
+  }
+
+  /** Explicit display pixel dimensions can override camera/canvas/DPR measurement. */
+  applyScaledVariant(target: AiScaledTextureTarget, selection: AiAssetSelection | string, options: { width?: number; height?: number; frame?: string | number } = {}) {
+    if (!this.variantsEnabled || this.previewTextureKeys.has(this.resolveAssetId(selection))) return;
+    const resolved = resolveAiAsset(this.manifest, this.withTarget(selection));
+    return applyAiScaledVariant(this.scene, target, resolved.asset, resolved.version, this.key(selection), options);
+  }
+
+  private updateScaledTarget(target: PhaserImageLike, selection: AiAssetSelection | string): void {
+    const sprite = target as AiScaledTextureTarget;
+    if (!sprite.setDisplaySize || !Number.isFinite(sprite.displayWidth) || !Number.isFinite(sprite.displayHeight)) return;
+    const assetId = this.resolveAssetId(selection), asset = this.manifest.assets[assetId];
+    if (!asset?.versions[asset.activeVersion] || this.previewTextureKeys.has(assetId)) return;
+    const key = this.key(selection), current = sprite.texture?.key;
+    // Bindings to base images must not replace an unrelated linked animation texture.
+    if (current !== key && !current?.startsWith(key + "::scaled::")) return;
+    this.applyScaledVariant(sprite, selection);
+  }
+
+  private refreshScaledVariants(): void {
+    if (this.disposed || !this.variantsEnabled || typeof Image === "undefined") return;
+    for (const asset of Object.values(this.manifest.assets)) {
+      const version = asset.versions[asset.activeVersion];
+      if (!version?.scaledVariants) continue;
+      const baseKey = aiTextureKey({ assetId: asset.id });
+      for (const variant of Object.values(version.scaledVariants)) {
+        const key = aiScaledVariantTextureKey(baseKey, variant);
+        if (this.scene.textures?.exists(key) || this.loadingVariants.has(key)) continue;
+        this.loadingVariants.add(key);
+        const image = new Image(); image.crossOrigin = "anonymous";
+        image.onload = () => {
+          this.loadingVariants.delete(key);
+          if (this.disposed) return;
+          if (variant.frameGrid) this.scene.textures?.addSpriteSheet?.(key, image, variant.frameGrid);
+          else this.scene.textures?.addImage?.(key, image);
+          this.onScaledUpdate();
+        };
+        image.onerror = () => { this.loadingVariants.delete(key); };
+        image.src = scaledVariantUrl(this.baseUrl, variant.file);
+      }
+    }
   }
 
   key(selection: AiAssetSelection | string): string {
@@ -233,6 +307,10 @@ export class AiAssetRuntime {
     );
 
     const frameTransforms = this.bindAnimationFrameTransforms(target, asset, animation, options);
+    const scaledBinding = { target, selection: animationSelection.selection };
+    this.variantBindings.add(scaledBinding);
+    const removeScaledBinding = () => this.variantBindings.delete(scaledBinding);
+    target.once?.("destroy", removeScaledBinding);
 
     return {
       assetId: animationSelection.assetId,
@@ -242,6 +320,8 @@ export class AiAssetRuntime {
       frameTransforms,
       destroy() {
         frameTransforms?.detach();
+        removeScaledBinding();
+        target.off?.("destroy", removeScaledBinding);
       }
     };
   }
@@ -340,6 +420,8 @@ export class AiAssetRuntime {
     this.manifest.assetPaths = manifest.assetPaths;
     this.manifest.styleGuide = manifest.styleGuide;
     this.manifest.targets = manifest.targets;
+    this.refreshScaledVariants();
+    this.onScaledUpdate();
 
     for (const binding of this.textureBindings) {
       binding.targetAssetId = this.resolveAssetId(binding.selection);

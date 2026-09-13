@@ -21,6 +21,7 @@ export type {
   AiAssetTileset,
   AiAssetTarget,
   AiAssetVersion,
+  AiAssetScaledVariant,
   AiTilesetAnimation,
   AiTilesetAnimationFrameTiming,
   AiTilesetAnimationVersion,
@@ -68,3 +69,5 @@ export type {
   InGameDesignerToggleOptions,
   InGameDesignerToggleRegistration
 } from "./designer-dock.js";
+
+export * from "./scaled-variants.js";
