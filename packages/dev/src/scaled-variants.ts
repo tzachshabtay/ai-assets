@@ -36,11 +36,12 @@ export type ScaledVariantRequest = {
   sourceFile: string;
   id?: string;
   expectedFile?: string;
-  action: "generate" | "touch-up" | "delete";
+  action: "generate" | "select" | "touch-up" | "delete";
   width?: number;
   height?: number;
   method?: "nearest" | "resample" | "ai-upscale";
   dataUrl?: string;
+  candidateSourceFile?: string;
 };
 export type ScaledVariantStoreOptions = AssetStoreOptions & {
   upscaleProvider?: AiAssetUpscaleProvider;
@@ -77,11 +78,45 @@ function localFile(options: AssetStoreOptions, file: string): string {
   return resolved;
 }
 
+export async function generateScaledVariantOptions(
+  options: ScaledVariantStoreOptions,
+  input: ScaledVariantRequest,
+  signal?: AbortSignal,
+) {
+  const operation = new AbortController();
+  const combined = signal ? AbortSignal.any([signal, operation.signal]) : operation.signal;
+  try {
+    const candidates = await Promise.all([0, 1, 2].map(async index => {
+      const result = await processScaledVariant(options, { ...input, action: "generate" }, combined, true);
+      const variant = result.variant!;
+      return {
+        index, dataUrl: result.previewDataUrl!, dimensions: variant.dimensions,
+        frameGrid: variant.frameGrid, method: variant.method, sourceFile: variant.sourceFile,
+      };
+    }));
+    combined.throwIfAborted();
+    return { candidates };
+  } catch (error) {
+    operation.abort(error);
+    throw error;
+  }
+}
+
 export async function saveScaledVariant(
   options: ScaledVariantStoreOptions,
   input: ScaledVariantRequest,
   signal?: AbortSignal,
 ) {
+  return processScaledVariant(options, input, signal, false);
+}
+
+async function processScaledVariant(
+  options: ScaledVariantStoreOptions,
+  input: ScaledVariantRequest,
+  signal: AbortSignal | undefined,
+  previewOnly: boolean,
+) {
+  signal?.throwIfAborted();
   const original = await readManifest(options.manifestPath);
   const asset = original.assets[input.assetId],
     version = asset?.versions[input.versionName];
@@ -91,14 +126,14 @@ export async function saveScaledVariant(
     );
   if (!["image", "spritesheet", "animation", "tileset"].includes(asset.kind))
     throw new Error("Scaled variants require a graphical asset.");
-  if (!["generate", "touch-up", "delete"].includes(input.action))
+  if (!["generate", "select", "touch-up", "delete"].includes(input.action))
     throw new Error("Unknown scaled variant action.");
   const existing = input.id ? version.scaledVariants?.[input.id] : undefined;
   if (input.id && !existing)
     throw new Error("Scaled variant no longer exists.");
   if (existing && existing.file !== input.expectedFile)
     throw new Error("Scaled variant changed. Refresh before editing it.");
-  if (input.action !== "generate" && !existing)
+  if (["touch-up", "delete"].includes(input.action) && !existing)
     throw new Error("Select a scaled variant first.");
   const base = scaledVariantSources(asset, version)[0]!;
   const geometryAsset = {
@@ -116,7 +151,7 @@ export async function saveScaledVariant(
             width: input.width!,
             height: input.height!,
           });
-    if (input.action === "generate") {
+    if (input.action === "generate" || input.action === "select") {
       const duplicate = scaledVariantSources(geometryAsset, version).find(
         (candidate) =>
           (!input.id || candidate.id !== input.id) &&
@@ -137,9 +172,11 @@ export async function saveScaledVariant(
       { width: input.width ?? 1, height: input.height ?? 1 },
       { version, excludeId: input.id },
     )!;
-    if (input.action === "touch-up") {
+    if (input.action === "select" && input.candidateSourceFile !== source.file)
+      throw new Error("The candidate source changed. Generate new scaled variant options.");
+    if (input.action === "touch-up" || input.action === "select") {
       if (!input.dataUrl?.startsWith("data:image/png;base64,"))
-        throw new Error("Touch-up must supply a PNG image.");
+        throw new Error("Selected image must supply a PNG image.");
       image = Buffer.from(
         input.dataUrl.slice("data:image/png;base64,".length),
         "base64",
@@ -151,7 +188,7 @@ export async function saveScaledVariant(
         metadata.width !== geometry.dimensions.width ||
         metadata.height !== geometry.dimensions.height
       )
-        throw new Error("Touch-up dimensions must match the scaled variant.");
+        throw new Error("Selected image dimensions must match the scaled variant.");
       image = await sharp(image).png().toBuffer();
     } else {
       const provider =
@@ -192,6 +229,10 @@ export async function saveScaledVariant(
     };
   }
   signal?.throwIfAborted();
+  if (previewOnly) return {
+    manifest: original, asset, variant,
+    previewDataUrl: `data:image/png;base64,${Buffer.from(image!).toString("base64")}`,
+  };
   return transaction(path.resolve(options.manifestPath), async () => {
     const manifest = await readManifest(options.manifestPath),
       latest = manifest.assets[input.assetId]?.versions[input.versionName];
@@ -204,6 +245,11 @@ export async function saveScaledVariant(
         JSON.stringify(existing)
     )
       throw new Error("Asset changed while processing. Refresh before saving.");
+    if (variant && scaledVariantSources(geometryAsset, latest).some(candidate =>
+      candidate.id !== variant.id &&
+      scaledVariantFrameSize(candidate).width === scaledVariantFrameSize(variant).width &&
+      scaledVariantFrameSize(candidate).height === scaledVariantFrameSize(variant).height
+    )) throw new Error("Scaled variant dimensions must be unique; that size was saved while processing.");
     const previous = structuredClone(manifest);
     latest.scaledVariantSource ??= {
       dimensions: base.dimensions,
@@ -281,6 +327,7 @@ export async function resizeScaledSource(
   for (let row = 0; row < rows; row++)
     for (let column = 0; column < columns; column++) {
       signal?.throwIfAborted();
+      if (row * columns + column >= (sourceGrid?.frameCount ?? rows * columns)) continue;
       const frame = await sharp(image)
         .extract({
           left:

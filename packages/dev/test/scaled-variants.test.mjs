@@ -18,6 +18,7 @@ import {
 } from "@ai-game-assets/core";
 import { createAiAssetDevServer } from "../dist/server.js";
 import {
+  generateScaledVariantOptions,
   saveScaledVariant,
   resizeScaledSource,
   createOpenAiUpscaleProvider,
@@ -482,4 +483,78 @@ test("OpenAI errors and missing output do not save variants", async (t) => {
   }
   assert.equal(await readFile(f.options.manifestPath, "utf8"), before);
   assert.deepEqual(await readdir(f.options.assetsDir), ["source.png"]);
+});
+
+
+test("three AI candidates do not save anything; selecting one saves its pixels without another generation", async (t) => {
+  const f = await fixture(t);
+  let calls = 0;
+  f.options.upscaleProvider = { async upscale() {
+    const shade = ++calls * 60;
+    return sharp({ create: { width: 4, height: 4, channels: 4, background: { r: shade, g: 0, b: 0, alpha: 1 } } }).png().toBuffer();
+  } };
+  const input = { assetId: "hero", versionName: "v1", sourceFile: "art/source.png", action: "generate", width: 4, height: 4, method: "ai-upscale" };
+  const before = await readFile(f.options.manifestPath, "utf8");
+  const { candidates } = await generateScaledVariantOptions(f.options, input);
+  assert.equal(calls, 3);
+  assert.equal(candidates.length, 3);
+  assert.equal(new Set(candidates.map(c => c.dataUrl)).size, 3);
+  assert.equal(await readFile(f.options.manifestPath, "utf8"), before);
+  assert.deepEqual(await readdir(f.options.assetsDir), ["source.png"]);
+  const chosen = candidates[1];
+  const saved = await saveScaledVariant(f.options, { ...input, action: "select", dataUrl: chosen.dataUrl, candidateSourceFile: chosen.sourceFile });
+  assert.equal(calls, 3);
+  assert.equal(Object.keys(saved.asset.versions.v1.scaledVariants).length, 1);
+  assert.deepEqual(await sharp(Buffer.from(saved.previewDataUrl.split(",")[1], "base64")).raw().toBuffer(), await sharp(Buffer.from(chosen.dataUrl.split(",")[1], "base64")).raw().toBuffer());
+});
+
+test("regeneration candidates preserve the old variant until selection and reject a stale selection", async (t) => {
+  const f = await fixture(t);
+  const original = (await f.generate({})).variant;
+  const input = { assetId: "hero", versionName: "v1", sourceFile: "art/source.png", id: original.id, expectedFile: original.file, action: "generate", width: 6, height: 6, method: "nearest" };
+  const { candidates } = await generateScaledVariantOptions(f.options, input);
+  assert.equal(JSON.parse(await readFile(f.options.manifestPath, "utf8")).assets.hero.versions.v1.scaledVariants[original.id].file, original.file);
+  const chosen = candidates[2];
+  const selection = { ...input, action: "select", dataUrl: chosen.dataUrl, candidateSourceFile: chosen.sourceFile };
+  const saved = await saveScaledVariant(f.options, selection);
+  assert.equal(saved.variant.id, original.id);
+  assert.notEqual(saved.variant.file, original.file);
+  await assert.rejects(saveScaledVariant(f.options, selection), /changed/);
+  assert.equal(Object.keys(saved.asset.versions.v1.scaledVariants).length, 1);
+});
+
+test("candidate failure or cancellation leaves files and manifest untouched", async (t) => {
+  const f = await fixture(t);
+  f.options.upscaleProvider = { async upscale() { throw new Error("offline"); } };
+  const input = { assetId: "hero", versionName: "v1", sourceFile: "art/source.png", action: "generate", width: 4, height: 4, method: "ai-upscale" };
+  const before = await readFile(f.options.manifestPath, "utf8");
+  await assert.rejects(generateScaledVariantOptions(f.options, input), /offline/);
+  await assert.rejects(generateScaledVariantOptions(f.options, input, AbortSignal.abort(new Error("canceled"))), /canceled/);
+  assert.equal(await readFile(f.options.manifestPath, "utf8"), before);
+  assert.deepEqual(await readdir(f.options.assetsDir), ["source.png"]);
+});
+
+test("HTTP candidate generation is read-only and promotion uses the selected candidate", async (t) => {
+  const f = await fixture(t), server = createAiAssetDevServer({ ...f.options, port: 0 });
+  await server.listen(); t.after(() => server.close());
+  const base = `http://127.0.0.1:${server.server.address().port}`;
+  const input = { assetId: "hero", versionName: "v1", sourceFile: "art/source.png", action: "generate", width: 6, height: 6, method: "nearest" };
+  const response = await fetch(base + "/__ai-assets/scaled-variant-options", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  assert.equal(response.status, 200);
+  const { candidates } = await response.json();
+  assert.equal(candidates.length, 3);
+  assert.deepEqual(await readdir(f.options.assetsDir), ["source.png"]);
+  const response2 = await fetch(base + "/__ai-assets/scaled-variant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input, action: "select", dataUrl: candidates[0].dataUrl, candidateSourceFile: candidates[0].sourceFile }) });
+  assert.equal(response2.status, 200);
+  assert.equal(Object.keys((await response2.json()).asset.versions.v1.scaledVariants).length, 1);
+});
+
+test("AI animation candidates process populated frames and leave unused grid cells empty", async () => {
+  const image = await sharp({ create: { width: 3, height: 1, channels: 4, background: "#ff0000" } }).png().toBuffer();
+  const grid = { columns: 3, rows: 1, frameCount: 2, frameWidth: 1, frameHeight: 1 };
+  let calls = 0;
+  const output = await resizeScaledSource(image, { file: "sheet.png", dimensions: { width: 3, height: 1 }, frameGrid: grid }, { dimensions: { width: 6, height: 2 }, frameGrid: { ...grid, frameWidth: 2, frameHeight: 2 } }, "ai-upscale", { async upscale({ image }) { calls++; return image; } });
+  assert.equal(calls, 2);
+  const pixels = await sharp(output).raw().toBuffer();
+  for (let y = 0; y < 2; y++) for (let x = 4; x < 6; x++) assert.equal(pixels[(y * 6 + x) * 4 + 3], 0);
 });
