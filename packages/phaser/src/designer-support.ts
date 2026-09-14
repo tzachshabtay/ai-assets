@@ -727,7 +727,9 @@ export function previewCurrentAsset(options: {
   onPreview(assetId: string, textureKey: string, asset: AiAssetDefinition): void;
   onError?(error: Error): void;
 }): void {
-  const textureKey = `ai-current-preview:${options.assetId}:${Date.now()}`;
+  // The active version is the canonical asset, including its scaled variants.
+  // A temporary preview key would pin playback to the original resolution.
+  const textureKey = aiTextureKey({ assetId: options.assetId });
   previewImageSource({
     ...options,
     textureKey

@@ -1939,7 +1939,7 @@ export function installAiAssetDesigner(
         label: readableAssetName(selectedTargetAssetId),
         playback: activeVersion.audioPlayback
       });
-      options.onPreview(selectedTargetAssetId, activeVersionSource, asset);
+      (options.onAssetReady ?? options.onPreview)(selectedTargetAssetId, activeVersionSource, asset);
     } else {
       const activeVersionSource = resolveAssetUrl(activeVersion.file);
       setCurrentImagePreview(elements.currentImage, activeVersionSource);
@@ -1948,7 +1948,7 @@ export function installAiAssetDesigner(
         manifest,
         assetId: selectedTargetAssetId,
         src: activeVersionSource,
-        onPreview: options.onPreview
+        onPreview: options.onAssetReady ?? options.onPreview
       });
     }
     setStatus(elements, "Previewing active version.", "info");

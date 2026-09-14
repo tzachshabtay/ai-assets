@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   installPromotedImageTexture,
   previewImageSource,
+  previewCurrentAsset,
   renderOptions,
   setCurrentImagePreview
 } from "../dist/designer-support.js";
@@ -223,12 +224,11 @@ test("a cross-origin active preview supersedes an older generated preview", () =
       assetOverride: { ...asset, prompt: "Temporary generated tiles." },
       onPreview
     });
-    previewImageSource({
+    previewCurrentAsset({
       scene,
       manifest,
       assetId: "forest",
       src: "http://127.0.0.1:4087/assets/forest.png",
-      textureKey: "active-preview",
       onPreview
     });
 
@@ -239,9 +239,9 @@ test("a cross-origin active preview supersedes an older generated preview", () =
     images[0].load();
     images[1].load();
 
-    assert.deepEqual(previewed, [{ assetId: "forest", textureKey: "active-preview" }]);
+    assert.deepEqual(previewed, [{ assetId: "forest", textureKey: "forest" }]);
     assert.equal(added.length, 1);
-    assert.equal(added[0].key, "active-preview");
+    assert.equal(added[0].key, "forest", "Current must restore the canonical texture so saved variants remain eligible");
     assert.deepEqual(added[0].config, {
       frameWidth: 16,
       frameHeight: 16,
