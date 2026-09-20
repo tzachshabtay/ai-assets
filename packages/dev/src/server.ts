@@ -775,16 +775,22 @@ export function planFirstDraftGeneration(
 function generationReferenceAssetIds(manifest: AiAssetManifest, asset: AiAssetDefinition): string[] {
   const targetId = Object.entries(manifest.targets ?? {})
     .find(([, target]) => Object.values(target.variants).includes(asset.id))?.[0];
+  const targetVariantIds = new Set(Object.values(manifest.targets ?? {})
+    .flatMap((target) => Object.values(target.variants)));
   const references = new Set<string>();
 
   // A linked animation inherits its base image as identity context. Resolve this
   // at generation time so promoting the base immediately changes the reference.
-  for (const parent of Object.values(manifest.assets)) {
-    if (parent.kind === "collection" || isAudioAsset(parent)) continue;
-    if (Object.values(parent.linkedAnimationAssets ?? {}).some((link) =>
+  for (const source of Object.values(manifest.assets)) {
+    if (targetVariantIds.has(source.id)) continue;
+    const parentId = resolveTargetAssetId(manifest, source.id, targetId);
+    const parent = manifest.assets[parentId];
+    if (!parent || parent.kind === "collection" || isAudioAsset(parent)) continue;
+    const links = { ...source.linkedAnimationAssets, ...parent.linkedAnimationAssets };
+    if (Object.values(links).some((link) =>
       resolveTargetAssetId(manifest, link.assetId, targetId) === asset.id
     )) {
-      references.add(resolveTargetAssetId(manifest, parent.id, targetId));
+      references.add(parentId);
     }
   }
   for (const id of asset.settings?.referenceAssetIds ?? []) {

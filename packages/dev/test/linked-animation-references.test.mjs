@@ -107,15 +107,18 @@ test("automatic base references are deduplicated and coexist with explicit, prio
 test("linked animation target variants reference their matching base variant", async (t) => {
   const manifest = { schemaVersion: 1, assets: {
     "cursor.walk": base(), "cursor.walk.click": animation("cursor.walk.click"),
-    "cursor.walk.phone": imageAsset("cursor.walk.phone"),
+    "cursor.walk.phone": imageAsset("cursor.walk.phone", { linkedAnimationAssets: base().linkedAnimationAssets }),
     "cursor.walk.click.phone": animation("cursor.walk.click.phone", { settings: { referenceAssetIds: ["cursor.walk"] } })
   }, targets: { phone: { id: "phone", label: "Phone", variants: {
     "cursor.walk": "cursor.walk.phone", "cursor.walk.click": "cursor.walk.click.phone"
   } } } };
   const { post, calls, assetsDir, image } = await fixture(t, manifest);
+  await writeFile(path.join(assetsDir, "interface/cursor.walk.png"), image);
   await writeFile(path.join(assetsDir, "interface/cursor.walk.phone.png"), image);
   await post("generate", { assetId: "cursor.walk.click.phone" });
   assert.deepEqual(calls[0].references.map((ref) => ref.fileName), ["cursor.walk.phone.png"]);
+  await post("generate", { assetId: "cursor.walk.click" });
+  assert.deepEqual(calls[1].references.map((ref) => ref.fileName), ["cursor.walk.png"]);
 });
 
 test("first drafts generate the linked base before its animation and pass the newly saved image", async (t) => {
