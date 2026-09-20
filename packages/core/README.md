@@ -10,6 +10,12 @@ npm install @ai-game-assets/core
 
 Use this package when defining or inspecting AI asset manifests without coupling your code to a game engine.
 
+## Shared designer dock
+
+`registerInGameDesignerPanel` and `registerInGameDesignerToggle` share a toolbar across installed designers. Click a button to toggle its panel/tool, or drag any toolbar button to move the toolbar and open panel together. When all panels are closed, dragging moves only the toolbar; opening a panel uses that location. Panel titles also support dragging, and panel edges support resizing.
+
+Drags end on release, pointer cancellation, lost capture, or window focus loss. Movement without a pressed button also clears a missed release outside the viewport. Run `npm run test:dock` for the browser regression tests (install Chromium with `npx playwright install chromium` first).
+
 ## Scaled variants
 
 `AiAssetVersion.scaledVariants` contains alternate resolutions of that source version. Each `AiAssetScaledVariant` records its ID, immutable file, dimensions, optional frame grid, generation method, source file and timestamp. `scaledVariantSource` retains the source geometry even if a later promotion changes the asset's dimensions. Variants do not change the logical asset dimensions or animation definitions.

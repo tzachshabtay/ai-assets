@@ -80,6 +80,9 @@ type DockState = {
   layoutAnimations: Map<HTMLButtonElement, Animation>;
   onWindowResize: () => void;
   activeId?: string;
+  position?: { right: number; top: number };
+  finishGesture?: () => void;
+  suppressButtonClick?: boolean;
   nextSequence: number;
 };
 
@@ -270,7 +273,25 @@ function ensureDockState(document: Document): DockState {
     onWindowResize: () => undefined,
     nextSequence: 0
   };
-  state.onWindowResize = () => positionDockForActivePanel(state);
+  state.onWindowResize = () => {
+    state.finishGesture?.();
+    positionDockForActivePanel(state);
+  };
+  root.addEventListener("pointerdown", (event) => {
+    const button = [...state.items.values(), ...state.toggles.values()]
+      .find((item) => item.button.contains(event.target as Node))?.button;
+    if (!button || button.disabled || event.button !== 0 || !event.isPrimary) return;
+    beginDockDrag(state, button, event, true);
+  });
+  root.addEventListener("click", (event) => {
+    const suppress = state.suppressButtonClick;
+    state.suppressButtonClick = false;
+    // Keyboard/programmatic activation has no pointer click to consume.
+    if (suppress && event.detail > 0) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
   document.defaultView?.addEventListener("resize", state.onWindowResize);
   states.set(document, state);
   return state;
@@ -278,6 +299,7 @@ function ensureDockState(document: Document): DockState {
 
 function activateDockItem(state: DockState, activeId: string | undefined): void {
   if (activeId !== undefined && !state.items.has(activeId)) return;
+  state.finishGesture?.();
 
   state.activeId = activeId;
   setDockPanelOpenState(state, activeId !== undefined);
@@ -304,9 +326,11 @@ function renderDockButtons(state: DockState): void {
   ));
 
   state.root.append(...items.map((item) => item.button));
+  positionDockForActivePanel(state);
 }
 
 function removeDockItem(state: DockState, item: DockItem): void {
+  state.finishGesture?.();
   const wasOpen = item.open;
   state.items.delete(item.id);
   if (state.activeId === item.id) state.activeId = undefined;
@@ -354,6 +378,7 @@ function setDockTogglePressed(item: DockToggleItem, isPressed: boolean): void {
 }
 
 function removeDockToggle(state: DockState, item: DockToggleItem): void {
+  state.finishGesture?.();
   state.toggles.delete(item.id);
   item.button.removeEventListener("click", item.onButtonClick);
   state.layoutAnimations.get(item.button)?.cancel();
@@ -388,31 +413,80 @@ function removeDockIfEmpty(state: DockState): void {
 }
 
 function beginPanelDrag(state: DockState, item: DockItem, event: PointerEvent): void {
-  if (event.button !== 0 || !item.open) return;
-  event.preventDefault();
-  const startRect = item.panel.getBoundingClientRect();
+  if (event.button !== 0 || !event.isPrimary || !item.open) return;
+  beginDockDrag(state, item.dragHandle!, event, false);
+}
+
+function beginDockDrag(state: DockState, handle: HTMLElement, event: PointerEvent, fromButton: boolean): void {
+  const view = state.document.defaultView;
+  if (!view) return;
+  const startRect = state.root.getBoundingClientRect();
+  const startRight = view.innerWidth - startRect.right;
   const startX = event.clientX;
   const startY = event.clientY;
-
-  const move = (moveEvent: PointerEvent) => {
-    const margin = 8;
-    const toolbarOffset = 50;
-    const view = state.document.defaultView;
-    if (!view) return;
-    const left = clamp(startRect.left + moveEvent.clientX - startX, margin, view.innerWidth - startRect.width - margin);
-    const top = clamp(startRect.top + moveEvent.clientY - startY, margin + toolbarOffset, view.innerHeight - 60);
-    item.geometry = { left, top, width: startRect.width, height: startRect.height };
-    applyPanelGeometry(item);
+  trackPointerGesture(state, handle, event, (moveEvent) => {
+    state.position = {
+      right: startRight - (moveEvent.clientX - startX),
+      top: startRect.top + moveEvent.clientY - startY
+    };
     positionDockForActivePanel(state);
+  }, fromButton);
+}
+
+/** Shared capture/cleanup for dragging and resizing, including releases outside the viewport. */
+function trackPointerGesture(
+  state: DockState,
+  handle: HTMLElement,
+  event: PointerEvent,
+  onMove: (event: PointerEvent) => void,
+  fromButton = false
+): void {
+  const view = state.document.defaultView;
+  if (!view) return;
+  state.finishGesture?.();
+  if (fromButton) state.suppressButtonClick = false;
+  let moved = false;
+  let finished = false;
+  const pointerId = event.pointerId;
+  if (!fromButton) event.preventDefault();
+  event.stopPropagation();
+  const move = (moveEvent: PointerEvent) => {
+    if (moveEvent.pointerId !== pointerId) return;
+    // A release beyond the browser may not send pointerup. Never move on re-entry without a press.
+    if ((moveEvent.buttons & 1) === 0) { end(); return; }
+    if (!moved && fromButton && Math.hypot(moveEvent.clientX - event.clientX, moveEvent.clientY - event.clientY) < 4) return;
+    moved = true;
+    state.root.classList.add("is-dragging");
+    moveEvent.preventDefault();
+    moveEvent.stopPropagation();
+    onMove(moveEvent);
   };
   const end = () => {
-    state.document.defaultView?.removeEventListener("pointermove", move);
-    state.document.defaultView?.removeEventListener("pointerup", end);
-    state.document.defaultView?.removeEventListener("pointercancel", end);
+    if (finished) return;
+    finished = true;
+    if (moved && fromButton) state.suppressButtonClick = true;
+    view.removeEventListener("pointermove", move, true);
+    view.removeEventListener("pointerup", endPointer, true);
+    view.removeEventListener("pointercancel", endPointer, true);
+    view.removeEventListener("blur", end);
+    state.document.removeEventListener("visibilitychange", visibility);
+    handle.removeEventListener("lostpointercapture", endPointer);
+    state.root.classList.remove("is-dragging");
+    if (state.finishGesture === end) state.finishGesture = undefined;
+    if (handle.hasPointerCapture?.(pointerId)) handle.releasePointerCapture(pointerId);
   };
-  state.document.defaultView?.addEventListener("pointermove", move);
-  state.document.defaultView?.addEventListener("pointerup", end, { once: true });
-  state.document.defaultView?.addEventListener("pointercancel", end, { once: true });
+  const endPointer = (endEvent: PointerEvent) => { if (endEvent.pointerId === pointerId) end(); };
+  const visibility = () => { if (state.document.hidden) end(); };
+  state.finishGesture = end;
+  // Capture phase runs before game/designer input boundaries can swallow the release.
+  view.addEventListener("pointermove", move, true);
+  view.addEventListener("pointerup", endPointer, true);
+  view.addEventListener("pointercancel", endPointer, true);
+  view.addEventListener("blur", end);
+  state.document.addEventListener("visibilitychange", visibility);
+  handle.addEventListener("lostpointercapture", endPointer);
+  try { handle.setPointerCapture(pointerId); }
+  catch { /* Detached handles and synthetic events still use the window listeners. */ }
 }
 
 function beginPanelResize(
@@ -421,14 +495,12 @@ function beginPanelResize(
   edge: ResizeEdge,
   event: PointerEvent
 ): void {
-  if (event.button !== 0 || !item.open) return;
-  event.preventDefault();
-  event.stopPropagation();
+  if (event.button !== 0 || !event.isPrimary || !item.open) return;
   const startRect = item.panel.getBoundingClientRect();
   const startX = event.clientX;
   const startY = event.clientY;
 
-  const move = (moveEvent: PointerEvent) => {
+  trackPointerGesture(state, event.currentTarget as HTMLElement, event, (moveEvent) => {
     const view = state.document.defaultView;
     if (!view) return;
     const margin = 8;
@@ -447,17 +519,10 @@ function beginPanelResize(
     if (edge.includes("s")) bottom = clamp(startRect.bottom + dy, top + minHeight, view.innerHeight - margin);
 
     item.geometry = { left, top, width: right - left, height: bottom - top };
+    state.position = { right: view.innerWidth - right, top: top - 50 };
     applyPanelGeometry(item);
     positionDockForActivePanel(state);
-  };
-  const end = () => {
-    state.document.defaultView?.removeEventListener("pointermove", move);
-    state.document.defaultView?.removeEventListener("pointerup", end);
-    state.document.defaultView?.removeEventListener("pointercancel", end);
-  };
-  state.document.defaultView?.addEventListener("pointermove", move);
-  state.document.defaultView?.addEventListener("pointerup", end, { once: true });
-  state.document.defaultView?.addEventListener("pointercancel", end, { once: true });
+  });
 }
 
 function applyPanelGeometry(item: DockItem): void {
@@ -471,6 +536,29 @@ function applyPanelGeometry(item: DockItem): void {
 
 function positionDockForActivePanel(state: DockState): void {
   const activeItem = state.activeId ? state.items.get(state.activeId) : undefined;
+  const view = state.document.defaultView;
+  if (state.position && view) {
+    if (activeItem?.open && activeItem.geometry) applyPanelGeometry(activeItem);
+    const dockRect = state.root.getBoundingClientRect();
+    const panelRect = activeItem?.open ? activeItem.panel.getBoundingClientRect() : undefined;
+    const right = clamp(state.position.right, 8, view.innerWidth - Math.max(dockRect.width, panelRect?.width ?? 0) - 8);
+    // Keep the toolbar and panel header reachable without preventing tall panels from moving down.
+    const visibleHeight = panelRect ? Math.max(dockRect.height, Math.min(panelRect.height, 60) + 50) : dockRect.height;
+    const top = clamp(state.position.top, 8, view.innerHeight - visibleHeight - 8);
+    state.position = { right, top };
+    state.root.style.left = "auto";
+    state.root.style.right = `${right}px`;
+    state.root.style.top = `${top}px`;
+    if (panelRect && activeItem) {
+      activeItem.geometry = {
+        left: view.innerWidth - right - panelRect.width, top: top + 50,
+        width: activeItem.geometry?.width ?? panelRect.width,
+        height: activeItem.geometry?.height ?? panelRect.height
+      };
+      applyPanelGeometry(activeItem);
+    }
+    return;
+  }
   if (!activeItem?.open) {
     state.root.style.removeProperty("left");
     state.root.style.removeProperty("top");
@@ -481,7 +569,6 @@ function positionDockForActivePanel(state: DockState): void {
   if (activeItem.geometry) applyPanelGeometry(activeItem);
   const panelRect = activeItem.panel.getBoundingClientRect();
   const dockRect = state.root.getBoundingClientRect();
-  const view = state.document.defaultView;
   const maximumLeft = view
     ? Math.max(8, view.innerWidth - dockRect.width - 8)
     : panelRect.right - dockRect.width;
@@ -530,6 +617,8 @@ function ensureDockStyles(document: Document): void {
   font: 600 13px/1 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   letter-spacing: 0;
   cursor: pointer;
+  touch-action: none;
+  user-select: none;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
   transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
@@ -549,6 +638,10 @@ function ensureDockStyles(document: Document): void {
 }
 .ai-game-assets-in-game-designer-dock.is-panel-open > .ai-game-assets-in-game-designer-dock__button:hover,
 .ai-game-assets-in-game-designer-dock.is-panel-open > .ai-game-assets-in-game-designer-dock__button:focus-visible {
+  transform: none;
+}
+.ai-game-assets-in-game-designer-dock.is-dragging > .ai-game-assets-in-game-designer-dock__button {
+  cursor: grabbing;
   transform: none;
 }
 .ai-game-assets-in-game-designer-dock__panel {

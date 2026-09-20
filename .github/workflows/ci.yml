@@ -30,6 +30,12 @@ jobs:
       - name: Test asset storage and Phaser runtime
         run: node --test packages/dev/test/*.test.mjs packages/phaser/test/*.test.mjs
 
+      - name: Install browser for designer dock tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Test designer dragging and resizing
+        run: npx playwright test
+
       - name: Typecheck workspaces
         run: npm run typecheck --workspaces --if-present
 

@@ -13,9 +13,11 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "build:packages": "tsc -b packages/core packages/dev packages/phaser --force",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:dock": "npm run build:packages && playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0"
   }
