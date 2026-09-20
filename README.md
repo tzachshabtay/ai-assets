@@ -92,6 +92,8 @@ export const assets = defineAiAssets({
 });
 ```
 
+Linked graphical animations automatically use their parent asset's active image as a generation reference. Promoting a new base image updates the reference for subsequent generations; no duplicate `referenceAssetIds` setting is needed. Explicit references and style guides are still included.
+
 For larger projects, keep assets as JSON files in folders and generate the TypeScript module during development or build.
 
 ### Tilesets and animated tiles

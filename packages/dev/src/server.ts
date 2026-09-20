@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import {
   assertAsset,
   resolveAiAsset,
+  resolveTargetAssetId,
   type AiAssetDefinition,
   type AiAudioGenerationSettings,
   type AiAssetDimensions,
@@ -361,7 +362,7 @@ async function routeRequest(
       const optionsForAsset = await options.provider.generate({
         asset,
         count: 1,
-        references: await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds),
+        references: await getReferenceImages(options, manifest, generationReferenceAssetIds(manifest, asset)),
         stylePrompt: manifest.styleGuide?.prompt,
         styleReferences: await getStyleReferenceImages(options, manifest.styleGuide)
       });
@@ -642,7 +643,7 @@ async function generateImage(
       ...(body.format ? { format: body.format } : {})
     },
     references: [
-      ...(await getReferenceImages(options, manifest, asset.settings?.referenceAssetIds) ?? []),
+      ...(await getReferenceImages(options, manifest, generationReferenceAssetIds(manifest, asset)) ?? []),
       ...referencesFromDataUrls(body.references)
     ],
     priorityReference: body.priorityReference
@@ -755,7 +756,7 @@ export function planFirstDraftGeneration(
 
     visiting.add(assetId);
 
-    for (const referenceAssetId of asset.settings?.referenceAssetIds ?? []) {
+    for (const referenceAssetId of generationReferenceAssetIds(manifest, asset)) {
       visit(referenceAssetId);
     }
 
@@ -769,6 +770,27 @@ export function planFirstDraftGeneration(
   }
 
   return planned;
+}
+
+function generationReferenceAssetIds(manifest: AiAssetManifest, asset: AiAssetDefinition): string[] {
+  const targetId = Object.entries(manifest.targets ?? {})
+    .find(([, target]) => Object.values(target.variants).includes(asset.id))?.[0];
+  const references = new Set<string>();
+
+  // A linked animation inherits its base image as identity context. Resolve this
+  // at generation time so promoting the base immediately changes the reference.
+  for (const parent of Object.values(manifest.assets)) {
+    if (parent.kind === "collection" || isAudioAsset(parent)) continue;
+    if (Object.values(parent.linkedAnimationAssets ?? {}).some((link) =>
+      resolveTargetAssetId(manifest, link.assetId, targetId) === asset.id
+    )) {
+      references.add(resolveTargetAssetId(manifest, parent.id, targetId));
+    }
+  }
+  for (const id of asset.settings?.referenceAssetIds ?? []) {
+    references.add(resolveTargetAssetId(manifest, id, targetId));
+  }
+  return [...references];
 }
 
 async function getReferenceImages(
@@ -787,7 +809,18 @@ async function getReferenceImages(
 
     const resolved = resolveAiAsset(manifest, assetId);
     const fileName = path.basename(resolved.version.file);
-    const filePath = path.join(options.assetsDir, fileName);
+    const prefix = (options.publicPathPrefix ?? "").replace(/^\/+|\/+$/g, "");
+    const publicFile = resolved.version.file.replace(/^\/+/, "");
+    // Preserve asset subfolders (for example art/interface/cursor.walk.png).
+    // Manifests without a matching public prefix retain legacy flat-file lookup.
+    const relativeFile = prefix && publicFile.startsWith(`${prefix}/`)
+      ? publicFile.slice(prefix.length + 1)
+      : fileName;
+    const root = path.resolve(options.assetsDir);
+    const filePath = path.resolve(root, relativeFile);
+    if (!filePath.startsWith(root + path.sep)) {
+      throw new Error("Generation reference is outside the asset directory.");
+    }
 
     return {
       image: await readFile(filePath),
