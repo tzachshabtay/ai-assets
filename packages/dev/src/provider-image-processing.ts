@@ -13,6 +13,64 @@ import type {
 
 export type RgbColor = { red: number; green: number; blue: number };
 
+export function hasAnimationBaseReference(request: GenerateAssetRequest): boolean {
+  return !request.priorityReference && request.asset.kind !== "tileset" &&
+    Boolean(request.references?.some((reference) => reference.role === "animation-base"));
+}
+
+/** Repeat the complete base canvas, including its margins, in the requested grid. */
+export async function animationBaseLayoutReference(
+  request: GenerateAssetRequest,
+  generationDimensions?: AiAssetDimensions
+): Promise<GenerateAssetReference | undefined> {
+  const grid = request.asset.frameGrid;
+  if (!hasAnimationBaseReference(request) || !grid) return undefined;
+  const count = grid.frameCount ?? grid.columns * grid.rows;
+  if (count <= 1) return undefined;
+  const base = request.references!.find((reference) => reference.role === "animation-base")!;
+  const dimensions = request.asset.dimensions;
+  if (!dimensions) return undefined;
+  const sheet = await composeSpriteSheetFrames(Array.from({ length: count }, () => base.image), dimensions, grid);
+  return {
+    image: generationDimensions ? resizePngToDimensions(sheet, generationDimensions) : sheet,
+    mimeType: "image/png",
+    fileName: "animation-base-layout.png"
+  };
+}
+
+/** Framing is relative to one frame, never to the entire generated sheet. */
+export function animationBaseFramingPromptLines(request: GenerateAssetRequest): string[] {
+  if (!hasAnimationBaseReference(request)) return [];
+  const referenceIndex = request.references!.findIndex((reference) => reference.role === "animation-base");
+  const reference = request.references![referenceIndex];
+  const lines = [
+    `Base-frame scale contract: Reference ${referenceIndex + 1} is the original single-frame base image, not an example of the whole spritesheet.`,
+    "Map the ENTIRE base-image canvas onto EACH animation frame's canvas. Preserve the subject's size relative to that canvas, its resting position, and its existing transparent margins. Do not fit the subject into a smaller inner box, zoom out, or add presentation padding.",
+    "Preserve the size of individual body parts and components (for example each footprint), not just the overall bounding box of the pose. Animate their positions at that size. Poses, squash/stretch, and effects may change visible bounds when requested; do not independently resize each pose to fill a box.",
+    "The first neutral pose and any return-to-rest pose must match the base image's framing. Prior generated frames guide motion only and must not introduce or propagate a smaller scale. If space is tight, reduce travel or effects instead of shrinking the whole subject, unless the user's action explicitly calls for a scale change.",
+    "The declared output dimensions override any older dimensions in the brief. A larger generation raster is more pixels for the same framing, not permission to draw a smaller subject."
+  ];
+  // PNG references allow concrete measurements in addition to the visual guide.
+  // Other reference formats still receive the same canvas-to-frame contract.
+  if (reference.mimeType !== "image/png") return lines;
+  let png: PNG;
+  try { png = PNG.sync.read(Buffer.from(reference.image)); } catch { return lines; }
+  let minX = png.width, minY = png.height, maxX = -1, maxY = -1, visible = 0;
+  for (let y = 0; y < png.height; y++) for (let x = 0; x < png.width; x++) {
+    if (png.data[(y * png.width + x) * 4 + 3] < 128) continue;
+    minX = Math.min(minX, x); minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); visible++;
+  }
+  if (!visible) return lines;
+  const width = maxX - minX + 1, height = maxY - minY + 1;
+  const percent = (value: number, total: number) => (100 * value / total).toFixed(1);
+  lines.push(
+    `Measured base framing: canvas ${png.width}x${png.height}; visible artwork at (${minX},${minY}), ${width}x${height} pixels. In EACH frame the resting subject therefore spans approximately ${percent(width, png.width)}% of frame width and ${percent(height, png.height)}% of frame height, starting at ${percent(minX, png.width)}% from the left and ${percent(minY, png.height)}% from the top.`,
+    `Solid artwork covers approximately ${percent(visible, png.width * png.height)}% of the base canvas. Preserve comparable body/component coverage while animating; do not satisfy the outer bounds with tiny subjects spaced far apart or with added sparkles.`
+  );
+  return lines;
+}
+
 export function referenceLockPromptLines(references: GenerateAssetReference[]): string[] {
   const analyses = references
     .map((reference) => analyzeReferenceImage(reference))

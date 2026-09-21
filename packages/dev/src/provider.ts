@@ -15,6 +15,9 @@ import { randomUUID } from "node:crypto";
 
 import {
   alignSpriteSheetFrames,
+  animationBaseFramingPromptLines,
+  animationBaseLayoutReference,
+  hasAnimationBaseReference,
   composeSpriteSheetFrames,
   referenceLockPromptLines,
   resizePngToDimensions,
@@ -56,6 +59,8 @@ export type GenerateAssetReference = {
   image: Uint8Array;
   mimeType: string;
   fileName: string;
+  /** A linked animation's single-frame base: preserve its framing as well as identity. */
+  role?: "animation-base";
 };
 
 export type GeneratedAssetOption = {
@@ -342,9 +347,11 @@ export function createOpenAiImageProvider(
             stageTilesetSheetReference(reference, tilesetGeometry)
           )))
         : request.references ?? [];
+      const animationLayout = await animationBaseLayoutReference(request, generationDimensions);
       const allReferences = [
         ...assetReferences,
         ...priorityImageReferences(request),
+        ...(animationLayout ? [animationLayout] : []),
         ...(request.styleReferences ?? []).map((reference, index) => ({
           ...reference,
           fileName: `style-reference-${index + 1}-${reference.fileName}`
@@ -363,7 +370,8 @@ export function createOpenAiImageProvider(
           variationIndex: index,
           variationCount: count,
           tilesetGeometry,
-          generationDimensions
+          generationDimensions,
+          animationLayoutReferenceNumber: animationLayout ? assetReferences.length + 1 : undefined
         }),
         n: 1,
         size: generationSize,
@@ -507,7 +515,8 @@ async function generateIsolatedSpriteSheetFrames(
         optionCount: context.count,
         branchSeed,
         hasPriorFrame: Boolean(priorFrame),
-        originalReferenceCount: request.references?.length ?? 0
+        originalReferenceCount: request.references?.length ?? 0,
+        preserveBaseFraming: hasAnimationBaseReference(request)
       });
       const frameAsset: AiAssetDefinition = {
         ...request.asset,
@@ -610,6 +619,7 @@ function isolatedSpriteFramePrompt(
     branchSeed: string;
     hasPriorFrame: boolean;
     originalReferenceCount: number;
+    preserveBaseFraming: boolean;
   }
 ): string {
   const frameNumber = context.frameIndex + 1;
@@ -624,12 +634,16 @@ function isolatedSpriteFramePrompt(
     `Render the animation phase at t=${context.frameIndex}/${context.frameCount}. Keep the pose meaningfully continuous with adjacent phases and make the complete sequence loop cleanly from its final sampled phase back to frame 1.`,
     ...(context.hasPriorFrame
       ? [
-          `Reference ${priorReferenceNumber} is the immediately preceding generated frame. Use it only for identity, scale, placement, and motion continuity; advance the action to the requested phase instead of copying it exactly.`
+          `Reference ${priorReferenceNumber} is the immediately preceding generated frame. Use it only for ${context.preserveBaseFraming ? "motion continuity; the original base image remains authoritative for subject scale and framing" : "identity, scale, placement, and motion continuity"}; advance the action to the requested phase instead of copying it exactly.`
         ]
       : [
-          "This is the first sampled phase. Establish the character identity, scale, and placement that all later frames should preserve."
+          context.preserveBaseFraming
+            ? "This is the first sampled phase. Inherit the subject identity, scale, and framing from the original base image; do not establish a new smaller scale."
+            : "This is the first sampled phase. Establish the character identity, scale, and placement that all later frames should preserve."
         ]),
-    "Show the entire subject with padding on every side. Do not crop the head, feet, limbs, clothing, effects, or shadow at the canvas edge."
+    context.preserveBaseFraming
+      ? "Keep the full subject inside the frame using the base image's existing margins. Do not shrink the subject or add presentation padding to accommodate the motion."
+      : "Show the entire subject with padding on every side. Do not crop the head, feet, limbs, clothing, effects, or shadow at the canvas edge."
   ].join("\n");
 }
 
@@ -790,6 +804,7 @@ function svgAssetPrompt(
     );
   }
 
+  lines.push(...animationBaseFramingPromptLines(request));
   lines.push(...priorityReferencePromptLines(request));
   return lines.join("\n");
 }
@@ -882,11 +897,13 @@ export function gameAssetPrompt(
     variationCount?: number;
     tilesetGeometry?: TilesetSheetGenerationGeometry;
     generationDimensions?: AiAssetDimensions;
+    animationLayoutReferenceNumber?: number;
   }
 ): string {
   const dimensions = requireAssetDimensions(request.asset);
   const generationDimensions = context.generationDimensions;
   const isTilesetAnimation = request.purpose === "tileset-animation";
+  const preserveBaseFraming = hasAnimationBaseReference(request);
   const lines: string[] = [];
   const brief = assetBriefForModel(request, context.prompt);
   if (brief) {
@@ -945,7 +962,7 @@ export function gameAssetPrompt(
   } else if (shouldRequestTransparency(request, context)) {
     lines.push(
       "Return an isolated sprite with native alpha transparency. Leave the background and empty padding fully transparent. Do not draw a checkerboard or a solid backdrop.",
-      "Use a centered subject, no text, no watermark, no cast shadow, no floor shadow, no ground plane, and no reflection. Keep the sprite readable through its shape and pose; do not darken or recolor the character to create contrast.",
+      `${preserveBaseFraming ? "Preserve the base image's subject placement" : "Use a centered subject"}, no text, no watermark, no cast shadow, no floor shadow, no ground plane, and no reflection. Keep the sprite readable through its shape and pose; do not darken or recolor the character to create contrast.`,
       "Preserve transparent backgrounds in reference images and subsequent edits, including partially transparent edge pixels."
     );
   } else if (context.tilesetGeometry) {
@@ -988,14 +1005,18 @@ export function gameAssetPrompt(
           ]),
       `Do not merge cells, crop cells, add extra frames beyond ${frameCount}, or change the grid layout.`,
       "Each grid cell must contain exactly one complete frame of the subject. Do not place a nested spritesheet, turnaround sheet, contact sheet, labels, thumbnails, or multiple mini-poses inside any single cell.",
-      "Keep every visible part of each subject strictly inside its own cell with empty padding on every side. No head, foot, limb, shadow, or stray pixel from one frame may cross into the row or column beside it.",
+      preserveBaseFraming
+        ? "Keep artwork inside its own cell using the base image's existing margins. Do not reduce subject scale to create additional padding or room for effects. No pixel may cross into another frame."
+        : "Keep every visible part of each subject strictly inside its own cell with empty padding on every side. No head, foot, limb, shadow, or stray pixel from one frame may cross into the row or column beside it.",
       "The grid layout is mandatory even if the animation would look nicer in another arrangement."
     );
 
     if (shouldRequestTransparency(request, context)) {
       lines.push(
         `If the grid has more cells than ${frameCount}, leave the extra trailing cells fully transparent and empty.`,
-        "Keep the character centered at a consistent scale in every cell, leaving transparent padding inside the cell."
+        preserveBaseFraming
+          ? "Every frame must preserve the original base image's subject-to-frame scale, not merely a consistent new scale across the generated sheet."
+          : "Keep the character centered at a consistent scale in every cell, leaving transparent padding inside the cell."
       );
     } else {
       lines.push(
@@ -1009,7 +1030,9 @@ export function gameAssetPrompt(
       lines.push(
         "Single-image asset contract: create exactly one complete sprite on the canvas.",
         "Do not create a spritesheet, turnaround sheet, contact sheet, sequence, grid, multiple poses, multiple variants, panels, labels, or frame divisions.",
-        "Keep the full subject visible with transparent padding on all sides. The subject must not touch the canvas edges and must not be cropped."
+        preserveBaseFraming
+          ? "Keep the full subject visible at the base image's scale with its existing margins. Do not shrink it or add padding."
+          : "Keep the full subject visible with transparent padding on all sides. The subject must not touch the canvas edges and must not be cropped."
       );
     } else {
       lines.push(
@@ -1017,6 +1040,15 @@ export function gameAssetPrompt(
         "Do not create a spritesheet, contact sheet, sequence, grid, panels, labels, frame divisions, or isolated cutout sprite."
       );
     }
+  }
+
+  lines.push(...animationBaseFramingPromptLines(request));
+
+  if (context.animationLayoutReferenceNumber) {
+    lines.push(
+      `Reference ${context.animationLayoutReferenceNumber} (animation-base-layout.png) is the exact starting layout: the original base image repeated at its required scale in every occupied frame, with trailing cells empty.`,
+      "Edit this layout in place to animate the requested action. Preserve its per-cell subject scale and margins; do not draw a new smaller subject inside the provided one, add another grid, or zoom out. Advance poses across cells while preserving the size of the base artwork's individual components."
+    );
   }
 
   if (request.priorityReference) {

@@ -362,7 +362,7 @@ async function routeRequest(
       const optionsForAsset = await options.provider.generate({
         asset,
         count: 1,
-        references: await getReferenceImages(options, manifest, generationReferenceAssetIds(manifest, asset)),
+        references: await getReferenceImages(options, manifest, generationReferences(manifest, asset)),
         stylePrompt: manifest.styleGuide?.prompt,
         styleReferences: await getStyleReferenceImages(options, manifest.styleGuide)
       });
@@ -643,7 +643,7 @@ async function generateImage(
       ...(body.format ? { format: body.format } : {})
     },
     references: [
-      ...(await getReferenceImages(options, manifest, generationReferenceAssetIds(manifest, asset)) ?? []),
+      ...(await getReferenceImages(options, manifest, generationReferences(manifest, asset)) ?? []),
       ...referencesFromDataUrls(body.references)
     ],
     priorityReference: body.priorityReference
@@ -756,8 +756,8 @@ export function planFirstDraftGeneration(
 
     visiting.add(assetId);
 
-    for (const referenceAssetId of generationReferenceAssetIds(manifest, asset)) {
-      visit(referenceAssetId);
+    for (const reference of generationReferences(manifest, asset)) {
+      visit(reference.assetId);
     }
 
     visiting.delete(assetId);
@@ -772,12 +772,14 @@ export function planFirstDraftGeneration(
   return planned;
 }
 
-function generationReferenceAssetIds(manifest: AiAssetManifest, asset: AiAssetDefinition): string[] {
+type AssetReference = { assetId: string; role?: "animation-base" };
+
+function generationReferences(manifest: AiAssetManifest, asset: AiAssetDefinition): AssetReference[] {
   const targetId = Object.entries(manifest.targets ?? {})
     .find(([, target]) => Object.values(target.variants).includes(asset.id))?.[0];
   const targetVariantIds = new Set(Object.values(manifest.targets ?? {})
     .flatMap((target) => Object.values(target.variants)));
-  const references = new Set<string>();
+  const references = new Map<string, AssetReference>();
 
   // A linked animation inherits its base image as identity context. Resolve this
   // at generation time so promoting the base immediately changes the reference.
@@ -790,23 +792,28 @@ function generationReferenceAssetIds(manifest: AiAssetManifest, asset: AiAssetDe
     if (Object.values(links).some((link) =>
       resolveTargetAssetId(manifest, link.assetId, targetId) === asset.id
     )) {
-      references.add(parentId);
+      references.set(parentId, {
+        assetId: parentId,
+        ...(asset.frameGrid && parent.kind === "image" && !parent.frameGrid
+          ? { role: "animation-base" as const } : {})
+      });
     }
   }
   for (const id of asset.settings?.referenceAssetIds ?? []) {
-    references.add(resolveTargetAssetId(manifest, id, targetId));
+    const assetId = resolveTargetAssetId(manifest, id, targetId);
+    if (!references.has(assetId)) references.set(assetId, { assetId });
   }
-  return [...references];
+  return [...references.values()];
 }
 
 async function getReferenceImages(
   options: AiAssetDevServerOptions,
   manifest: AiAssetManifest,
-  referenceAssetIds: string[] | undefined
+  references: AssetReference[]
 ) {
-  if (!referenceAssetIds?.length) return undefined;
+  if (!references.length) return undefined;
 
-  return Promise.all(referenceAssetIds.map(async (assetId) => {
+  return Promise.all(references.map(async ({ assetId, role }) => {
     const asset = manifest.assets[assetId];
 
     if (!asset || asset.kind === "collection" || Object.keys(asset.versions).length === 0) {
@@ -831,7 +838,8 @@ async function getReferenceImages(
     return {
       image: await readFile(filePath),
       mimeType: mimeTypeFromFile(fileName),
-      fileName
+      fileName,
+      ...(role ? { role } : {})
     };
   })).then((references) => references.filter((reference) => reference !== undefined));
 }

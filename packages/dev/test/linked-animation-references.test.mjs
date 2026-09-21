@@ -76,6 +76,7 @@ test("linked cursor generation uses the active base image before and after promo
       const request = calls.at(-1);
       assert.equal(request.count, 3);
       assert.equal(request.references.length, 1);
+      assert.equal(request.references[0].role, "animation-base");
       assert.deepEqual(request.references[0].image, expected);
       assert.match(request.references[0].fileName, version === "original" ? /^cursor.walk.png$/ : /promoted/);
     }
@@ -100,6 +101,7 @@ test("automatic base references are deduplicated and coexist with explicit, prio
   });
   const request = calls.at(-1);
   assert.deepEqual(request.references.map((ref) => ref.fileName), ["cursor.walk.png", "palette.png", "context.png"]);
+  assert.deepEqual(request.references.map((ref) => ref.role), ["animation-base", undefined, undefined]);
   assert.equal(request.priorityReference.fileName, "sketch.png");
   assert.equal(request.styleReferences[0].fileName, "style.png");
 });
@@ -117,6 +119,7 @@ test("linked animation target variants reference their matching base variant", a
   await writeFile(path.join(assetsDir, "interface/cursor.walk.phone.png"), image);
   await post("generate", { assetId: "cursor.walk.click.phone" });
   assert.deepEqual(calls[0].references.map((ref) => ref.fileName), ["cursor.walk.phone.png"]);
+  assert.equal(calls[0].references[0].role, "animation-base");
   await post("generate", { assetId: "cursor.walk.click" });
   assert.deepEqual(calls[1].references.map((ref) => ref.fileName), ["cursor.walk.png"]);
 });
@@ -131,4 +134,5 @@ test("first drafts generate the linked base before its animation and pass the ne
   await post("ensure-first-drafts", { assetIds: ["cursor.walk.click"] });
   assert.deepEqual(calls.map((call) => call.asset.id), ["cursor.walk", "cursor.walk.click"]);
   assert.deepEqual(calls[1].references[0].image, image);
+  assert.equal(calls[1].references[0].role, "animation-base");
 });

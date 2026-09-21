@@ -94,6 +94,8 @@ export const assets = defineAiAssets({
 
 Linked graphical animations automatically use their parent asset's active image as a generation reference. Promoting a new base image updates the reference for subsequent generations; no duplicate `referenceAssetIds` setting is needed. Explicit references and style guides are still included.
 
+For single-image parents, animation generation also uses the base as a framing reference: each frame should retain the subject's size relative to its canvas and its existing margins. PNG base images supply measured visible bounds to the model. Whole-sheet raster generation also receives a layout reference with the base repeated at the intended size in each occupied cell. A manually chosen priority reference can override this framing. The library preserves intentional motion and squash/stretch instead of resizing every generated pose to identical bounds.
+
 For larger projects, keep assets as JSON files in folders and generate the TypeScript module during development or build.
 
 ### Tilesets and animated tiles
