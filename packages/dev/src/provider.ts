@@ -305,10 +305,12 @@ export function createOpenAiImageProvider(
         request.asset.settings?.background ??
         requestedBackground
       );
+      // A reference changes the art direction, not the sheet's alignment contract.
+      // Only an explicit setting may opt out of row/column correction.
       const frameAlignment =
         request.settings?.frameAlignment ??
         request.asset.settings?.frameAlignment ??
-        (request.priorityReference ? "none" : "center");
+        "center";
       if (shouldGenerateIsolatedSpriteFrames(request, transparentBackground)) {
         return generateIsolatedSpriteSheetFrames(provider, request, {
           prompt,

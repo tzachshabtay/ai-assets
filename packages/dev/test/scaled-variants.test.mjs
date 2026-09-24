@@ -642,32 +642,36 @@ test("AI animation variants share normal row/column alignment and honor a versio
   Object.assign(f.asset, { kind: "animation", dimensions, frameGrid: grid, settings: { frameAlignment: "center" } });
   const source = await sharp({ create: { ...dimensions, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
   await writeFile(path.join(f.options.assetsDir, "source.png"), source);
-  const targetGrid = { ...grid, frameWidth: 16, frameHeight: 24 };
-  const pixels = Buffer.alloc(32 * 72 * 4);
-  // Successive rows drift upwards; the second pose deliberately sits one pixel lower.
-  for (let frame = 0; frame < 6; frame++) {
-    const column = frame % 2, row = Math.floor(frame / 2);
-    for (let y = 9 - row * 2 + column; y < 15 - row * 2 + column; y++)
-      for (let x = 5; x < 11; x++) pixels.set([200, 90, 30, 255], ((row * 24 + y) * 32 + column * 16 + x) * 4);
-  }
-  const generated = await sharp(pixels, { raw: { width: 32, height: 72, channels: 4 } }).png().toBuffer();
-  f.options.upscaleProvider = { async upscale() { return generated; } };
-  const { alignSpriteSheetFrames } = await import("../dist/provider-image-processing.js");
-  const input = { assetId: "hero", versionName: "v1", sourceFile: "art/source.png", action: "generate", width: 16, height: 24, method: "ai-upscale" };
-  for (const alignment of [undefined, "none"]) {
-    f.asset.versions.v1.settings = alignment ? { frameAlignment: alignment } : undefined;
-    await writeFile(f.options.manifestPath, JSON.stringify(f.manifest));
-    const { candidates } = await generateScaledVariantOptions(f.options, input);
-    const expected = await sharp(alignment === "none" ? generated : alignSpriteSheetFrames(generated, targetGrid)).raw().toBuffer();
-    for (const candidate of candidates) {
-      const actual = await sharp(Buffer.from(candidate.dataUrl.split(",")[1], "base64")).raw().toBuffer();
-      assert.deepEqual(actual, expected);
-      if (alignment !== "none") {
-        const tops = Array.from({ length: 6 }, (_, frame) => {
-          for (let y = 0; y < 24; y++) for (let x = 0; x < 16; x++)
-            if (actual[((Math.floor(frame / 2) * 24 + y) * 32 + frame % 2 * 16 + x) * 4 + 3]) return y;
-        });
-        assert.deepEqual(tops, [9, 10, 9, 10, 9, 10]);
+  for (const [frameWidth, frameHeight] of [[16, 24], [33, 47], [48, 64], [192, 256]]) {
+    const targetGrid = { ...grid, frameWidth, frameHeight };
+    const width = frameWidth * 2, height = frameHeight * 3;
+    const pixels = Buffer.alloc(width * height * 4);
+    // Successive rows drift upwards; the second pose deliberately sits one pixel lower.
+    for (let frame = 0; frame < 6; frame++) {
+      const column = frame % 2, row = Math.floor(frame / 2);
+      for (let y = 9 - row * 2 + column; y < 15 - row * 2 + column; y++)
+        for (let x = 5; x < 11; x++) pixels.set([200, 90, 30, 255], ((row * frameHeight + y) * width + column * frameWidth + x) * 4);
+    }
+    const generated = await sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
+    f.options.upscaleProvider = { async upscale() { return generated; } };
+    const { alignSpriteSheetFrames } = await import("../dist/provider-image-processing.js");
+    const input = { assetId: "hero", versionName: "v1", sourceFile: "art/source.png", action: "generate", width: frameWidth, height: frameHeight, method: "ai-upscale" };
+    for (const alignment of [undefined, "none"]) {
+      f.asset.versions.v1.settings = alignment ? { frameAlignment: alignment } : undefined;
+      await writeFile(f.options.manifestPath, JSON.stringify(f.manifest));
+      const { candidates } = await generateScaledVariantOptions(f.options, input);
+      const expected = await sharp(alignment === "none" ? generated : alignSpriteSheetFrames(generated, targetGrid)).raw().toBuffer();
+      for (const candidate of candidates) {
+        const actual = await sharp(Buffer.from(candidate.dataUrl.split(",")[1], "base64")).raw().toBuffer();
+        assert.deepEqual(actual, expected);
+        if (alignment !== "none") {
+          const tops = Array.from({ length: 6 }, (_, frame) => {
+            for (let y = 0; y < frameHeight; y++) for (let x = 0; x < frameWidth; x++)
+              if (actual[((Math.floor(frame / 2) * frameHeight + y) * width + frame % 2 * frameWidth + x) * 4 + 3]) return y;
+          });
+          const top = Math.round(frameHeight / 2 - 3);
+          assert.deepEqual(tops, [top, top + 1, top, top + 1, top, top + 1]);
+        }
       }
     }
   }

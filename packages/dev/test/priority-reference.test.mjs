@@ -116,15 +116,17 @@ test("SVG requests include the priority image and the same visual precedence rul
   }
 });
 
-test("priority composition avoids default recentering and respects explicit frame alignment", async () => {
+test("priority references retain default frame alignment and respect explicit overrides", async () => {
   const originalFetch = globalThis.fetch;
   const image = await sharp(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect x="1" y="1" width="2" height="2" fill="red"/></svg>')).png().toBuffer();
   try {
     globalThis.fetch = async () => Response.json({ data: [{ b64_json: image.toString("base64") }] });
     for (const [assetAlignment, requestAlignment, expected] of [
-      [undefined, undefined, "none"],
+      [undefined, undefined, "center"],
       ["center", undefined, "center"],
-      ["none", "center", "center"]
+      ["none", "center", "center"],
+      ["none", undefined, "none"],
+      ["center", "none", "none"]
     ]) {
       const [option] = await createOpenAiImageProvider({ apiKey: "test-key" }).generate({
         asset: asset("hero.run", {

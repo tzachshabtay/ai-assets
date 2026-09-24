@@ -166,7 +166,8 @@ Tileset generation uses a temporary staging grid that is independent of the fina
 The grid dimensions must exactly cover `dimensions`, including optional `margin` and `spacing`. Base `tiles` and animation `tiles` each contain one non-empty prompt per usable tile in row-major order. The image provider programmatically adds the exact tile size, sheet dimensions, grid, and ordering contract, then appends the applicable tile prompts to form the model request; authors do not repeat that boilerplate. The animation's editable `frameCount` determines how many complete, aligned sheets are generated. During generation, each of the three candidate branches is produced sequentially: the base sheet and all earlier frames in that branch are supplied as references for the next frame. The three sequences remain available for preview until the user explicitly opens Mix tilesets, where each tile shows its animation prompt and can regenerate three tile-specific sequences. Selecting or mixing previews the result without promoting it.
 
 Transparent spritesheet generations are aligned to their declared frame grid by default. The provider
-normalizes the generated row and column placement without scaling individual frames. Set
+normalizes the generated row and column placement without scaling individual frames, including when
+a priority generation reference is selected. Reference selection controls appearance, not alignment. Set
 `settings.frameAlignment` to `"none"` when an animation intentionally translates within its frame cells.
 
 Set `settings.background` explicitly when the asset's background is part of the artwork:
