@@ -43,7 +43,8 @@ type DockItem = {
   button: HTMLButtonElement;
   panel: HTMLElement;
   dragHandle?: HTMLElement;
-  resizeHandles: HTMLElement[];
+  resizeFrame: HTMLDivElement;
+  resizeObserver?: ResizeObserver;
   geometry?: PanelGeometry;
   open: boolean;
   createdButton: boolean;
@@ -106,6 +107,12 @@ export function registerInGameDesignerPanel(
   }
 
   const button = options.button ?? document.createElement("button");
+  // Keep resize targets outside the panel's scroll container. Absolutely
+  // positioned children otherwise scroll away and can create extra scrollbars.
+  const resizeFrame = document.createElement("div");
+  resizeFrame.className = "ai-game-assets-in-game-designer-dock__resize-frame";
+  resizeFrame.hidden = true;
+  resizeFrame.setAttribute("aria-hidden", "true");
   const sequence = state.nextSequence;
   state.nextSequence += 1;
   const item: DockItem = {
@@ -115,7 +122,7 @@ export function registerInGameDesignerPanel(
     button,
     panel: options.panel,
     dragHandle: options.dragHandle,
-    resizeHandles: [],
+    resizeFrame,
     open: false,
     createdButton: !options.button,
     initialPanelHidden: options.panel.hidden,
@@ -135,6 +142,7 @@ export function registerInGameDesignerPanel(
     options.panel.id = `ai-game-assets-designer-panel-${safeDomId(id)}-${sequence}`;
   }
   button.setAttribute("aria-controls", options.panel.id);
+  resizeFrame.dataset.resizePanel = options.panel.id;
   button.addEventListener("click", item.onButtonClick);
 
   options.panel.classList.add("ai-game-assets-in-game-designer-dock__panel");
@@ -150,8 +158,13 @@ export function registerInGameDesignerPanel(
     handle.dataset.edge = edge;
     handle.setAttribute("aria-hidden", "true");
     handle.addEventListener("pointerdown", (event) => beginPanelResize(state, item, edge, event));
-    options.panel.append(handle);
-    item.resizeHandles.push(handle);
+    resizeFrame.append(handle);
+  }
+  document.body.append(resizeFrame);
+  const Observer = document.defaultView?.ResizeObserver;
+  if (Observer) {
+    item.resizeObserver = new Observer(() => syncResizeFrame(item));
+    item.resizeObserver.observe(item.panel);
   }
   state.items.set(id, item);
   renderDockButtons(state);
@@ -310,6 +323,7 @@ function activateDockItem(state: DockState, activeId: string | undefined): void 
     if (item.open !== isOpen) changed.push(item);
     item.open = isOpen;
     item.panel.hidden = !isOpen;
+    item.resizeFrame.hidden = !isOpen;
     item.button.setAttribute("aria-expanded", String(isOpen));
     item.button.classList.toggle("is-open", isOpen);
   }
@@ -341,7 +355,8 @@ function removeDockItem(state: DockState, item: DockItem): void {
     item.dragHandle.removeEventListener("pointerdown", item.onDragPointerDown);
     item.dragHandle.classList.remove("ai-game-assets-in-game-designer-dock__drag-handle");
   }
-  item.resizeHandles.forEach((handle) => handle.remove());
+  item.resizeObserver?.disconnect();
+  item.resizeFrame.remove();
   state.layoutAnimations.get(item.button)?.cancel();
   state.layoutAnimations.delete(item.button);
   item.button.classList.remove("ai-game-assets-in-game-designer-dock__button", "is-open");
@@ -532,6 +547,16 @@ function applyPanelGeometry(item: DockItem): void {
   item.panel.style.setProperty("right", "auto", "important");
   item.panel.style.setProperty("width", `${item.geometry.width}px`, "important");
   item.panel.style.setProperty("height", `${item.geometry.height}px`, "important");
+  syncResizeFrame(item);
+}
+
+function syncResizeFrame(item: DockItem): void {
+  const rect = item.panel.getBoundingClientRect();
+  item.resizeFrame.hidden = !item.open || !item.panel.isConnected || rect.width === 0 || rect.height === 0;
+  if (item.resizeFrame.hidden) return;
+  Object.assign(item.resizeFrame.style, {
+    left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px`
+  });
 }
 
 function positionDockForActivePanel(state: DockState): void {
@@ -576,6 +601,7 @@ function positionDockForActivePanel(state: DockState): void {
   state.root.style.left = `${left}px`;
   state.root.style.top = `${Math.max(8, panelRect.top - 50)}px`;
   state.root.style.right = "auto";
+  syncResizeFrame(activeItem);
 }
 
 function ensureDockStyles(document: Document): void {
@@ -663,9 +689,16 @@ function ensureDockStyles(document: Document): void {
   touch-action: none;
   user-select: none;
 }
+.ai-game-assets-in-game-designer-dock__resize-frame {
+  position: fixed;
+  z-index: 2147483646;
+  pointer-events: none;
+}
+.ai-game-assets-in-game-designer-dock__resize-frame[hidden] { display: none !important; }
 .ai-game-assets-in-game-designer-dock__resize-handle {
   position: absolute;
   z-index: 20;
+  pointer-events: auto;
   touch-action: none;
 }
 .ai-game-assets-in-game-designer-dock__resize-handle.is-n,
@@ -677,6 +710,17 @@ function ensureDockStyles(document: Document): void {
 }
 .ai-game-assets-in-game-designer-dock__resize-handle.is-n { top: -4px; }
 .ai-game-assets-in-game-designer-dock__resize-handle.is-s { bottom: -4px; }
+.ai-game-assets-in-game-designer-dock__resize-handle.is-s::after {
+  content: "";
+  position: absolute;
+  left: calc(50% - 16px);
+  top: 3px;
+  width: 32px;
+  height: 2px;
+  border-radius: 2px;
+  background: #63708a;
+}
+.ai-game-assets-in-game-designer-dock__resize-handle.is-s:hover::after { background: #8bb8ff; }
 .ai-game-assets-in-game-designer-dock__resize-handle.is-e,
 .ai-game-assets-in-game-designer-dock__resize-handle.is-w {
   top: 10px;

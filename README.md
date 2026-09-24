@@ -305,6 +305,8 @@ playback.destroy();
 
 `@ai-game-assets/phaser` includes a debug-only designer overlay. It is installed by the game, but the UI and behavior are library-provided.
 
+The shared designer dock lets you drag panels by their title or any toolbar button, and resize them from any edge or corner. The bottom edge has a small grip. Resize handles remain on the outer border while the contents scroll, and each panel retains its chosen dimensions when switching tabs.
+
 The designer supports:
 
 - breadcrumb navigation through folder-organized assets

@@ -5,6 +5,7 @@ const dockSource = readFileSync(new URL("../dist/designer-dock.js", import.meta.
 const toolbar = (page: Page) => page.getByRole("toolbar", { name: "Game designer tools" });
 const button = (page: Page, name: string) => page.getByRole("button", { name: `Toggle ${name}`, exact: true });
 const box = async (locator: Locator) => (await locator.boundingBox())!;
+const resizeHandle = (page: Page, panel: string, edge: string) => page.locator(`[data-resize-panel="${panel}"] [data-edge="${edge}"]`);
 
 async function drag(page: Page, handle: Locator, dx: number, dy: number) {
   const rect = await box(handle);
@@ -76,7 +77,7 @@ test("dragging an inactive tab moves the open panel; title dragging and resizing
   expect((await box(page.locator("#assets"))).x).toBeCloseTo(panel.x - 60, 0);
   expect((await box(page.locator("#assets"))).y).toBeCloseTo(panel.y + 70, 0);
   panel = await box(page.locator("#assets"));
-  await drag(page, page.locator("#assets .is-se"), 45, 35);
+  await drag(page, resizeHandle(page, "assets", "se"), 45, 35);
   expect((await box(page.locator("#assets"))).width).toBeCloseTo(panel.width + 45, 0);
   expect((await box(page.locator("#assets"))).height).toBeCloseTo(panel.height + 35, 0);
   const stopped = await box(page.locator("#assets"));
@@ -92,7 +93,7 @@ for (const handle of ["toolbar", "title", "resize"] as const) {
   test(`${handle} stops after releases beyond every viewport edge`, async ({ page }) => {
     await button(page, "Assets").click();
     for (const [x, y] of [[-30, 200], [1230, 200], [600, -30], [600, 830]]) {
-      const target = handle === "toolbar" ? button(page, "Scenes") : page.locator(handle === "title" ? "#assets-title" : "#assets .is-nw");
+      const target = handle === "toolbar" ? button(page, "Scenes") : handle === "title" ? page.locator("#assets-title") : resizeHandle(page, "assets", "nw");
       const rect = await box(target);
       await page.mouse.move(rect.x + rect.width / 2, rect.y + rect.height / 2); await page.mouse.down();
       await page.mouse.move(x!, y!, { steps: 3 }); await page.mouse.up();
@@ -147,6 +148,50 @@ test("a moved dock stays reachable on viewport resize and retains panel dimensio
   await page.setViewportSize({ width: 1200, height: 800 });
   const restored = await box(page.locator("#assets"));
   expect(restored.width).toBe(original.width); expect(restored.height).toBe(original.height);
+});
+
+test("scrolling panel contents keeps the bottom edge resizable without adding scrollbars", async ({ page }) => {
+  await page.locator('#scenes').evaluate(panel => {
+    panel.style.padding = '14px'; panel.style.border = '1px solid'; panel.style.borderRadius = '8px';
+    const content = document.createElement('div'); content.style.height = '1000px'; panel.append(content);
+  });
+  await button(page, 'Scenes').click();
+  const panel = page.locator('#scenes'), before = await box(panel);
+  expect(await panel.evaluate(p => p.scrollWidth === p.clientWidth)).toBe(true);
+  await page.mouse.move(before.x + before.width / 2, before.y + 100);
+  await page.mouse.wheel(0, 500);
+  await expect.poll(() => panel.evaluate(p => p.scrollTop)).toBeGreaterThan(0);
+  const south = resizeHandle(page, 'scenes', 's'), edge = await box(south);
+  expect(edge.y + edge.height / 2).toBeCloseTo(before.y + before.height, 0);
+  expect(await south.evaluate(h => {
+    const r = h.getBoundingClientRect();
+    return document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) === h;
+  })).toBe(true);
+  await drag(page, south, 0, 160);
+  const after = await box(panel);
+  expect(after.height).toBeCloseTo(before.height + 160, 0);
+  expect(after.y).toBeCloseTo(before.y, 0); expect(after.width).toBeCloseTo(before.width, 0);
+  await page.mouse.move(100, 100);
+  expect(await box(panel)).toEqual(after);
+  await button(page, 'Assets').click();
+  await expect(south).toBeHidden();
+  await button(page, 'Scenes').click();
+  expect(await box(panel)).toEqual(after);
+  await page.evaluate(() => (window as any).dockFixture.scenes.destroy());
+  await expect(page.locator('[data-resize-panel="scenes"]')).toHaveCount(0);
+});
+
+test("resize frame follows content-sized panels as their contents change", async ({ page }) => {
+  const panel = page.locator('#scenes');
+  await panel.evaluate(p => { p.style.height = 'auto'; });
+  await button(page, 'Scenes').click();
+  const before = await box(panel);
+  await panel.evaluate(p => { const content = document.createElement('div'); content.style.height = '250px'; p.append(content); });
+  await expect.poll(async () => {
+    const p = await box(panel), h = await box(resizeHandle(page, 'scenes', 's'));
+    return Math.abs(h.y + h.height / 2 - p.y - p.height);
+  }).toBeLessThan(1);
+  expect((await box(panel)).height).toBeCloseTo(before.height + 250, 0);
 });
 
 for (const reason of ["pointercancel", "lostpointercapture", "blur", "hidden", "destroy"] as const) {
