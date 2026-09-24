@@ -169,6 +169,10 @@ Transparent spritesheet generations are aligned to their declared frame grid by 
 normalizes the generated row and column placement without scaling individual frames, including when
 a priority generation reference is selected. Reference selection controls appearance, not alignment. Set
 `settings.frameAlignment` to `"none"` when an animation intentionally translates within its frame cells.
+For transparent sheets, nearby transparent gutters are located before cutting so artwork crossing a
+nominal cell boundary stays with its frame. This also happens before scaled variants clear unused
+cells. Recovered artwork that cannot fit its frame without cropping is rejected with a regeneration
+error rather than saved with missing pixels.
 
 Set `settings.background` explicitly when the asset's background is part of the artwork:
 

@@ -460,30 +460,96 @@ type SpriteFrameBounds = {
   maxY: number;
 };
 
+type SpriteFrameSource = {
+  frame: number;
+  column: number;
+  row: number;
+  originX: number;
+  originY: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+};
+
+// Generated artwork can cross a requested cell boundary even when the sheet's
+// overall dimensions are correct. Find transparent gutters before cutting; a
+// fixed cut followed by alignment loses the overflowing pixels permanently.
+function spriteSheetSources(png: PNG, grid: AiAssetFrameGrid, count: number): SpriteFrameSource[] {
+  const margin = grid.margin ?? 0;
+  const spacing = grid.spacing ?? 0;
+  const rowInk = new Uint32Array(png.height);
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      if ((png.data[(y * png.width + x) * 4 + 3] ?? 0) >= 16) rowInk[y]! += 1;
+    }
+  }
+  const rows = spriteSheetCuts(rowInk, grid.rows, grid.frameHeight, margin, spacing, Math.ceil(count / grid.columns));
+  const result: SpriteFrameSource[] = [];
+  for (let row = 0; row < grid.rows; row += 1) {
+    const top = rows[row]!;
+    const bottom = rows[row + 1]!;
+    const columnInk = new Uint32Array(png.width);
+    for (let y = top; y < bottom; y += 1) {
+      for (let x = 0; x < png.width; x += 1) {
+        if ((png.data[(y * png.width + x) * 4 + 3] ?? 0) >= 16) columnInk[x]! += 1;
+      }
+    }
+    const columns = spriteSheetCuts(columnInk, grid.columns, grid.frameWidth, margin, spacing,
+      Math.max(0, Math.min(grid.columns, count - row * grid.columns)));
+    for (let column = 0; column < grid.columns; column += 1) {
+      const frame = row * grid.columns + column;
+      if (frame >= count) break;
+      result.push({ frame, row, column, top, bottom,
+        left: columns[column]!, right: columns[column + 1]!,
+        originX: margin + column * (grid.frameWidth + spacing),
+        originY: margin + row * (grid.frameHeight + spacing) });
+    }
+  }
+  return result;
+}
+
+function spriteSheetCuts(
+  ink: Uint32Array, count: number, size: number, margin: number, spacing: number, activeCount: number
+): number[] {
+  const cuts = [0];
+  const accumulatedInk = new Float64Array(ink.length + 1);
+  for (let index = 0; index < ink.length; index += 1) {
+    accumulatedInk[index + 1] = accumulatedInk[index]! + ink[index]!;
+  }
+  for (let index = 1; index < count; index += 1) {
+    const nominal = margin + index * (size + spacing) - Math.ceil(spacing / 2);
+    let cut = nominal;
+    // Stay within the two neighboring half-cells so a missing frame or a wide
+    // pose cannot cause subsequent frame indices to shift.
+    const radius = Math.floor(size / 2);
+    const next = Math.min(ink.length, margin + (index + 1) * (size + spacing) - Math.ceil(spacing / 2));
+    const separates = (at: number) => at > 0 && at < ink.length &&
+      (ink[at - 1] === 0 || ink[at] === 0);
+    const retainsNeighbors = (at: number) =>
+      accumulatedInk[at]! > accumulatedInk[cuts[cuts.length - 1]!]! &&
+      (index >= activeCount || accumulatedInk[next]! > accumulatedInk[at]!);
+    if (!separates(nominal)) {
+      for (let distance = 1; distance <= radius; distance += 1) {
+        if (separates(nominal + distance) && retainsNeighbors(nominal + distance)) { cut = nominal + distance; break; }
+        if (separates(nominal - distance) && retainsNeighbors(nominal - distance)) { cut = nominal - distance; break; }
+      }
+    }
+    cuts.push(Math.max(cuts[cuts.length - 1]!, Math.min(ink.length, cut)));
+  }
+  cuts.push(ink.length);
+  return cuts;
+}
+
 export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFrameGrid): Buffer {
   const png = PNG.sync.read(Buffer.from(image));
-  const margin = frameGrid.margin ?? 0;
-  const spacing = frameGrid.spacing ?? 0;
   const frameCount = Math.min(
     frameGrid.frameCount ?? frameGrid.columns * frameGrid.rows,
     frameGrid.columns * frameGrid.rows
   );
-  const frames = Array.from({ length: frameCount }, (_, frame) => {
-    const column = frame % frameGrid.columns;
-    const row = Math.floor(frame / frameGrid.columns);
-    const originX = margin + column * (frameGrid.frameWidth + spacing);
-    const originY = margin + row * (frameGrid.frameHeight + spacing);
-
-    return visibleSpriteFrameBounds(png, {
-      frame,
-      column,
-      row,
-      originX,
-      originY,
-      width: frameGrid.frameWidth,
-      height: frameGrid.frameHeight
-    });
-  }).filter((frame): frame is SpriteFrameBounds => frame !== undefined);
+  const sources = spriteSheetSources(png, frameGrid, frameCount);
+  const frames = sources.map((source) => visibleSpriteFrameBounds(png, source))
+    .filter((frame): frame is SpriteFrameBounds => frame !== undefined);
 
   if (!frames.length) return Buffer.from(image);
 
@@ -510,11 +576,14 @@ export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFram
 
   const source = Buffer.from(png.data);
 
-  for (let frame = 0; frame < frameCount; frame += 1) {
-    const column = frame % frameGrid.columns;
-    const row = Math.floor(frame / frameGrid.columns);
-    const originX = margin + column * (frameGrid.frameWidth + spacing);
-    const originY = margin + row * (frameGrid.frameHeight + spacing);
+  // Clear every source before copying any destination. Recovered rectangles
+  // may overlap destination cells, including their margins and spacing.
+  for (const frame of sources) {
+    clearPngRect(png, frame.left, frame.top, frame.right - frame.left, frame.bottom - frame.top);
+  }
+
+  for (const frame of sources) {
+    const { column, row, originX, originY } = frame;
     const shiftX = columnShifts[column] ?? 0;
     const shiftY = rowShifts[row] ?? 0;
 
@@ -534,7 +603,11 @@ export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFram
       width: frameGrid.frameWidth,
       height: frameGrid.frameHeight,
       shiftX,
-      shiftY
+      shiftY,
+      sourceLeft: frame.left,
+      sourceTop: frame.top,
+      sourceRight: frame.right,
+      sourceBottom: frame.bottom
     });
   }
 
@@ -543,36 +616,20 @@ export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFram
 
 function visibleSpriteFrameBounds(
   png: PNG,
-  options: {
-    frame: number;
-    column: number;
-    row: number;
-    originX: number;
-    originY: number;
-    width: number;
-    height: number;
-  }
+  options: SpriteFrameSource
 ): SpriteFrameBounds | undefined {
-  if (
-    options.originX < 0 ||
-    options.originY < 0 ||
-    options.originX + options.width > png.width ||
-    options.originY + options.height > png.height
-  ) {
-    return undefined;
-  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
 
-  let minX = options.width;
-  let minY = options.height;
-  let maxX = -1;
-  let maxY = -1;
-
-  for (let y = 0; y < options.height; y += 1) {
-    for (let x = 0; x < options.width; x += 1) {
-      const alpha = png.data[((options.originY + y) * png.width + options.originX + x) * 4 + 3] ?? 0;
+  for (let py = options.top; py < options.bottom; py += 1) {
+    for (let px = options.left; px < options.right; px += 1) {
+      const alpha = png.data[(py * png.width + px) * 4 + 3] ?? 0;
 
       if (alpha < 16) continue;
-
+      const x = px - options.originX;
+      const y = py - options.originY;
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x);
@@ -616,6 +673,10 @@ function spriteFrameAxisShifts(options: {
       ...frames.map((frame) => options.frameSize - 1 - options.max(frame))
     );
 
+    if (minimumShift > maximumShift) {
+      throw new Error("Generated sprites do not fit their frame cells without cropping. Regenerate the sheet with more space between frames or larger frame dimensions.");
+    }
+
     return Math.min(maximumShift, Math.max(minimumShift, desiredShift));
   });
 }
@@ -642,14 +703,18 @@ function copyShiftedPngRect(
     height: number;
     shiftX: number;
     shiftY: number;
+    sourceLeft: number;
+    sourceTop: number;
+    sourceRight: number;
+    sourceBottom: number;
   }
 ): void {
-  for (let y = 0; y < options.height; y += 1) {
+  for (let y = options.sourceTop - options.originY; y < options.sourceBottom - options.originY; y += 1) {
     const targetY = y + options.shiftY;
 
     if (targetY < 0 || targetY >= options.height) continue;
 
-    for (let x = 0; x < options.width; x += 1) {
+    for (let x = options.sourceLeft - options.originX; x < options.sourceRight - options.originX; x += 1) {
       const targetX = x + options.shiftX;
 
       if (targetX < 0 || targetX >= options.width) continue;

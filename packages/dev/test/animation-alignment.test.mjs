@@ -28,6 +28,68 @@ function driftingSheet(grid) {
   return sheet;
 }
 
+// The innkeeper regression: the first row's feet cross the requested cut by
+// one pixel. Cutting fixed cells first leaves a detached foot strip in row 2,
+// so its bounds appear taller and its alignment gets clamped incorrectly.
+function spillingSheet(grid) {
+  const { frameWidth: width, frameHeight: height, columns, rows } = grid;
+  const margin = grid.margin ?? 0, spacing = grid.spacing ?? 0;
+  const sheet = new PNG({ width: 2 * margin + columns * width + (columns - 1) * spacing,
+    height: 2 * margin + rows * height + (rows - 1) * spacing });
+  const w = Math.floor(width / 2), h = Math.floor(height * 3 / 4);
+  for (let frame = 0; frame < grid.frameCount; frame++) {
+    const column = frame % columns, row = Math.floor(frame / columns);
+    const x = margin + column * (width + spacing) + (column === 0 ? width - w + spacing + 1 : 3);
+    const y = margin + row * (height + spacing) + (row === 0 ? height - h + spacing + 1 : 3);
+    for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) {
+      const offset = ((y + dy) * sheet.width + x + dx) * 4;
+      sheet.data.set([40 + frame, 120 + dx % 80, 60 + dy % 80, dx === 0 ? 128 : 255], offset);
+    }
+  }
+  return sheet;
+}
+
+test("recover complete sprites across row and column cuts before alignment", () => {
+  for (const [frameWidth, frameHeight] of [[7, 11], [33, 47], [48, 64], [96, 128], [191, 257]]) {
+    for (const [margin, spacing] of [[0, 0], [2, 1]]) {
+      for (const frameCount of [7, 8]) {
+        const grid = { frameWidth, frameHeight, columns: 3, rows: 3, frameCount, margin, spacing };
+        const before = spillingSheet(grid);
+        let output;
+        try { output = alignSpriteSheetFrames(PNG.sync.write(before), grid); }
+        catch (error) { throw new Error(`Grid ${JSON.stringify(grid)}: ${error.message}`, { cause: error }); }
+        const after = PNG.sync.read(output);
+        const frames = [];
+        for (let frame = 0; frame < grid.frameCount; frame++) {
+          const expected = [];
+          for (let offset = 0; offset < before.data.length; offset += 4) {
+            if (before.data[offset] === 40 + frame && before.data[offset + 3]) expected.push(before.data.readUInt32BE(offset));
+          }
+          const actual = framePixels(after, grid, frame);
+          assert.deepEqual(actual.pixels, expected.sort((a, b) => a - b), `frame ${frame}: retain all pixels in the correct cell`);
+          frames.push(actual);
+      }
+      assert.equal(new Set(frames.map(frame => frame.bottom)).size, 1, "same baseline in every row");
+      assert.equal(new Set(frames.map(frame => frame.left)).size, 1, "same placement in every column");
+      assert.equal(framePixels(after, grid, 8).pixels.length, 0, "unused final cell stays empty");
+      assert.deepEqual(alignSpriteSheetFrames(output, grid), output, "recovered grid is stable");
+      }
+    }
+  }
+});
+
+test("oversized recovered artwork is rejected rather than silently cropped", () => {
+  const grid = { frameWidth: 48, frameHeight: 64, columns: 1, rows: 2, frameCount: 2 };
+  const sheet = new PNG({ width: 48, height: 128 });
+  for (let y = 8; y < 78; y++) for (let x = 10; x < 30; x++) {
+    sheet.data.set([80, 90, 100, 255], (y * 48 + x) * 4);
+  }
+  for (let y = 90; y < 120; y++) for (let x = 10; x < 30; x++) {
+    sheet.data.set([110, 120, 130, 255], (y * 48 + x) * 4);
+  }
+  assert.throws(() => alignSpriteSheetFrames(PNG.sync.write(sheet), grid), /do not fit.*without cropping/);
+});
+
 function framePixels(sheet, grid, frame) {
   const ox = (grid.margin ?? 0) + frame % grid.columns * (grid.frameWidth + (grid.spacing ?? 0));
   const oy = (grid.margin ?? 0) + Math.floor(frame / grid.columns) * (grid.frameHeight + (grid.spacing ?? 0));
@@ -78,7 +140,7 @@ test("whole-sheet animations align with a selected reference in both PNG and Web
   try {
     for (const [frameWidth, frameHeight] of [[7, 11], [33, 47], [48, 64], [191, 257]]) {
       const grid = { frameWidth, frameHeight, columns: 3, rows: 3, frameCount: 8 };
-      const source = driftingSheet(grid), image = PNG.sync.write(source);
+      const source = spillingSheet(grid), image = PNG.sync.write(source);
       let calls = 0;
       globalThis.fetch = async () => {
         calls++;
@@ -96,8 +158,7 @@ test("whole-sheet animations align with a selected reference in both PNG and Web
         assert.equal(option.settings.frameAlignment, "center");
         assert.deepEqual(option.frameGrid, grid);
         const decoded = PNG.sync.read(await sharp(option.image).png().toBuffer());
-        if (format === "png") assertAligned(source, decoded, grid);
-        else {
+        {
           const bottoms = Array.from({ length: 8 }, (_, f) => framePixels(decoded, grid, f).bottom);
           assert.ok(Math.max(...bottoms) - Math.min(...bottoms) <= 1);
         }

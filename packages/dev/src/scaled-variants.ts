@@ -348,12 +348,10 @@ export async function resizeScaledSource(
     const fitted = await sharp(enhanced, { limitInputPixels: 33554432 })
       .resize(target.dimensions.width, target.dimensions.height, { fit: "fill", kernel: "nearest" })
       .ensureAlpha().png().toBuffer();
-    // Clear unused cells even if the model painted in them; retain all valid
-    // frame pixels and their returned alpha without applying a source mask.
-    const cleared = await resizeScaledSource(fitted, { ...source, ...target }, target, "nearest", undefined, signal);
-    // Match normal sheet generation: correct row/column drift together, keeping
-    // the relative motion of poses within each row and column intact.
-    return source.frameAlignment === "none" ? cleared : alignSpriteSheetFrames(cleared, targetGrid);
+    // Recover overflowing sprite pixels before cutting cells or clearing gutters
+    // and unused slots. Otherwise that first cut permanently loses those pixels.
+    const aligned = source.frameAlignment === "none" ? fitted : alignSpriteSheetFrames(fitted, targetGrid);
+    return resizeScaledSource(aligned, { ...source, ...target }, target, "nearest", undefined, signal);
   }
   const output = Buffer.alloc(
     target.dimensions.width * target.dimensions.height * 4,

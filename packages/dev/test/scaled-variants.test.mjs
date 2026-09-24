@@ -676,3 +676,43 @@ test("AI animation variants share normal row/column alignment and honor a versio
     }
   }
 });
+
+test("animation upscale recovers boundary-crossing pixels before clearing unused cells", async (t) => {
+  const f = await fixture(t);
+  const frameGrid = { frameWidth: 24, frameHeight: 32, columns: 3, rows: 3, frameCount: 7 };
+  const dimensions = { width: 72, height: 96 };
+  Object.assign(f.asset, { kind: "animation", dimensions, frameGrid });
+  const source = await sharp({ create: { ...dimensions, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
+  await writeFile(path.join(f.options.assetsDir, "source.png"), source);
+  await writeFile(f.options.manifestPath, JSON.stringify(f.manifest));
+  const width = 144, height = 192, pixels = Buffer.alloc(width * height * 4);
+  for (let frame = 0; frame < 7; frame++) {
+    const column = frame % 3, row = Math.floor(frame / 3);
+    const left = column * 48 + (column === 0 ? 30 : 6);
+    const top = row * 64 + (row === 0 ? 17 : 12);
+    for (let y = top; y < top + 48; y++) for (let x = left; x < left + 20; x++) {
+      pixels.set([40 + frame, 100, 120, 255], (y * width + x) * 4);
+    }
+  }
+  const generated = await sharp(pixels, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  f.options.upscaleProvider = { async upscale() { return generated; } };
+  const { candidates } = await generateScaledVariantOptions(f.options, {
+    assetId: "hero", versionName: "v1", sourceFile: "art/source.png", width: 48, height: 64, method: "ai-upscale"
+  });
+  for (const candidate of candidates) {
+    const actual = await sharp(Buffer.from(candidate.dataUrl.split(",")[1], "base64")).raw().toBuffer();
+    const bottoms = [];
+    for (let frame = 0; frame < 9; frame++) {
+      let count = 0, bottom = -1;
+      for (let y = 0; y < 64; y++) for (let x = 0; x < 48; x++) {
+        const offset = ((Math.floor(frame / 3) * 64 + y) * width + frame % 3 * 48 + x) * 4;
+        if (!actual[offset + 3]) continue;
+        assert.equal(actual[offset], 40 + frame, "pixels belong to this frame, never a neighboring pose");
+        count++; bottom = y;
+      }
+      assert.equal(count, frame < 7 ? 20 * 48 : 0, "keep every sprite pixel, including overflow into unused cells");
+      if (frame < 7) bottoms.push(bottom);
+    }
+    assert.equal(new Set(bottoms).size, 1, "consistent baseline across rows");
+  }
+});
