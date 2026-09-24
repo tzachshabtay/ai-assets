@@ -313,6 +313,8 @@ The designer supports:
 - unsaved field edits retained per asset, target, and animation until the page is refreshed
 - a priority reference for image and animation generation: choose from the asset tree (including animation sheets), upload from your computer, or sketch in the built-in image editor
 - streaming generation options as they complete
+- distinct design directions for still-image candidates, while preserving the brief and any reference-defined identity
+- an expand button on each graphical candidate for a larger preview, with animation playback; expanding does not select or promote it
 - generated animation candidates contain no inherited animation metadata; temporary sheet playback is derived from the candidate frame grid, while timing, tags, and transforms are authored only after choosing a sheet
 - selecting a generated or saved option updates the Current preview without promoting it, so it can be edited in place; Revert preview restores the active promoted version
 - cancelable generations

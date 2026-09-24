@@ -799,12 +799,7 @@ function svgAssetPrompt(
     );
   }
 
-  if (context.variation) {
-    lines.push(
-      context.variation,
-      variationDirectionPromptLine(context.variationIndex ?? 0)
-    );
-  }
+  lines.push(...candidateVariationPromptLines(request, context));
 
   lines.push(...animationBaseFramingPromptLines(request));
   lines.push(...priorityReferencePromptLines(request));
@@ -1082,29 +1077,44 @@ export function gameAssetPrompt(
     );
   }
 
-  if (
-    context.variation &&
-    request.asset.kind === "tileset" &&
-    isTilesetAnimation
-  ) {
-    lines.push(
-      `Variation seed: ${context.variation}. Use it only to choose a coherent motion treatment for this candidate; never vary tile identity, sheet layout, cell alignment, palette, or indices.`,
-      variationDirectionPromptLine(context.variationIndex ?? 0)
-    );
-  } else if (context.variation && request.asset.kind === "tileset") {
-    lines.push(
-      `Variation seed: ${context.variation}. Use it only to choose a coherent visual treatment for this complete base tileset candidate; never vary tile identity, sheet layout, cell alignment, scale, or indices.`,
-      tilesetBaseVariationDirectionPromptLine(context.variationIndex ?? 0)
-    );
-  } else if (context.variation) {
-    lines.push(
-      `Variation seed: ${context.variation}. Use this seed to make this option visually distinct from sibling options, not a near-duplicate. Vary the animation timing, pose rhythm, secondary motion, and effect shape while preserving the asset brief, frame grid, background instructions, and same exact character identity.`,
-      variationDirectionPromptLine(context.variationIndex ?? 0)
-    );
-  }
+  lines.push(...candidateVariationPromptLines(request, context));
 
   lines.push(...priorityReferencePromptLines(request));
   return lines.join("\n");
+}
+
+function candidateVariationPromptLines(request: GenerateAssetRequest, context: {
+  variation?: string;
+  variationIndex?: number;
+  variationCount?: number;
+}): string[] {
+  if (!context.variation) return [];
+  const index = context.variationIndex ?? 0;
+  if (request.asset.kind === "tileset") {
+    return request.purpose === "tileset-animation" ? [
+      `Variation seed: ${context.variation}. Use it only to choose a coherent motion treatment for this candidate; never vary tile identity, sheet layout, cell alignment, palette, or indices.`,
+      variationDirectionPromptLine(index)
+    ] : [
+      `Variation seed: ${context.variation}. Use it only to choose a coherent visual treatment for this complete base tileset candidate; never vary tile identity, sheet layout, cell alignment, scale, or indices.`,
+      tilesetBaseVariationDirectionPromptLine(index)
+    ];
+  }
+  if (request.asset.frameGrid) {
+    return [
+      `Variation seed: ${context.variation}. Use this seed to make this option visually distinct from sibling options, not a near-duplicate. Vary the animation timing, pose rhythm, secondary motion, and effect shape while preserving the asset brief, frame grid, background instructions, and same exact character identity.`,
+      variationDirectionPromptLine(index)
+    ];
+  }
+  const directions = [
+    "Base image variation direction: prioritize a bold, simple silhouette and large, clear shape groups. Where the brief leaves design open, explore a distinct build or composition with restrained details.",
+    "Base image variation direction: prioritize a layered, detailed design with distinctive material treatment and secondary shapes. Explore unspecified costume, object construction, or environmental details that distinguish this option at game scale.",
+    "Base image variation direction: prioritize a contrasting distribution of light, dark, and accent colors, with distinctive contours and surface details. Explore unspecified palette and lighting choices while retaining the requested style."
+  ];
+  return [
+    `Static image candidate ${index + 1} of ${context.variationCount ?? 3}. Variation seed: ${context.variation}. Create a visibly different design interpretation of the same brief; do not deliver a near-duplicate with only tiny pixel changes.`,
+    directions[index % directions.length]!,
+    "Generate exactly one still image. Keep the requested subject, pose, facing, style, dimensions, and background. Explicit prompt requirements and reference-defined identity, palette, and composition take precedence; vary only visual choices left unspecified."
+  ];
 }
 
 function tilesetBaseVariationDirectionPromptLine(index: number): string {

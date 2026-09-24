@@ -67,6 +67,7 @@ class FakeElement {
     this.listeners = new Map();
     this.classList = new FakeClassList();
     this.dataset = {};
+    this.attributes = new Map();
   }
 
   set className(value) {
@@ -92,6 +93,10 @@ class FakeElement {
 
   addEventListener(name, listener) {
     this.listeners.set(name, listener);
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(name, String(value));
   }
 
   querySelectorAll(selector) {

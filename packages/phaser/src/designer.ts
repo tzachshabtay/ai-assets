@@ -205,6 +205,7 @@ import {
   normalizeAudioFormat,
   openAnimationEditor,
   openAssetVersionsDialog,
+  appendOptionExpandButton,
   openAudioEditor,
   openFrameTouchUpEditor,
   openStyleGuideEditor,
@@ -1389,6 +1390,11 @@ export function installAiAssetDesigner(
       label.textContent = `Option ${candidate.index + 1}`;
       button.append(image, label);
       card.append(button);
+      if (candidate.frames[0]) {
+        appendOptionExpandButton({ card, asset: manifest.assets[assetId],
+          src: candidate.frames[0].dataUrl, label: `${assetId} animation option ${candidate.index + 1}`,
+          sequence: candidate.frames.map((item, index) => ({ src: item.dataUrl, delayMs: delayForFrame(index) })) });
+      }
       elements.options.append(card);
 
       let frame = 0;

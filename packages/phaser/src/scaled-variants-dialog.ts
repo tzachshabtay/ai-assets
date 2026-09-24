@@ -6,7 +6,7 @@ import {
   type AiAssetScaledVariant,
 } from "@ai-game-assets/core";
 import type { AiAssetDebugClient, ScaledVariantCandidate } from "./debug-client.js";
-import { openFrameTouchUpEditor, startSpritesheetPreview, startGeneratingStatusAnimation, stopStatusAnimation } from "./designer-support.js";
+import { appendOptionExpandButton, openFrameTouchUpEditor, startSpritesheetPreview, startGeneratingStatusAnimation, stopStatusAnimation } from "./designer-support.js";
 
 type VariantRequest = Parameters<AiAssetDebugClient["scaledVariant"]>[0];
 type VariantDraft = { request: VariantRequest; candidates: ScaledVariantCandidate[]; chosenIndex?: number };
@@ -352,6 +352,10 @@ export function openScaledVariantsDialog(options: {
       select.append(image);
       candidateCard.append(select);
       addAnimation(candidateCard, image, candidate, candidate.dataUrl, candidateAnimations);
+      appendOptionExpandButton({ card: candidateCard, src: candidate.dataUrl,
+        label: `${asset.id} scaled option ${candidate.index + 1}`,
+        asset: { ...asset, dimensions: candidate.dimensions, frameGrid: candidate.frameGrid },
+        isAnimating: () => image.hidden });
       candidatesList.append(candidateCard);
       if (draft.chosenIndex === candidate.index) select.click();
     }

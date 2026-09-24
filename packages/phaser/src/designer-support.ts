@@ -606,6 +606,11 @@ export function renderOptions(options: {
     });
 
     card.append(selectButton);
+    if (!isAudio) {
+      appendOptionExpandButton({ card, asset: optionAsset, src: option.dataUrl,
+        label: `${options.assetId} option ${option.index + 1}`,
+        isAnimating: () => Boolean(card.querySelector(".ai-game-assets-designer__option-animation:not([hidden])")) });
+    }
     if (isAudio) {
       const player = document.createElement("div");
       player.className = "ai-game-assets-designer__option-audio";
@@ -657,6 +662,120 @@ export function renderOptions(options: {
 
     options.elements.options.append(card);
   }
+}
+
+/** An inspection-only view: expanding never selects, previews in-game, or promotes a candidate. */
+export function appendOptionExpandButton(options: {
+  card: HTMLElement;
+  asset: AiAssetDefinition;
+  src: string;
+  label: string;
+  isAnimating?: () => boolean;
+  sequence?: Array<{ src: string; delayMs: number }>;
+}): void {
+  const expand = document.createElement("button");
+  expand.type = "button";
+  expand.className = "ai-game-assets-designer__option-expand";
+  expand.title = `Expand ${options.label}`;
+  expand.setAttribute("aria-label", expand.title);
+  expand.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M3 3l6 6m12-6-6 6M3 21l6-6m12 6-6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  let closePreview: (() => void) | undefined;
+  expand.addEventListener("click", (event) => {
+    event.stopPropagation();
+    closePreview?.();
+    const dialog = document.createElement("dialog");
+    dialog.className = "ai-game-assets-designer__generation-dialog";
+    dialog.setAttribute("aria-label", `Preview ${options.label}`);
+    const header = document.createElement("header");
+    const title = document.createElement("h2");
+    title.textContent = options.label;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.textContent = "Close";
+    header.append(title, close);
+    const viewport = document.createElement("div");
+    viewport.className = "ai-game-assets-designer__generation-viewport";
+    const image = document.createElement("img");
+    image.src = options.src;
+    image.alt = options.label;
+    const stage = document.createElement("div");
+    stage.className = "ai-game-assets-designer__generation-animation";
+    stage.hidden = true;
+    viewport.append(image, stage);
+    const footer = document.createElement("footer");
+    const size = document.createElement("span");
+    const grid = options.asset.frameGrid;
+    size.textContent = grid
+      ? `${grid.frameWidth} × ${grid.frameHeight} per frame · ${grid.frameCount ?? grid.columns * grid.rows} frames`
+      : options.asset.dimensions ? `${options.asset.dimensions.width} × ${options.asset.dimensions.height}` : "";
+    footer.append(size);
+    const animate = document.createElement("button");
+    animate.type = "button";
+    let playing = Boolean(options.sequence?.length || options.isAnimating?.());
+    let stopAnimation: (() => void) | undefined;
+    const render = () => {
+      stopAnimation?.();
+      stopAnimation = undefined;
+      image.src = options.src;
+      const sequence = options.sequence;
+      image.hidden = playing && !sequence;
+      stage.hidden = !playing || Boolean(sequence);
+      animate.textContent = playing ? "Stop" : "Animate";
+      animate.setAttribute("aria-pressed", String(playing));
+      if (!playing) return;
+      if (sequence?.length) {
+        let frame = 0;
+        let timer: number;
+        const tick = () => {
+          const current = sequence[frame++ % sequence.length]!;
+          image.src = current.src;
+          timer = window.setTimeout(tick, current.delayMs);
+        };
+        tick();
+        stopAnimation = () => window.clearTimeout(timer);
+      } else {
+        stopAnimation = startSpritesheetPreview({ element: stage, src: options.src,
+          asset: options.asset, displaySize: { width: viewport.clientWidth, height: viewport.clientHeight },
+          applyFrameTransforms: false });
+      }
+    };
+    if (grid || options.sequence?.length) {
+      footer.append(animate);
+      animate.addEventListener("click", () => { playing = !playing; render(); });
+    } else playing = false;
+    dialog.append(header, viewport, footer);
+    const root = options.card.closest(".ai-game-assets-designer") ?? document.body;
+    root.append(dialog);
+    let disposed = false;
+    const observer = new MutationObserver(() => {
+      if (!options.card.isConnected || !dialog.isConnected) closePreview?.();
+    });
+    const onResize = () => { if (playing) render(); };
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      observer.disconnect();
+      window.removeEventListener("resize", onResize);
+      stopAnimation?.();
+      dialog.remove();
+      if (expand.isConnected) expand.focus({ preventScroll: true });
+      closePreview = undefined;
+    };
+    closePreview = () => { dialog.close(); dispose(); };
+    close.addEventListener("click", () => closePreview?.());
+    dialog.addEventListener("close", dispose);
+    dialog.addEventListener("cancel", event => { event.preventDefault(); closePreview?.(); });
+    // Keep Escape/arrow keys and pointer input away from the game and any
+    // containing scaled-variant dialog. Native dialog supplies the focus trap.
+    for (const name of ["keydown", "keyup", "pointerdown", "pointerup", "click", "wheel"]) {
+      dialog.addEventListener(name, event => event.stopPropagation());
+    }
+    observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", onResize);
+    dialog.showModal();
+    render();
+  });
+  options.card.append(expand);
 }
 
 const pendingCurrentImages = new WeakMap<HTMLImageElement, HTMLImageElement>();
@@ -4656,6 +4775,7 @@ export function ensureDesignerStyles(): void {
   grid-template-columns: 1fr;
 }
 .ai-game-assets-designer__option {
+  position: relative;
   border: 2px solid #384251;
   border-radius: 8px;
   background: #0f1218;
@@ -4707,6 +4827,39 @@ export function ensureDesignerStyles(): void {
 .ai-game-assets-designer__option .ai-game-assets-designer__animate-button {
   width: 100%;
 }
+.ai-game-assets-designer__option-expand {
+  position: absolute; top: 3px; right: 3px; z-index: 1;
+  display: grid; place-items: center; width: 26px; height: 26px;
+  padding: 4px; border: 1px solid #536278; border-radius: 5px;
+  background: #202a3a; color: #e0eaff; cursor: pointer;
+}
+.ai-game-assets-designer__option-expand:hover,
+.ai-game-assets-designer__option-expand:focus-visible { background: #364762; border-color: #91c7ee; }
+.ai-game-assets-designer__generation-dialog {
+  box-sizing: border-box; width: min(960px, calc(100vw - 32px));
+  max-width: none; max-height: calc(100dvh - 32px); overflow: auto;
+  border: 1px solid #536278; border-radius: 10px; padding: 16px;
+  background: #141820; color: #dbeafe; font: 14px/1.4 system-ui, sans-serif;
+  box-shadow: 0 22px 70px #0008;
+}
+.ai-game-assets-designer__generation-dialog::backdrop { background: #06080cbf; }
+.ai-game-assets-designer__generation-dialog header,
+.ai-game-assets-designer__generation-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ai-game-assets-designer__generation-dialog h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.ai-game-assets-designer__generation-dialog footer { margin-top: 12px; color: #b9c1cf; }
+.ai-game-assets-designer__generation-dialog button {
+  flex-shrink: 0; padding: 7px 12px; border: 1px solid #536278; border-radius: 6px;
+  background: #253247; color: #e0eaff; font: inherit; cursor: pointer;
+}
+.ai-game-assets-designer__generation-dialog button:is(:hover,:focus-visible) { background: #364762; border-color: #91c7ee; }
+.ai-game-assets-designer__generation-viewport {
+  display: grid; place-items: center; height: min(60dvh, 600px); min-height: 120px;
+  margin-top: 14px; overflow: hidden;
+  background: repeating-conic-gradient(#26303b 0% 25%,#19212c 0% 50%) 0/20px 20px;
+}
+.ai-game-assets-designer__generation-viewport > img { width: 100%; height: 100%; min-height: 0; object-fit: contain; image-rendering: pixelated; }
+.ai-game-assets-designer__generation-animation { position: relative; overflow: hidden; max-width: 100%; }
+.ai-game-assets-designer__generation-viewport > [hidden] { display: none; }
 .ai-game-assets-designer__modal {
   position: fixed;
   inset: 0;
