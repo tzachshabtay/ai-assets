@@ -1,4 +1,4 @@
-import type { AiAssetDefinition, AiAssetDimensions, AiAssetManifest } from "@ai-game-assets/core";
+import type { AiAssetDefinition, AiAssetDimensions, AiAssetFrameGrid, AiAssetManifest } from "@ai-game-assets/core";
 import {
   fileToDataUrl,
   imageSizeFromSource,
@@ -9,7 +9,7 @@ import {
   renderAssetFolderBrowser
 } from "./designer-support.js";
 
-export type GenerationReference = { name: string; dataUrl: string };
+export type GenerationReference = { name: string; dataUrl: string; frameGrid?: AiAssetFrameGrid };
 
 export type GenerationReferenceControlOptions = {
   root: HTMLElement;
@@ -263,7 +263,10 @@ export function createGenerationReferenceControl(
           dialogStatus.textContent = "Loading reference…";
           try {
             const dataUrl = await imageSourceToDataUrl(options.resolveAssetUrl(file));
-            select({ name: readableAssetName(assetId), dataUrl }, selection);
+            select({
+              name: readableAssetName(assetId), dataUrl,
+              ...(asset.kind !== "tileset" && asset.frameGrid ? { frameGrid: { ...asset.frameGrid } } : {})
+            }, selection);
           } catch (error) {
             if (destroyed || selection !== revision || closeDialog !== close) return;
             dialogStatus.textContent = error instanceof Error ? error.message : String(error);
@@ -311,7 +314,10 @@ export function createGenerationReferenceControl(
 }
 
 function copyReference(reference: GenerationReference | undefined): GenerationReference | undefined {
-  return reference ? { ...reference } : undefined;
+  return reference ? {
+    ...reference,
+    ...(reference.frameGrid ? { frameGrid: { ...reference.frameGrid } } : {})
+  } : undefined;
 }
 
 function sketchDimension(value: number): number {

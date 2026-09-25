@@ -216,7 +216,7 @@ test("generation HTTP endpoints preserve priority, identity, base and style refe
   const server = createAiAssetDevServer({ manifestPath, assetsDir, provider, port: 0 });
   await server.listen();
   const origin = `http://127.0.0.1:${server.server.address().port}`;
-  const selected = { name: "sketch.png", dataUrl: dataUrl(priority) };
+  const selected = { name: "sketch.png", dataUrl: dataUrl(priority), frameGrid: { frameWidth: 3, frameHeight: 5, columns: 1, rows: 1, frameCount: 1 } };
   const styleGuide = { images: [{ name: "style.png", dataUrl: dataUrl(image) }] };
   const post = (endpoint, body) => fetch(`${origin}/__ai-assets/${endpoint}`, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
@@ -233,6 +233,7 @@ test("generation HTTP endpoints preserve priority, identity, base and style refe
       assert.deepEqual(request.references.map((ref) => ref.fileName), ["identity.png", "context.png"]);
       assert.equal(request.priorityReference.fileName, "sketch.png");
       assert.deepEqual(request.priorityReference.image, priority);
+      assert.deepEqual(request.priorityReference.frameGrid, selected.frameGrid);
       assert.equal(request.styleReferences[0].fileName, "style.png");
     }
     const response = await post("generate-tileset-animation-stream", {
@@ -249,6 +250,7 @@ test("generation HTTP endpoints preserve priority, identity, base and style refe
       assert.deepEqual(request.references[0].image, image);
       assert.equal(request.references.length, index + 1);
       assert.deepEqual(request.priorityReference.image, priority);
+      assert.deepEqual(request.priorityReference.frameGrid, selected.frameGrid);
       assert.equal(request.priorityReference.fileName, "sketch.png");
       assert.equal(request.styleReferences[0].fileName, "style.png");
       assert.match(request.prompt, /priority reference controls intended appearance/);

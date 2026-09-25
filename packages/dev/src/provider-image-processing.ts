@@ -13,9 +13,70 @@ import type {
 
 export type RgbColor = { red: number; green: number; blue: number };
 
+function animationFramingReference(request: GenerateAssetRequest) {
+  if (request.asset.kind === "tileset") return undefined;
+  if (request.priorityReference) {
+    if (request.priorityReference.frameGrid) return undefined; // Extract a frame before measuring it.
+    return request.asset.frameGrid || request.priorityReference.role === "animation-base" ||
+      request.references?.some((reference) => reference.role === "animation-base")
+      ? { reference: request.priorityReference, number: (request.references?.length ?? 0) + 1, priority: true }
+      : undefined;
+  }
+  const index = request.references?.findIndex((reference) => reference.role === "animation-base") ?? -1;
+  return index < 0 ? undefined : { reference: request.references![index], number: index + 1, priority: false };
+}
+
 export function hasAnimationBaseReference(request: GenerateAssetRequest): boolean {
-  return !request.priorityReference && request.asset.kind !== "tileset" &&
-    Boolean(request.references?.some((reference) => reference.role === "animation-base"));
+  return Boolean(animationFramingReference(request));
+}
+
+/** A reference sheet supplies one full frame, never a miniature sheet inside every output cell. */
+export async function prepareAnimationFramingReference(request: GenerateAssetRequest): Promise<GenerateAssetRequest> {
+  if (!request.priorityReference || request.asset.kind === "tileset") return request;
+  const isAnimation = Boolean(request.asset.frameGrid ||
+    request.priorityReference.role === "animation-base" ||
+    request.references?.some((reference) => reference.role === "animation-base"));
+  if (!isAnimation) return request;
+  let reference = request.priorityReference;
+  if (reference.frameGrid) {
+    const grid = reference.frameGrid;
+    const { frameWidth, frameHeight, columns, rows } = grid;
+    const margin = grid.margin ?? 0, spacing = grid.spacing ?? 0;
+    const count = grid.frameCount ?? columns * rows;
+    if (![frameWidth, frameHeight, columns, rows, count].every((value) => Number.isSafeInteger(value) && value > 0) ||
+      ![margin, spacing].every((value) => Number.isSafeInteger(value) && value >= 0) || count > columns * rows) {
+      throw new Error("Generation reference has an invalid animation frame grid.");
+    }
+    const { data, info } = await sharp(Buffer.from(reference.image), { failOn: "error" })
+      .toColourspace("srgb").ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    if (margin + columns * frameWidth + (columns - 1) * spacing > info.width ||
+      margin + rows * frameHeight + (rows - 1) * spacing > info.height) {
+      throw new Error("Generation reference frame grid extends outside its image.");
+    }
+    let frame: Buffer | undefined;
+    let frameIndex = 0;
+    for (; frameIndex < count; frameIndex++) {
+      request.signal?.throwIfAborted();
+      const left = margin + (frameIndex % columns) * (frameWidth + spacing);
+      const top = margin + Math.floor(frameIndex / columns) * (frameHeight + spacing);
+      const candidate = new PNG({ width: frameWidth, height: frameHeight });
+      let visible = false;
+      for (let y = 0; y < frameHeight; y++) {
+        const start = ((top + y) * info.width + left) * info.channels;
+        data.copy(candidate.data, y * frameWidth * 4, start, start + frameWidth * 4);
+      }
+      for (let offset = 3; offset < candidate.data.length; offset += 4) {
+        if (candidate.data[offset] >= 16) { visible = true; break; }
+      }
+      if (visible) { frame = PNG.sync.write(candidate); break; }
+    }
+    if (!frame) throw new Error("Generation reference animation contains no visible frames.");
+    reference = {
+      ...reference, image: frame, mimeType: "image/png", frameGrid: undefined,
+      fileName: `${reference.fileName.replace(/\.[^.]+$/, "")}-frame-${frameIndex + 1}.png`
+    };
+  }
+  return { ...request, priorityReference: { ...reference, role: "animation-base" } };
 }
 
 /** Repeat the complete base canvas, including its margins, in the requested grid. */
@@ -27,7 +88,7 @@ export async function animationBaseLayoutReference(
   if (!hasAnimationBaseReference(request) || !grid) return undefined;
   const count = grid.frameCount ?? grid.columns * grid.rows;
   if (count <= 1) return undefined;
-  const base = request.references!.find((reference) => reference.role === "animation-base")!;
+  const base = animationFramingReference(request)!.reference;
   const dimensions = request.asset.dimensions;
   if (!dimensions) return undefined;
   const sheet = await composeSpriteSheetFrames(Array.from({ length: count }, () => base.image), dimensions, grid);
@@ -40,11 +101,11 @@ export async function animationBaseLayoutReference(
 
 /** Framing is relative to one frame, never to the entire generated sheet. */
 export function animationBaseFramingPromptLines(request: GenerateAssetRequest): string[] {
-  if (!hasAnimationBaseReference(request)) return [];
-  const referenceIndex = request.references!.findIndex((reference) => reference.role === "animation-base");
-  const reference = request.references![referenceIndex];
+  const framing = animationFramingReference(request);
+  if (!framing) return [];
+  const { reference } = framing;
   const lines = [
-    `Base-frame scale contract: Reference ${referenceIndex + 1} is the original single-frame base image, not an example of the whole spritesheet.`,
+    `Base-frame scale contract: Reference ${framing.number} is ${framing.priority ? "the user-selected single-frame animation reference" : "the original single-frame base image"}, not an example of the whole spritesheet. It is the framing source described as the base image below.`,
     "Map the ENTIRE base-image canvas onto EACH animation frame's canvas. Preserve the subject's size relative to that canvas, its resting position, and its existing transparent margins. Do not fit the subject into a smaller inner box, zoom out, or add presentation padding.",
     "Preserve the size of individual body parts and components (for example each footprint), not just the overall bounding box of the pose. Animate their positions at that size. Poses, squash/stretch, and effects may change visible bounds when requested; do not independently resize each pose to fill a box.",
     "The first neutral pose and any return-to-rest pose must match the base image's framing. Prior generated frames guide motion only and must not introduce or propagate a smaller scale. If space is tight, reduce travel or effects instead of shrinking the whole subject, unless the user's action explicitly calls for a scale change.",

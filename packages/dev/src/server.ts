@@ -80,7 +80,7 @@ export type GenerateTilesetAnimationStreamRequest = {
   count?: number;
   baseDataUrl?: string;
   settings?: AiAssetDefinition["settings"];
-  priorityReference?: { name: string; dataUrl: string };
+  priorityReference?: { name: string; dataUrl: string; frameGrid?: AiAssetFrameGrid };
   styleGuide?: DebugStyleGuide;
 };
 
@@ -585,7 +585,7 @@ type GenerateRequestBody = {
   assetId: string;
   prompt?: string;
   count?: number;
-  priorityReference?: { name: string; dataUrl: string };
+  priorityReference?: { name: string; dataUrl: string; frameGrid?: AiAssetFrameGrid };
   references?: Array<{
     name: string;
     dataUrl: string;
@@ -607,7 +607,7 @@ async function generateImage(
   body: {
     prompt?: string;
     count?: number;
-    priorityReference?: { name: string; dataUrl: string };
+    priorityReference?: { name: string; dataUrl: string; frameGrid?: AiAssetFrameGrid };
     references?: Array<{
       name: string;
       dataUrl: string;
@@ -859,7 +859,7 @@ async function getStyleReferenceImages(
   }));
 }
 
-function referencesFromDataUrls(images: DebugStyleGuide["images"] = []) {
+function referencesFromDataUrls(images: Array<{ name: string; dataUrl: string; frameGrid?: AiAssetFrameGrid }> = []) {
   return images.map((image) => {
     const match = /^data:(.+);base64,(.+)$/.exec(image.dataUrl);
 
@@ -870,7 +870,8 @@ function referencesFromDataUrls(images: DebugStyleGuide["images"] = []) {
     return {
       image: Buffer.from(match[2], "base64"),
       mimeType: match[1],
-      fileName: image.name
+      fileName: image.name,
+      ...(image.frameGrid ? { frameGrid: { ...image.frameGrid } } : {})
     };
   });
 }

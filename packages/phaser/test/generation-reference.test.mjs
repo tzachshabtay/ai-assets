@@ -69,6 +69,7 @@ test("existing reference browser includes linked animation and target images and
     id, kind, prompt: id, activeVersion: "saved",
     versions: { saved: { file: "/slow.png" } }
   }]));
+  assets["hero.walk"].frameGrid = { frameWidth: 40, frameHeight: 80, columns: 3, rows: 3, frameCount: 8 };
   assets.hero.linkedAnimations = [{ label: "Walk", assetId: "hero.walk" }];
   const manifest = {
     schemaVersion: 1,
@@ -106,6 +107,9 @@ test("existing reference browser includes linked animation and target images and
     dom.button("Hero Walk").click();
     await settle();
     assert.equal(control.getValue().name, "Hero Walk");
+    assert.deepEqual(control.getValue().frameGrid, assets["hero.walk"].frameGrid);
+    control.getValue().frameGrid.frameWidth = 99;
+    assert.equal(control.getValue().frameGrid.frameWidth, 40, "callers cannot mutate the reference grid");
     assert.ok(control.getValue().dataUrl.startsWith("data:image/png"));
     assert.equal(changes.length, 1);
     control.destroy();

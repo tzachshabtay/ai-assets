@@ -18,6 +18,7 @@ import {
   animationBaseFramingPromptLines,
   animationBaseLayoutReference,
   hasAnimationBaseReference,
+  prepareAnimationFramingReference,
   composeSpriteSheetFrames,
   referenceLockPromptLines,
   resizePngToDimensions,
@@ -61,6 +62,8 @@ export type GenerateAssetReference = {
   fileName: string;
   /** A linked animation's single-frame base: preserve its framing as well as identity. */
   role?: "animation-base";
+  /** Geometry of a selected animation sheet; generation uses a complete visible frame. */
+  frameGrid?: AiAssetFrameGrid;
 };
 
 export type GeneratedAssetOption = {
@@ -270,6 +273,8 @@ export function createOpenAiImageProvider(
         throw new Error("OPENAI_API_KEY is required to generate AI game assets.");
       }
 
+      request = await prepareAnimationFramingReference(request);
+
       const model =
         request.settings?.model ??
         request.asset.settings?.model ??
@@ -373,7 +378,8 @@ export function createOpenAiImageProvider(
           variationCount: count,
           tilesetGeometry,
           generationDimensions,
-          animationLayoutReferenceNumber: animationLayout ? assetReferences.length + 1 : undefined
+          animationLayoutReferenceNumber: animationLayout
+            ? assetReferences.length + priorityImageReferences(request).length + 1 : undefined
         }),
         n: 1,
         size: generationSize,
@@ -518,7 +524,8 @@ async function generateIsolatedSpriteSheetFrames(
         branchSeed,
         hasPriorFrame: Boolean(priorFrame),
         originalReferenceCount: request.references?.length ?? 0,
-        preserveBaseFraming: hasAnimationBaseReference(request)
+        preserveBaseFraming: hasAnimationBaseReference(request),
+        hasPriorityReference: Boolean(request.priorityReference)
       });
       const frameAsset: AiAssetDefinition = {
         ...request.asset,
@@ -622,10 +629,12 @@ function isolatedSpriteFramePrompt(
     hasPriorFrame: boolean;
     originalReferenceCount: number;
     preserveBaseFraming: boolean;
+    hasPriorityReference: boolean;
   }
 ): string {
   const frameNumber = context.frameIndex + 1;
   const priorReferenceNumber = context.originalReferenceCount + 1;
+  const framingSource = context.hasPriorityReference ? "user-selected reference frame" : "original base image";
 
   return [
     prompt.trim(),
@@ -636,11 +645,11 @@ function isolatedSpriteFramePrompt(
     `Render the animation phase at t=${context.frameIndex}/${context.frameCount}. Keep the pose meaningfully continuous with adjacent phases and make the complete sequence loop cleanly from its final sampled phase back to frame 1.`,
     ...(context.hasPriorFrame
       ? [
-          `Reference ${priorReferenceNumber} is the immediately preceding generated frame. Use it only for ${context.preserveBaseFraming ? "motion continuity; the original base image remains authoritative for subject scale and framing" : "identity, scale, placement, and motion continuity"}; advance the action to the requested phase instead of copying it exactly.`
+          `Reference ${priorReferenceNumber} is the immediately preceding generated frame. Use it only for ${context.preserveBaseFraming ? `motion continuity; the ${framingSource} remains authoritative for subject scale and framing` : "identity, scale, placement, and motion continuity"}; advance the action to the requested phase instead of copying it exactly.`
         ]
       : [
           context.preserveBaseFraming
-            ? "This is the first sampled phase. Inherit the subject identity, scale, and framing from the original base image; do not establish a new smaller scale."
+            ? `This is the first sampled phase. Inherit the subject identity, scale, and framing from the ${framingSource}; do not establish a new smaller scale.`
             : "This is the first sampled phase. Establish the character identity, scale, and placement that all later frames should preserve."
         ]),
     context.preserveBaseFraming
@@ -826,6 +835,10 @@ function priorityReferencePromptLines(request: GenerateAssetRequest): string[] {
     "Preserve its intended placement instead of applying generic centering or pose suggestions, while honoring any explicitly configured frame alignment.",
     "Apply the requested edits and animation motion to this visual direction. A sketch is guidance to interpret and finish as artwork, not an extra panel to reproduce.",
     "The declared output dimensions, frame count, tile indices, grid cell boundaries, and transparency requirements remain mandatory. Adapt the priority image inside the assigned canvas or cells; its own image dimensions and any drawn guides do not replace the asset's geometry.",
+    ...(hasAnimationBaseReference(request) ? [
+      "Animate the exact subject in the priority reference. Preserve its body proportions, face, costume, equipment, colors and material regions; change only the requested action or direction. A front-facing reference must turn to the requested walking direction without becoming a redesigned character.",
+      ...referenceLockPromptLines([request.priorityReference]).map((line) => line.replace(/^Reference /, `Priority reference ${referenceNumber} `))
+    ] : []),
     ...(request.asset.kind === "tileset" && request.references?.length ? [
       "Reference 1 remains the base sheet for tile coordinates and unchanged context; it does not override the priority image's intended appearance or pose inside each tile rectangle."
     ] : [])
@@ -1012,7 +1025,7 @@ export function gameAssetPrompt(
       lines.push(
         `If the grid has more cells than ${frameCount}, leave the extra trailing cells fully transparent and empty.`,
         preserveBaseFraming
-          ? "Every frame must preserve the original base image's subject-to-frame scale, not merely a consistent new scale across the generated sheet."
+          ? `Every frame must preserve the ${request.priorityReference ? "user-selected reference frame" : "original base image"}'s subject-to-frame scale, not merely a consistent new scale across the generated sheet.`
           : "Keep the character centered at a consistent scale in every cell, leaving transparent padding inside the cell."
       );
     } else {
@@ -1043,7 +1056,7 @@ export function gameAssetPrompt(
 
   if (context.animationLayoutReferenceNumber) {
     lines.push(
-      `Reference ${context.animationLayoutReferenceNumber} (animation-base-layout.png) is the exact starting layout: the original base image repeated at its required scale in every occupied frame, with trailing cells empty.`,
+      `Reference ${context.animationLayoutReferenceNumber} (animation-base-layout.png) is the exact starting layout: ${request.priorityReference ? "the user-selected reference frame" : "the original base image"} repeated at its required scale in every occupied frame, with trailing cells empty.`,
       "Edit this layout in place to animate the requested action. Preserve its per-cell subject scale and margins; do not draw a new smaller subject inside the provided one, add another grid, or zoom out. Advance poses across cells while preserving the size of the base artwork's individual components."
     );
   }

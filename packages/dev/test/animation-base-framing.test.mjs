@@ -62,7 +62,8 @@ test("ordinary identity and style images do not accidentally become framing lock
   input.references = [base];
   input.priorityReference = { ...base, role: undefined, fileName: "sketch.png" };
   const prompt = gameAssetPrompt(input, context);
-  assert.doesNotMatch(prompt, /Base-frame scale contract|Measured base framing/);
+  assert.match(prompt, /Reference 2 is the user-selected single-frame animation reference/);
+  assert.match(prompt, /Measured base framing/);
   assert.match(prompt, /priority image takes precedence/);
 });
 
@@ -87,7 +88,7 @@ test("the layout guide repeats complete base canvases without trimming margins a
     assert.equal(guide.data[offset + 3], index < 3 ? png.data[(y * 48 + x) * 4 + 3] : 0);
   }
   input.priorityReference = base;
-  assert.equal(await animationBaseLayoutReference(input), undefined);
+  assert.deepEqual(PNG.sync.read((await animationBaseLayoutReference(input)).image).data, guide.data);
   delete input.priorityReference;
   delete input.asset.frameGrid;
   assert.equal(await animationBaseLayoutReference(input), undefined);

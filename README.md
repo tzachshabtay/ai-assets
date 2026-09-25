@@ -94,7 +94,7 @@ export const assets = defineAiAssets({
 
 Linked graphical animations automatically use their parent asset's active image as a generation reference. Promoting a new base image updates the reference for subsequent generations; no duplicate `referenceAssetIds` setting is needed. Explicit references and style guides are still included.
 
-For single-image parents, animation generation also uses the base as a framing reference: each frame should retain the subject's size relative to its canvas and its existing margins. PNG base images supply measured visible bounds to the model. Whole-sheet raster generation also receives a layout reference with the base repeated at the intended size in each occupied cell. A manually chosen priority reference can override this framing. The library preserves intentional motion and squash/stretch instead of resizing every generated pose to identical bounds.
+For single-image parents, animation generation also uses the base as a framing reference: each frame should retain the subject's size relative to its canvas and its existing margins. PNG references supply measured visible bounds to the model. Whole-sheet raster generation also receives a layout reference repeated at the intended size in each occupied cell. A manually chosen priority reference replaces the base as the framing source rather than disabling these safeguards. When selecting an existing animation as the reference, the designer includes its frame grid so generation can use the first visible complete frame, preserving its transparent margins instead of treating the entire sheet as one small subject. The library preserves intentional motion and squash/stretch instead of resizing every generated pose to identical bounds.
 
 For larger projects, keep assets as JSON files in folders and generate the TypeScript module during development or build.
 
@@ -343,7 +343,10 @@ and AI derivation controls use the same reference picker.
 
 Programmatically, pass `priorityReference: { name: "outline.png", dataUrl }` to the debug client's
 `generate`, `generateStream`, or `generateTilesetAnimationStream` request. Ordinary `references` remain
-available for supporting context.
+available for supporting context. For an animation-sheet reference, include its `frameGrid` alongside
+`name` and `dataUrl`; the existing-asset picker does this automatically. Animation generation extracts
+the first visible frame using that source grid (including margins and spacing), independently of the
+output frame count and resolution. Uploads without grid metadata are treated as single images.
 
 ## Local Dev Server
 

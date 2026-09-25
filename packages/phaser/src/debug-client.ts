@@ -1,5 +1,6 @@
 import type {
   AiAssetDefinition,
+  AiAssetFrameGrid,
   AiAssetGenerationSettings,
   AiAssetManifest,
   AiAssetTileset,
@@ -21,7 +22,7 @@ export type GenerateDebugOptionsRequest = {
     name: string;
     dataUrl: string;
   }>;
-  priorityReference?: { name: string; dataUrl: string };
+  priorityReference?: { name: string; dataUrl: string; frameGrid?: AiAssetFrameGrid };
   dimensions?: {
     width: number;
     height: number;
@@ -96,7 +97,7 @@ export type GenerateTilesetAnimationRequest = {
   assetId: string;
   animationKey: string;
   settings?: AiAssetGenerationSettings;
-  priorityReference?: { name: string; dataUrl: string };
+  priorityReference?: { name: string; dataUrl: string; frameGrid?: AiAssetFrameGrid };
   /** Backward-compatible animation-wide prompt. Prefer `tiles`. */
   prompt?: string;
   frameCount?: number;
