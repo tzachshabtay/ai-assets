@@ -141,11 +141,14 @@ test("a moved dock stays reachable on viewport resize and retains panel dimensio
   await drag(page, button(page, "Assets"), -100, 100);
   const original = await box(page.locator("#assets"));
   await page.setViewportSize({ width: 320, height: 240 });
+  // CDP acknowledges the resize before Chromium dispatches visualViewport.resize.
+  await expect.poll(async () => { const dock = await box(toolbar(page)); return dock.x + dock.width; }).toBeLessThanOrEqual(312);
   const dock = await box(toolbar(page));
   expect(dock.x).toBeGreaterThanOrEqual(8); expect(dock.y).toBeGreaterThanOrEqual(8);
   expect(dock.x + dock.width).toBeLessThanOrEqual(312);
   expect(dock.y + dock.height).toBeLessThan(240);
   await page.setViewportSize({ width: 1200, height: 800 });
+  await expect.poll(async () => { const panel = await box(page.locator("#assets")); return [panel.width, panel.height]; }).toEqual([original.width, original.height]);
   const restored = await box(page.locator("#assets"));
   expect(restored.width).toBe(original.width); expect(restored.height).toBe(original.height);
 });
