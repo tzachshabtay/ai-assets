@@ -214,3 +214,49 @@ for (const reason of ["pointercancel", "lostpointercapture", "blur", "hidden", "
     await expect(toolbar(page)).not.toHaveClass(/is-dragging/);
   });
 }
+
+
+test("all five tools and their panel stay inside a zoomed, panned, or narrow viewport", async ({ page }) => {
+  await page.addScriptTag({ type: "module", content: `${dockSource}
+    registerInGameDesignerToggle({ id: 'prefabs', label: 'Prefabs' });
+    registerInGameDesignerToggle({ id: 'dialogs', label: 'Dialogs' });
+  ` });
+  const assertFits = async () => {
+    await expect.poll(() => page.evaluate(() => {
+      const viewport = window.visualViewport!;
+      const elements = [...document.querySelectorAll('[role="toolbar"] button, section:not([hidden])')];
+      return elements.length >= 5 && elements.every(element => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= viewport.offsetLeft && rect.right <= viewport.offsetLeft + viewport.width + 1
+          && rect.top >= viewport.offsetTop && rect.bottom <= viewport.offsetTop + viewport.height + 1;
+      });
+    })).toBe(true);
+  };
+  const session = await page.context().newCDPSession(page);
+  await session.send('Emulation.setPageScaleFactor', { pageScaleFactor: 1.5 });
+  await assertFits();
+  await button(page, 'Assets').press('Enter');
+  await assertFits();
+  // Visual viewport scroll does not dispatch a window resize.
+  await page.evaluate(() => {
+    Object.defineProperty(window.visualViewport, 'offsetLeft', { configurable: true, value: 90 });
+    Object.defineProperty(window.visualViewport, 'offsetTop', { configurable: true, value: 70 });
+    window.visualViewport!.dispatchEvent(new Event('scroll'));
+  });
+  await assertFits();
+  await page.evaluate(() => {
+    delete (window.visualViewport as any).offsetLeft;
+    delete (window.visualViewport as any).offsetTop;
+  });
+  await session.send('Emulation.setPageScaleFactor', { pageScaleFactor: 1 });
+  await page.setViewportSize({ width: 320, height: 600 });
+  await assertFits();
+  const dock = await box(toolbar(page));
+  expect(dock.height).toBeGreaterThan(42);
+  expect((await box(page.locator('#assets'))).y).toBeGreaterThan(dock.y + dock.height);
+  await button(page, 'Scenes').click();
+  await expect(page.locator('#scenes')).toBeVisible();
+  await assertFits();
+  await button(page, 'Scenes').click();
+  await assertFits();
+});

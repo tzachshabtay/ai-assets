@@ -306,6 +306,8 @@ function ensureDockState(document: Document): DockState {
     }
   }, true);
   document.defaultView?.addEventListener("resize", state.onWindowResize);
+  document.defaultView?.visualViewport?.addEventListener("resize", state.onWindowResize);
+  document.defaultView?.visualViewport?.addEventListener("scroll", state.onWindowResize);
   states.set(document, state);
   return state;
 }
@@ -420,6 +422,8 @@ function removeDockToggle(state: DockState, item: DockToggleItem): void {
 function removeDockIfEmpty(state: DockState): void {
   if (state.items.size === 0 && state.toggles.size === 0) {
     state.document.defaultView?.removeEventListener("resize", state.onWindowResize);
+    state.document.defaultView?.visualViewport?.removeEventListener("resize", state.onWindowResize);
+    state.document.defaultView?.visualViewport?.removeEventListener("scroll", state.onWindowResize);
     state.root.remove();
     const host = globalThis as typeof globalThis & Record<string, unknown>;
     const states = host[dockStatesKey] as WeakMap<Document, DockState> | undefined;
@@ -436,13 +440,14 @@ function beginDockDrag(state: DockState, handle: HTMLElement, event: PointerEven
   const view = state.document.defaultView;
   if (!view) return;
   const startRect = state.root.getBoundingClientRect();
-  const startRight = view.innerWidth - startRect.right;
+  const viewport = dockViewport(view);
+  const startRight = viewport.right - startRect.right;
   const startX = event.clientX;
   const startY = event.clientY;
   trackPointerGesture(state, handle, event, (moveEvent) => {
     state.position = {
       right: startRight - (moveEvent.clientX - startX),
-      top: startRect.top + moveEvent.clientY - startY
+      top: startRect.top - viewport.top + moveEvent.clientY - startY
     };
     positionDockForActivePanel(state);
   }, fromButton);
@@ -519,8 +524,10 @@ function beginPanelResize(
     const view = state.document.defaultView;
     if (!view) return;
     const margin = 8;
-    const minWidth = Math.min(280, view.innerWidth - margin * 2);
-    const minHeight = Math.min(180, view.innerHeight - 66);
+    const viewport = dockViewport(view);
+    const toolbarSpace = state.root.getBoundingClientRect().height + margin;
+    const minWidth = Math.min(280, viewport.width - margin * 2);
+    const minHeight = Math.min(180, viewport.height - toolbarSpace - margin * 2);
     const dx = moveEvent.clientX - startX;
     const dy = moveEvent.clientY - startY;
     let left = startRect.left;
@@ -528,13 +535,13 @@ function beginPanelResize(
     let right = startRect.right;
     let bottom = startRect.bottom;
 
-    if (edge.includes("w")) left = clamp(startRect.left + dx, margin, right - minWidth);
-    if (edge.includes("e")) right = clamp(startRect.right + dx, left + minWidth, view.innerWidth - margin);
-    if (edge.includes("n")) top = clamp(startRect.top + dy, 58, bottom - minHeight);
-    if (edge.includes("s")) bottom = clamp(startRect.bottom + dy, top + minHeight, view.innerHeight - margin);
+    if (edge.includes("w")) left = clamp(startRect.left + dx, viewport.left + margin, right - minWidth);
+    if (edge.includes("e")) right = clamp(startRect.right + dx, left + minWidth, viewport.right - margin);
+    if (edge.includes("n")) top = clamp(startRect.top + dy, viewport.top + toolbarSpace + margin, bottom - minHeight);
+    if (edge.includes("s")) bottom = clamp(startRect.bottom + dy, top + minHeight, viewport.bottom - margin);
 
     item.geometry = { left, top, width: right - left, height: bottom - top };
-    state.position = { right: view.innerWidth - right, top: top - 50 };
+    state.position = { right: viewport.right - right, top: top - viewport.top - toolbarSpace };
     applyPanelGeometry(item);
     positionDockForActivePanel(state);
   });
@@ -559,49 +566,50 @@ function syncResizeFrame(item: DockItem): void {
   });
 }
 
-function positionDockForActivePanel(state: DockState): void {
-  const activeItem = state.activeId ? state.items.get(state.activeId) : undefined;
-  const view = state.document.defaultView;
-  if (state.position && view) {
-    if (activeItem?.open && activeItem.geometry) applyPanelGeometry(activeItem);
-    const dockRect = state.root.getBoundingClientRect();
-    const panelRect = activeItem?.open ? activeItem.panel.getBoundingClientRect() : undefined;
-    const right = clamp(state.position.right, 8, view.innerWidth - Math.max(dockRect.width, panelRect?.width ?? 0) - 8);
-    // Keep the toolbar and panel header reachable without preventing tall panels from moving down.
-    const visibleHeight = panelRect ? Math.max(dockRect.height, Math.min(panelRect.height, 60) + 50) : dockRect.height;
-    const top = clamp(state.position.top, 8, view.innerHeight - visibleHeight - 8);
-    state.position = { right, top };
-    state.root.style.left = "auto";
-    state.root.style.right = `${right}px`;
-    state.root.style.top = `${top}px`;
-    if (panelRect && activeItem) {
-      activeItem.geometry = {
-        left: view.innerWidth - right - panelRect.width, top: top + 50,
-        width: activeItem.geometry?.width ?? panelRect.width,
-        height: activeItem.geometry?.height ?? panelRect.height
-      };
-      applyPanelGeometry(activeItem);
-    }
-    return;
-  }
-  if (!activeItem?.open) {
-    state.root.style.removeProperty("left");
-    state.root.style.removeProperty("top");
-    state.root.style.removeProperty("right");
-    return;
-  }
+/** Fixed elements use layout coordinates, even when zoom exposes only part of that layout. */
+function dockViewport(view: Window) {
+  const visual = view.visualViewport;
+  const left = visual?.offsetLeft ?? 0;
+  const top = visual?.offsetTop ?? 0;
+  const width = visual?.width ?? view.innerWidth;
+  const height = visual?.height ?? view.innerHeight;
+  return { left, top, width, height, right: left + width, bottom: top + height };
+}
 
-  if (activeItem.geometry) applyPanelGeometry(activeItem);
-  const panelRect = activeItem.panel.getBoundingClientRect();
+function positionDockForActivePanel(state: DockState): void {
+  const view = state.document.defaultView;
+  if (!view) return;
+  const viewport = dockViewport(view);
+  const activeItem = state.activeId ? state.items.get(state.activeId) : undefined;
+  const panel = activeItem?.open ? activeItem.panel : undefined;
+  // Wrapping keeps every tab visible on narrow/zoomed viewports. Its measured
+  // height also determines the panel offset; it is not always a single row.
+  const availableWidth = Math.max(1, viewport.width - 28);
+  state.root.style.maxWidth = `${availableWidth}px`;
+  state.root.style.maxHeight = `${Math.max(1, viewport.height - 28)}px`;
   const dockRect = state.root.getBoundingClientRect();
-  const maximumLeft = view
-    ? Math.max(8, view.innerWidth - dockRect.width - 8)
-    : panelRect.right - dockRect.width;
-  const left = clamp(panelRect.right - dockRect.width, 8, maximumLeft);
-  state.root.style.left = `${left}px`;
-  state.root.style.top = `${Math.max(8, panelRect.top - 50)}px`;
+  const toolbarSpace = dockRect.height + 8;
+  if (panel) {
+    panel.style.setProperty("max-width", `${availableWidth}px`, "important");
+    if (activeItem?.geometry) applyPanelGeometry(activeItem);
+  }
+  const panelRect = panel?.getBoundingClientRect();
+  const position = state.position ?? { right: 14, top: 14 };
+  const right = clamp(position.right, 8, viewport.width - Math.max(dockRect.width, panelRect?.width ?? 0) - 8);
+  const visibleHeight = panelRect ? toolbarSpace + Math.min(panelRect.height, 60) : dockRect.height;
+  const top = clamp(position.top, 8, viewport.height - visibleHeight - 8);
+  if (state.position) state.position = { right, top };
+  state.root.style.left = `${viewport.right - right - dockRect.width}px`;
   state.root.style.right = "auto";
-  syncResizeFrame(activeItem);
+  state.root.style.top = `${viewport.top + top}px`;
+  if (panel && panelRect && activeItem) {
+    const panelTop = viewport.top + top + toolbarSpace;
+    panel.style.setProperty("left", `${viewport.right - right - panelRect.width}px`, "important");
+    panel.style.setProperty("top", `${panelTop}px`, "important");
+    panel.style.setProperty("right", "auto", "important");
+    panel.style.setProperty("max-height", `${Math.max(1, viewport.bottom - panelTop - 14)}px`, "important");
+    syncResizeFrame(activeItem);
+  }
 }
 
 function ensureDockStyles(document: Document): void {
@@ -619,14 +627,15 @@ function ensureDockStyles(document: Document): void {
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
+  width: max-content;
   max-width: calc(100vw - 28px);
+  overflow: auto;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   transition: gap 160ms ease;
 }
 .ai-game-assets-in-game-designer-dock.is-panel-open {
   flex-direction: row;
-  overflow-x: auto;
-  overflow-y: hidden;
+  flex-wrap: wrap;
   scrollbar-width: thin;
 }
 .ai-game-assets-in-game-designer-dock > .ai-game-assets-in-game-designer-dock__button {
@@ -676,6 +685,7 @@ function ensureDockStyles(document: Document): void {
   right: 14px !important;
   z-index: 2147483646 !important;
   display: block !important;
+  min-width: 0 !important;
   max-width: calc(100vw - 28px) !important;
   max-height: calc(100vh - 78px) !important;
   margin: 0 !important;
