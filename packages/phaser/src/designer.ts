@@ -1,3 +1,4 @@
+import { DesignerGenerationRecovery, type PendingDesignerOption } from "./generation-recovery.js";
 import { openScaledVariantsDialog } from "./scaled-variants-dialog.js";
 import type {
   AiAssetAnimation,
@@ -111,6 +112,8 @@ export type AiAssetDesignerOptions = {
   targetId?: string;
   mount?: HTMLElement;
   restartOnPromote?: boolean;
+  /** Browser recovery for generated choices and pending edits. Scoped to this page and server by default. */
+  generationRecoveryKey?: string | false;
   previewDisplaySize?:
     | Record<string, AiAssetPreviewDisplaySize>
     | ((assetId: string, asset: AiAssetDefinition) => AiAssetPreviewDisplaySize | undefined);
@@ -249,14 +252,14 @@ export function installAiAssetDesigner(
   let stopCurrentAnimationPreview: (() => void) | undefined;
   let editedCurrentOption: GeneratedDebugOption | undefined;
   let previewedVersionName: string | undefined;
-  const pendingOptions = new Map<string, {
-    option: GeneratedDebugOption;
-    inheritAnimations: boolean;
-    previewedVersionName?: string;
-    tilesetAnimations?: Record<string, string[]>;
-    tilesetAnimationSettings?: Record<string, AiAssetGenerationSettings>;
-    animationOnlyKey?: string;
-  }>();
+  const pendingOptions = new Map<string, PendingDesignerOption>();
+  const generatedByAsset = new Map<string, GeneratedDebugOption[]>();
+  const recoveryTouched = new Set<string>();
+  const recovery = options.generationRecoveryKey !== false && typeof indexedDB !== "undefined"
+    ? new DesignerGenerationRecovery(options.generationRecoveryKey ??
+      JSON.stringify([location.pathname, client.endpoint])) : undefined;
+  let recoveryWrites = 0;
+  let recoveryFailed = false;
   let styleGuideDraft = styleGuideDraftFromManifest(manifest, resolveAssetUrl);
   const sessionDrafts = new DesignerSessionDrafts();
   let renderedDraftContext: DesignerDraftContext | undefined;
@@ -552,6 +555,25 @@ export function installAiAssetDesigner(
     syncRegenerateAllLinesButton();
     syncManifestRetryButton();
   };
+  const persistRecovery = (assetId: string) => {
+    recoveryTouched.add(assetId);
+    if (!recovery) return;
+    recoveryWrites++;
+    void recovery.write({ assetId, activeVersion: manifest.assets[assetId].activeVersion,
+      generated: generatedByAsset.get(assetId) ?? [], pending: pendingOptions.get(assetId)
+    }).catch((error) => {
+      recoveryFailed = true;
+      if (!destroyed) setStatus(elements,
+        `Could not back up generated choices. Keep this page open and promote what you want to keep. ${errorMessage(error)}`, "error");
+    }).finally(() => { recoveryWrites--; });
+  };
+  const protectUnfinishedWork = (event: BeforeUnloadEvent) => {
+    if (!activeGeneration && recoveryWrites === 0 &&
+      !((!recovery || recoveryFailed) && (pendingOptions.size || generatedByAsset.size))) return;
+    event.preventDefault();
+    event.returnValue = "";
+  };
+  window.addEventListener("beforeunload", protectUnfinishedWork);
   const rememberPendingOption = (
     assetId: string,
     option: GeneratedDebugOption,
@@ -571,6 +593,7 @@ export function installAiAssetDesigner(
       tilesetAnimationSettings: pending.tilesetAnimationSettings,
       animationOnlyKey: pending.animationOnlyKey
     });
+    persistRecovery(assetId);
     syncPromoteAllButton();
   };
   const flushDeferredVoiceLineManifest = (): Promise<boolean> => {
@@ -636,6 +659,7 @@ export function installAiAssetDesigner(
   };
   const forgetPendingOption = (assetId: string) => {
     pendingOptions.delete(assetId);
+    persistRecovery(assetId);
     resolveDeferredVoiceLinePendingOption(assetId);
     syncPromoteAllButton();
   };
@@ -1008,6 +1032,8 @@ export function installAiAssetDesigner(
       isSvgSource(activeVersion?.file ?? "");
     if (syncOptions.preserveOptions && displayedOptions?.assetId === assetId) {
       renderGeneratedOptions(assetId, displayedOptions.generated);
+    } else if (!selectedTilesetAnimationKey && generatedByAsset.has(assetId)) {
+      renderGeneratedOptions(assetId, generatedByAsset.get(assetId)!);
     } else {
       clearGeneratedOptions();
     }
@@ -1126,6 +1152,8 @@ export function installAiAssetDesigner(
       assetId,
       generated: [...generated]
     };
+    generatedByAsset.set(assetId, [...generated]);
+    persistRecovery(assetId);
     renderOptions({
       elements,
       generated,
@@ -1750,6 +1778,7 @@ export function installAiAssetDesigner(
     const controller = new AbortController();
     const currentGenerationId = generationId + 1;
     generationId = currentGenerationId;
+    recoveryTouched.add(assetId);
     activeGeneration = { controller, id: currentGenerationId };
     syncPromoteAllButton();
     elements.regenerateButton.textContent = "Cancel generation";
@@ -2206,6 +2235,7 @@ export function installAiAssetDesigner(
       };
     }
     generationId = currentGenerationId;
+    recoveryTouched.add(generationAssetId);
     activeGeneration = { controller, id: currentGenerationId };
     syncPromoteAllButton();
 
@@ -2401,6 +2431,7 @@ export function installAiAssetDesigner(
       }
       for (const saved of result.promoted) {
         pendingOptions.delete(saved.asset.id);
+        persistRecovery(saved.asset.id);
         resolveDeferredVoiceLinePendingOption(saved.asset.id);
         try {
           (options.onAssetReady ?? options.onPreview)(
@@ -3041,6 +3072,7 @@ export function installAiAssetDesigner(
           promotedImageSources.set(assetId, pending.option.dataUrl);
         }
         pendingOptions.delete(assetId);
+        persistRecovery(assetId);
         resolveDeferredVoiceLinePendingOption(assetId);
         promotedCount += 1;
       } catch (error) {
@@ -3235,6 +3267,7 @@ export function installAiAssetDesigner(
     const controller = new AbortController();
     const currentGenerationId = generationId + 1;
     generationId = currentGenerationId;
+    assetIds.forEach(assetId => recoveryTouched.add(assetId));
     activeGeneration = { controller, id: currentGenerationId };
     clearGeneratedOptions();
     syncPromoteAllButton();
@@ -3720,6 +3753,23 @@ export function installAiAssetDesigner(
   });
 
   syncAsset(selectedAssetId);
+  if (recovery) void recovery.read().then((records) => {
+    if (destroyed) return;
+    for (const record of records) {
+      const asset = manifest.assets[record.assetId];
+      if (!asset || recoveryTouched.has(record.assetId)) continue;
+      if (record.generated.length) generatedByAsset.set(record.assetId, record.generated);
+      // A promotion in another tab must not be shadowed by an older pending edit.
+      if (record.pending && record.activeVersion === asset.activeVersion) {
+        pendingOptions.set(record.assetId, record.pending);
+      }
+    }
+    if (!activeGeneration && !recoveryTouched.has(selectedTargetAssetId)) syncTargetAsset(selectedTargetAssetId);
+    syncPromoteAllButton();
+  }).catch((error) => {
+    recoveryFailed = true;
+    if (!destroyed) setStatus(elements, `Could not restore generated choices. ${errorMessage(error)}`, "error");
+  });
 
   if (options.autoFirstDrafts !== false) {
     void ensureMissingAiAssetFirstDrafts({
@@ -3774,6 +3824,7 @@ export function installAiAssetDesigner(
     close: () => setOpen(false),
     destroy: () => {
       destroyed = true;
+      window.removeEventListener("beforeunload", protectUnfinishedWork);
       mainReferenceControl?.destroy();
       activeGeneration?.controller.abort();
       activeVoiceLineRegeneration?.controller.abort();

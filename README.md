@@ -165,6 +165,16 @@ Tileset generation uses a temporary staging grid that is independent of the fina
 
 The grid dimensions must exactly cover `dimensions`, including optional `margin` and `spacing`. Base `tiles` and animation `tiles` each contain one non-empty prompt per usable tile in row-major order. The image provider programmatically adds the exact tile size, sheet dimensions, grid, and ordering contract, then appends the applicable tile prompts to form the model request; authors do not repeat that boilerplate. The animation's editable `frameCount` determines how many complete, aligned sheets are generated. During generation, each of the three candidate branches is produced sequentially: the base sheet and all earlier frames in that branch are supplied as references for the next frame. The three sequences remain available for preview until the user explicitly opens Mix tilesets, where each tile shows its animation prompt and can regenerate three tile-specific sequences. Selecting or mixing previews the result without promoting it.
 
+The asset designer keeps the latest generated choices and selected pending edits for each asset
+in browser IndexedDB. They reappear when you return to the asset after a reload; recovery does
+not promote anything or replace the active game asset. Image bytes and animation geometry are
+stored together, including sheets too large for localStorage. A new promoted version takes
+precedence over an older recovered selection. Storage failures are shown in the panel, and
+leaving during generation or before a backup finishes prompts before discarding work.
+Recovery is scoped by the page path and companion server; set `generationRecoveryKey` to a
+stable project identifier when sharing preview URLs, or `false` to disable browser recovery.
+Promoted assets remain regular files in the project's asset directory.
+
 Transparent spritesheet generations are aligned to their declared frame grid by default. The provider
 normalizes the generated row and column placement without scaling individual frames, including when
 a priority generation reference is selected. Reference selection controls appearance, not alignment. Set
