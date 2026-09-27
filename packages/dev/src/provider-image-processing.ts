@@ -614,8 +614,26 @@ export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFram
 
   if (!frames.length) return Buffer.from(image);
 
+  // Recover first, then fit: a generated pose can be taller/wider than a
+  // logical cell while still being fully separated from its neighbors. Use one
+  // uniform reduction for the entire animation, never a different scale per pose.
+  const scale = Math.min(1, ...frames.flatMap((frame) => [
+    frameGrid.frameWidth / (frame.maxX - frame.minX + 1),
+    frameGrid.frameHeight / (frame.maxY - frame.minY + 1)
+  ]));
+  const fittedFrames = frames.map((frame) => {
+    const minX = Math.floor(frame.minX * scale);
+    const minY = Math.floor(frame.minY * scale);
+    return {
+      ...frame, minX, minY,
+      maxX: minX + Math.max(1, Math.floor((frame.maxX - frame.minX + 1) * scale)) - 1,
+      maxY: minY + Math.max(1, Math.floor((frame.maxY - frame.minY + 1) * scale)) - 1
+    };
+  });
+  const fittedByIndex = new Map(fittedFrames.map((frame) => [frame.frame, frame]));
+  const boundsByIndex = new Map(frames.map((frame) => [frame.frame, frame]));
   const columnShifts = spriteFrameAxisShifts({
-    frames,
+    frames: fittedFrames,
     groupCount: frameGrid.columns,
     frameSize: frameGrid.frameWidth,
     group: (frame) => frame.column,
@@ -623,7 +641,7 @@ export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFram
     max: (frame) => frame.maxX
   });
   const rowShifts = spriteFrameAxisShifts({
-    frames,
+    frames: fittedFrames,
     groupCount: frameGrid.rows,
     frameSize: frameGrid.frameHeight,
     group: (frame) => frame.row,
@@ -631,7 +649,7 @@ export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFram
     max: (frame) => frame.maxY
   });
 
-  if (columnShifts.every((shift) => shift === 0) && rowShifts.every((shift) => shift === 0)) {
+  if (scale === 1 && [...columnShifts.values(), ...rowShifts.values()].every((shift) => shift === 0)) {
     return Buffer.from(image);
   }
 
@@ -644,9 +662,9 @@ export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFram
   }
 
   for (const frame of sources) {
-    const { column, row, originX, originY } = frame;
-    const shiftX = columnShifts[column] ?? 0;
-    const shiftY = rowShifts[row] ?? 0;
+    const { originX, originY } = frame;
+    const shiftX = columnShifts.get(frame.frame) ?? 0;
+    const shiftY = rowShifts.get(frame.frame) ?? 0;
 
     if (
       originX < 0 ||
@@ -658,6 +676,12 @@ export function alignSpriteSheetFrames(image: Uint8Array, frameGrid: AiAssetFram
     }
 
     clearPngRect(png, originX, originY, frameGrid.frameWidth, frameGrid.frameHeight);
+    if (scale < 1) {
+      const bounds = boundsByIndex.get(frame.frame);
+      const fitted = fittedByIndex.get(frame.frame);
+      if (bounds && fitted) copyFittedSprite(png, source, frame, bounds, fitted, shiftX, shiftY);
+      continue;
+    }
     copyShiftedPngRect(png, source, {
       originX,
       originY,
@@ -718,11 +742,12 @@ function spriteFrameAxisShifts(options: {
   group(frame: SpriteFrameBounds): number;
   min(frame: SpriteFrameBounds): number;
   max(frame: SpriteFrameBounds): number;
-}): number[] {
-  return Array.from({ length: options.groupCount }, (_, groupIndex) => {
+}): Map<number, number> {
+  const shifts = new Map<number, number>();
+  for (let groupIndex = 0; groupIndex < options.groupCount; groupIndex += 1) {
     const frames = options.frames.filter((frame) => options.group(frame) === groupIndex);
 
-    if (!frames.length) return 0;
+    if (!frames.length) continue;
 
     const averageCenter = frames.reduce(
       (total, frame) => total + (options.min(frame) + options.max(frame)) / 2,
@@ -734,12 +759,40 @@ function spriteFrameAxisShifts(options: {
       ...frames.map((frame) => options.frameSize - 1 - options.max(frame))
     );
 
-    if (minimumShift > maximumShift) {
-      throw new Error("Generated sprites do not fit their frame cells without cropping. Regenerate the sheet with more space between frames or larger frame dimensions.");
+    for (const frame of frames) {
+      // Prefer one group shift to retain intentional motion. If frames drift in
+      // opposing directions, their union may not fit even though each sprite
+      // does. Correct only the overflowing poses instead of rejecting the sheet
+      // or shrinking all its artwork to accommodate that layout error.
+      const minShift = minimumShift <= maximumShift ? minimumShift : -options.min(frame);
+      const maxShift = minimumShift <= maximumShift ? maximumShift : options.frameSize - 1 - options.max(frame);
+      shifts.set(frame.frame, Math.min(maxShift, Math.max(minShift, desiredShift)));
     }
+  }
+  return shifts;
+}
 
-    return Math.min(maximumShift, Math.max(minimumShift, desiredShift));
-  });
+function copyFittedSprite(
+  png: PNG, source: Buffer, cell: SpriteFrameSource,
+  bounds: SpriteFrameBounds, fitted: SpriteFrameBounds, shiftX: number, shiftY: number
+): void {
+  const width = fitted.maxX - fitted.minX + 1;
+  const height = fitted.maxY - fitted.minY + 1;
+  const sourceWidth = bounds.maxX - bounds.minX + 1;
+  const sourceHeight = bounds.maxY - bounds.minY + 1;
+  // Sample the complete recovered sprite with nearest neighbor. Sampling from
+  // pixel centers retains both ends of the footprint and never blends frames.
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = cell.originY + bounds.minY + Math.floor((y + 0.5) * sourceHeight / height);
+    const targetY = cell.originY + fitted.minY + shiftY + y;
+    for (let x = 0; x < width; x += 1) {
+      const sourceX = cell.originX + bounds.minX + Math.floor((x + 0.5) * sourceWidth / width);
+      const sourceOffset = (sourceY * png.width + sourceX) * 4;
+      const targetX = cell.originX + fitted.minX + shiftX + x;
+      const targetOffset = (targetY * png.width + targetX) * 4;
+      source.copy(png.data, targetOffset, sourceOffset, sourceOffset + 4);
+    }
+  }
 }
 
 function clearPngRect(png: PNG, x: number, y: number, width: number, height: number): void {

@@ -171,8 +171,11 @@ a priority generation reference is selected. Reference selection controls appear
 `settings.frameAlignment` to `"none"` when an animation intentionally translates within its frame cells.
 For transparent sheets, nearby transparent gutters are located before cutting so artwork crossing a
 nominal cell boundary stays with its frame. This also happens before scaled variants clear unused
-cells. Recovered artwork that cannot fit its frame without cropping is rejected with a regeneration
-error rather than saved with missing pixels.
+cells. When poses drift in opposing directions, only the conflicting offsets are corrected so
+sprites that already fit keep their original size. If a recovered sprite is larger than its cell,
+all frames receive the same uniform nearest-neighbor reduction to fit the complete artwork.
+Frames are never independently resized to fill their cells, preventing size changes between poses.
+The final sheet retains its declared dimensions, grid, and frame order.
 
 Set `settings.background` explicitly when the asset's background is part of the artwork:
 

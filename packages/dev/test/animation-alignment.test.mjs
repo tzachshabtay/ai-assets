@@ -78,16 +78,127 @@ test("recover complete sprites across row and column cuts before alignment", () 
   }
 });
 
-test("oversized recovered artwork is rejected rather than silently cropped", () => {
-  const grid = { frameWidth: 48, frameHeight: 64, columns: 1, rows: 2, frameCount: 2 };
-  const sheet = new PNG({ width: 48, height: 128 });
-  for (let y = 8; y < 78; y++) for (let x = 10; x < 30; x++) {
-    sheet.data.set([80, 90, 100, 255], (y * 48 + x) * 4);
+function paintSprite(sheet, x, y, width, height, frame) {
+  for (let dy = 0; dy < height; dy++) for (let dx = 0; dx < width; dx++) {
+    // Edge bands expose truncation at the head/feet and either side.
+    const edgeX = dx < 3 ? 30 : dx >= width - 3 ? 230 : 120;
+    const edgeY = dy < 3 ? 30 : dy >= height - 3 ? 230 : 120;
+    sheet.data.set([40 + frame, edgeX, edgeY, 255], ((y + dy) * sheet.width + x + dx) * 4);
   }
-  for (let y = 90; y < 120; y++) for (let x = 10; x < 30; x++) {
-    sheet.data.set([110, 120, 130, 255], (y * 48 + x) * 4);
+}
+
+function oversizedSheet(grid) {
+  const { frameWidth: w, frameHeight: h, columns, rows, frameCount } = grid;
+  const margin = grid.margin ?? 0, spacing = grid.spacing ?? 0;
+  const sheet = new PNG({ width: 2 * margin + columns * w + (columns - 1) * spacing,
+    height: 2 * margin + rows * h + (rows - 1) * spacing });
+  const bounds = [];
+  for (let frame = 0; frame < frameCount; frame++) {
+    const row = Math.floor(frame / columns), column = frame % columns;
+    const width = Math.floor(w / 2);
+    const height = row === 0 ? h + Math.floor(h / 10) : Math.floor(h * 0.7);
+    const x = margin + column * (w + spacing) + Math.floor(w / 4);
+    const y = margin + row * (h + spacing) + (row === 0 ? 1 : Math.floor(h / 5));
+    paintSprite(sheet, x, y, width, height, frame);
+    bounds.push({ width, height });
   }
-  assert.throws(() => alignSpriteSheetFrames(PNG.sync.write(sheet), grid), /do not fit.*without cropping/);
+  return { sheet, bounds };
+}
+
+test("oversized recovered sprites fit with one animation-wide scale, without chopping off edges", () => {
+  for (const [frameWidth, frameHeight] of [[24, 32], [33, 47], [48, 64], [120, 200], [191, 257]]) {
+    for (const [margin, spacing] of [[0, 0], [2, 3]]) {
+      const grid = { frameWidth, frameHeight, columns: 3, rows: 3, frameCount: 8, margin, spacing };
+      const { sheet, bounds } = oversizedSheet(grid);
+      const scale = frameHeight / bounds[0].height;
+      const encoded = alignSpriteSheetFrames(PNG.sync.write(sheet), grid);
+      const result = PNG.sync.read(encoded);
+      assert.deepEqual([result.width, result.height], [sheet.width, sheet.height]);
+      for (let frame = 0; frame < 8; frame++) {
+        const actual = framePixels(result, grid, frame);
+        assert.equal(actual.right - actual.left + 1, Math.floor(bounds[frame].width * scale));
+        assert.equal(actual.bottom - actual.top + 1, Math.floor(bounds[frame].height * scale));
+        assert.ok(actual.pixels.every(pixel => pixel >>> 24 === 40 + frame), "no neighboring frame contamination");
+        const colors = actual.pixels.map(pixel => [(pixel >>> 16) & 255, (pixel >>> 8) & 255]);
+        for (const axis of [0, 1]) for (const edge of [30, 230]) {
+          assert.ok(colors.some(color => color[axis] === edge), "retain every edge, including head and feet");
+        }
+      }
+      assert.equal(framePixels(result, grid, 8).pixels.length, 0, "unused cell stays empty");
+      assert.deepEqual(alignSpriteSheetFrames(encoded, grid), encoded, "fitting is stable on reprocessing");
+    }
+  }
+});
+
+test("oversized horizontal poses use the same reduction as the other frames", () => {
+  const grid = { frameWidth: 64, frameHeight: 48, columns: 2, rows: 1, frameCount: 2 };
+  const sheet = new PNG({ width: 128, height: 48 });
+  paintSprite(sheet, 8, 10, 70, 20, 0);
+  paintSprite(sheet, 90, 10, 30, 20, 1);
+  const encoded = alignSpriteSheetFrames(PNG.sync.write(sheet), grid);
+  const result = PNG.sync.read(encoded);
+  const a = framePixels(result, grid, 0), b = framePixels(result, grid, 1);
+  assert.equal(a.right - a.left + 1, 64);
+  assert.equal(b.right - b.left + 1, Math.floor(30 * 64 / 70));
+  assert.equal(a.bottom - a.top + 1, Math.floor(20 * 64 / 70));
+  assert.equal(b.bottom - b.top, a.bottom - a.top);
+  assert.ok(a.pixels.every(pixel => pixel >>> 24 === 40));
+  assert.ok(b.pixels.every(pixel => pixel >>> 24 === 41));
+  assert.deepEqual(alignSpriteSheetFrames(encoded, grid), encoded);
+});
+
+test("conflicting row and column offsets preserve sprite size and every pixel", () => {
+  for (const vertical of [false, true]) {
+    // Each pose fits, but the two poses in column 0 need conflicting shifts.
+    const sheet = new PNG({ width: 96, height: 96 });
+    const positions = [[0, 5, 40, 30], [78, 5, 16, 30], [20, 55, 40, 30], [78, 55, 16, 30]];
+    positions.forEach(([x, y, w, h], frame) => {
+      paintSprite(sheet, ...(vertical ? [y, x, h, w] : [x, y, w, h]), frame);
+    });
+    const grid = { frameWidth: 48, frameHeight: 48, columns: 2, rows: 2, frameCount: 4 };
+    const encoded = alignSpriteSheetFrames(PNG.sync.write(sheet), grid);
+    const result = PNG.sync.read(encoded);
+    for (let frame = 0; frame < 4; frame++) {
+      const expected = [];
+      for (let offset = 0; offset < sheet.data.length; offset += 4) {
+        if (sheet.data[offset] === 40 + frame && sheet.data[offset + 3]) expected.push(sheet.data.readUInt32BE(offset));
+      }
+      // Transposition swaps the middle frame indices in row-major order.
+      const index = vertical ? [0, 2, 1, 3][frame] : frame;
+      assert.deepEqual(framePixels(result, grid, index).pixels, expected.sort((a, b) => a - b));
+    }
+    assert.deepEqual(alignSpriteSheetFrames(encoded, grid), encoded);
+  }
+});
+
+test("orc speak-back layout returns all three generated options despite recoverable oversized poses", async () => {
+  const grid = { frameWidth: 120, frameHeight: 200, columns: 3, rows: 3, frameCount: 8 };
+  const { sheet } = oversizedSheet(grid);
+  const image = PNG.sync.write(sheet);
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = async () => {
+      calls++;
+      return Response.json({ data: [{ b64_json: image.toString("base64") }] });
+    };
+    const streamed = [];
+    const options = await createOpenAiImageProvider({ apiKey: "test-key" }).generate({
+      asset: {
+        id: "guard.speak-back", kind: "animation", prompt: "Speak, facing back, transparent background.",
+        dimensions: { width: 360, height: 600 }, frameGrid: grid,
+        activeVersion: "original", versions: {}, settings: { background: "transparent", format: "png" }
+      }, count: 3
+    }, (option, index) => { streamed.push(index); });
+    assert.equal(calls, 3, "one request per whole-sheet option, no paid retries");
+    assert.equal(options.length, 3);
+    assert.deepEqual(streamed.sort(), [0, 1, 2]);
+    for (const option of options) {
+      assert.deepEqual(option.frameGrid, grid);
+      const decoded = PNG.sync.read(option.image);
+      for (let frame = 0; frame < 8; frame++) assert.ok(framePixels(decoded, grid, frame).pixels.length);
+    }
+  } finally { globalThis.fetch = originalFetch; }
 });
 
 function framePixels(sheet, grid, frame) {
