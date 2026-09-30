@@ -117,3 +117,51 @@ test("expanding scaled candidates does not select/save and Escape leaves the par
   await expect(parent.getByRole("button", { name: "Promote", exact: true })).toBeDisabled();
   expect(await page.evaluate(() => (window as any).saveCalls)).toBe(0);
 });
+
+test("speech selector distinguishes a custom provider default from an explicit v4 choice", async ({ page }) => {
+  await page.evaluate(async () => {
+    const { installAiAssetDesigner } = await import("/packages/phaser/dist/designer.js");
+    const w = window as any;
+    w.speechRequests = [];
+    w.designer = installAiAssetDesigner({
+      generationRecoveryKey: "speech-model-selector", autoFirstDrafts: false,
+      manifest: { schemaVersion: 1, assets: {
+        "voice.line.detective": {
+          id: "voice.line.detective", kind: "voice-line", prompt: "Speak with quiet confidence.",
+          voiceSettings: { voiceId: "detective", text: "The case is closed." },
+          activeVersion: "", versions: {}
+        }
+      } },
+      scene: { textures: { exists: () => false, addImage: () => {}, remove: () => {} } },
+      client: { endpoint: "test", assetUrl: (file: string) => file,
+        generateStream: async (request: any) => {
+          w.speechRequests.push({ request, resolvedModel: request.voiceSettings?.model ?? "eleven_v3" });
+          return [];
+        } }
+    });
+    w.designer.open();
+  });
+  const model = page.getByRole("combobox", { name: "Voice model", exact: true });
+  const regenerate = page.getByRole("button", { name: "Regenerate", exact: true });
+  await expect(model).toHaveValue("");
+  await expect(model.locator("option:checked")).toHaveText("Provider default");
+  await regenerate.click();
+  await expect.poll(() => page.evaluate(() => (window as any).speechRequests.length)).toBe(1);
+  expect(await page.evaluate(() => (window as any).speechRequests[0])).toMatchObject({ resolvedModel: "eleven_v3" });
+  expect(await page.evaluate(() => (window as any).speechRequests[0].request.voiceSettings.model)).toBeUndefined();
+
+  await expect(regenerate).toBeVisible();
+  await model.selectOption("eleven_v4");
+  await regenerate.click();
+  await expect.poll(() => page.evaluate(() => (window as any).speechRequests.length)).toBe(2);
+  expect(await page.evaluate(() => (window as any).speechRequests[1])).toMatchObject({
+    request: { voiceSettings: { model: "eleven_v4" } }, resolvedModel: "eleven_v4"
+  });
+
+  await expect(regenerate).toBeVisible();
+  await model.selectOption("");
+  await regenerate.click();
+  await expect.poll(() => page.evaluate(() => (window as any).speechRequests.length)).toBe(3);
+  expect(await page.evaluate(() => (window as any).speechRequests[2].resolvedModel)).toBe("eleven_v3");
+  expect(await page.evaluate(() => (window as any).speechRequests[2].request.voiceSettings.model)).toBeUndefined();
+});

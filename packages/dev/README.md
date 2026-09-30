@@ -10,6 +10,16 @@ npm install -D @ai-game-assets/dev
 
 Use this package during development to generate, edit, promote, and build game assets. Production games do not need the development server or AI credentials.
 
+## ElevenLabs voice lines
+
+`createElevenLabsAudioProvider()` defaults voice-line generation to Eleven v4 (`eleven_v4`)
+through the [text-to-speech API](https://elevenlabs.io/docs/eleven-api/quickstart). Set
+`voiceSettings.model` on an asset or request to pin a different model, or pass
+`voiceLineModel` to the provider to change its default. Voice settings take precedence over
+`audioSettings.model`, then the provider default. Explicit legacy and custom models remain supported.
+Generated options save the resolved speech model in `model` and `voiceSettings.model`.
+Voice design, sound effects, and music use their own models.
+
 ## Scaled variants
 
 `POST /__ai-assets/scaled-variant-options` generates three candidates from the closest available source without writing PNGs or changing the manifest. It accepts the same source identity, requested dimensions, regeneration identity, and scaling method as generation. Each candidate includes `index`, `dataUrl`, `dimensions`, optional `frameGrid`, `method`, and `sourceFile`. AI animation enlargement sends the whole spritesheet in one request per candidate, with shared character-consistency and grid-preservation instructions. Source margins and spacing are removed before generation; unused cells stay transparent. Failed or canceled batches never replace a saved variant.

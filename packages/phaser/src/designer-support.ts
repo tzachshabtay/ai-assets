@@ -12,7 +12,7 @@ import type {
   AiAssetManifest,
   AiAssetVersion
 } from "@ai-game-assets/core";
-import { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "@ai-game-assets/core";
+import { DEFAULT_IMAGE_MODEL, DEFAULT_VOICE_LINE_MODEL, IMAGE_MODELS, VOICE_LINE_MODELS } from "@ai-game-assets/core";
 import type { DebugStyleGuideDraft, GeneratedDebugOption } from "./debug-client.js";
 import type {
   AiAssetDesignerOptions,
@@ -3819,7 +3819,8 @@ export function audioGenerationOverridesFromInputs(
 
 export function voiceGenerationOverridesFromInputs(
   elements: DesignerElements,
-  asset: AiAssetDefinition
+  asset: AiAssetDefinition,
+  modelDraft?: string
 ): AiVoiceGenerationSettings | undefined {
   if (!isVoiceAsset(asset)) return asset.voiceSettings;
 
@@ -3834,6 +3835,7 @@ export function voiceGenerationOverridesFromInputs(
 
   return {
     ...asset.voiceSettings,
+    ...(modelDraft?.trim() ? { model: modelDraft.trim() } : {}),
     text: text || asset.voiceSettings?.text,
     direction: elements.promptInput.value.trim() || asset.voiceSettings?.direction
   };
@@ -3887,20 +3889,65 @@ export function syncImageModelControl(
   animationKey?: string
 ): void {
   const settings = imageGenerationSettings(asset, modelDraft, format, animationKey);
-  elements.modelField.hidden = !settings;
-  elements.modelSelect.disabled = !settings;
-  elements.modelSelect.replaceChildren();
-  if (!settings) return;
+  syncModelControl(elements, settings?.model, IMAGE_MODELS);
+}
 
-  const selectedModel = settings.model!;
-  for (const model of IMAGE_MODELS) {
+/** Speech preferences stay independent from historical version provenance and voice-design models. */
+export function voiceLineGenerationModel(asset: AiAssetDefinition, modelDraft?: string): string | undefined {
+  if (asset.kind !== "voice-line") return undefined;
+  return modelDraft?.trim() || asset.voiceSettings?.model || asset.audioSettings?.model || DEFAULT_VOICE_LINE_MODEL;
+}
+
+export function syncVoiceLineModelControl(
+  elements: Pick<DesignerElements, "modelSelect" | "modelField">,
+  asset: AiAssetDefinition,
+  modelDraft?: string
+): void {
+  if (asset.kind !== "voice-line") {
+    syncModelControl(elements, undefined, VOICE_LINE_MODELS);
+    return;
+  }
+  const configuredModel = asset.voiceSettings?.model || asset.audioSettings?.model;
+  const models = configuredModel ? VOICE_LINE_MODELS : [{
+    id: "",
+    label: "Provider default",
+    description: `Uses the provider's configured speech model (${DEFAULT_VOICE_LINE_MODEL} by default)`
+  }, ...VOICE_LINE_MODELS];
+  syncModelControl(elements, modelDraft?.trim() || configuredModel || "", models);
+}
+
+export function syncGenerationModelControl(
+  elements: Pick<DesignerElements, "modelSelect" | "modelField">,
+  asset: AiAssetDefinition,
+  modelDraft?: string,
+  format?: AiAssetFormat,
+  animationKey?: string
+): void {
+  if (elements.modelField.firstChild) {
+    elements.modelField.firstChild.textContent = asset.kind === "voice-line" ? "Voice model" : "Image model";
+  }
+  if (asset.kind === "voice-line") syncVoiceLineModelControl(elements, asset, modelDraft);
+  else syncImageModelControl(elements, asset, modelDraft, format, animationKey);
+}
+
+function syncModelControl(
+  elements: Pick<DesignerElements, "modelSelect" | "modelField">,
+  selectedModel: string | undefined,
+  models: ReadonlyArray<{ id: string; label: string; description: string }>
+): void {
+  elements.modelField.hidden = selectedModel === undefined;
+  elements.modelSelect.disabled = selectedModel === undefined;
+  elements.modelSelect.replaceChildren();
+  if (selectedModel === undefined) return;
+
+  for (const model of models) {
     const option = document.createElement("option");
     option.value = model.id;
     option.textContent = model.label;
     option.title = model.description;
     elements.modelSelect.append(option);
   }
-  if (!IMAGE_MODELS.some((model) => model.id === selectedModel)) {
+  if (!models.some((model) => model.id === selectedModel)) {
     const option = document.createElement("option");
     option.value = selectedModel;
     option.textContent = `${selectedModel} (configured)`;

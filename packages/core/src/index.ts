@@ -57,6 +57,7 @@ export {
 export type { CreateVersionInput } from "./generation.js";
 
 export { DEFAULT_IMAGE_MODEL, IMAGE_MODELS } from "./image-models.js";
+export { DEFAULT_VOICE_LINE_MODEL, VOICE_LINE_MODELS } from "./voice-models.js";
 
 export {
   registerInGameDesignerPanel,

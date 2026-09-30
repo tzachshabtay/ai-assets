@@ -395,6 +395,31 @@ Environment variables:
 
 OpenAI and ElevenLabs are independent. A project can generate graphics without an ElevenLabs key, or audio without an OpenAI key.
 
+### ElevenLabs voice models
+
+Voice lines default to **Eleven v4** (`eleven_v4`), using the
+[text-to-speech API](https://elevenlabs.io/docs/eleven-api/quickstart). Direction notes
+are included as bracketed audio tags, and tags already present in the spoken text are preserved.
+The voice-line model selector in the designer offers Eleven v4, Eleven v3, and Eleven
+Multilingual v2. Unconfigured lines show **Provider default**. Existing assets with an explicit
+model keep that selection; choose Eleven v4 to migrate them. Promoted candidates save the model
+used for generation.
+
+Set `voiceSettings.model` on an asset or generation request to choose a speech model, or configure
+the provider default:
+
+```ts
+audioProvider: createElevenLabsAudioProvider({ voiceLineModel: "eleven_v4" })
+```
+
+`voiceSettings.model` takes precedence over `audioSettings.model`, followed by the provider's
+`voiceLineModel` and the Eleven v4 default. Request overrides replace the corresponding asset
+settings. Explicit custom model ids remain supported. Base voice design uses its own
+`eleven_multilingual_ttv_v2` default; sound effects and music also retain their separate models.
+Eleven v4 Turbo uses a separate
+[Dialogue WebSocket API](https://elevenlabs.io/docs/eleven-api/guides/how-to/websockets/tts-vs-ttd-websockets)
+and is not offered by this batch asset provider.
+
 ### Avoiding Dev Refreshes On Promote
 
 When `manifestModulePath` points at a source file such as `src/assets.ts`, Promote rewrites that file. Vite and similar dev servers may refresh the page if the running game imports that module directly or watches the generated module. `restartOnPromote: false` only disables the designer's explicit reload; it cannot stop your bundler from reacting to a watched source file change.

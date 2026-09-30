@@ -227,7 +227,7 @@ import {
   stopStatusAnimation,
   styleGuideDraftFromManifest,
   styleGuideRequest,
-  syncImageModelControl,
+  syncGenerationModelControl,
   uploadedOptionFromFile,
   voiceGenerationOverridesFromInputs
 } from "./designer-support.js";
@@ -945,7 +945,7 @@ export function installAiAssetDesigner(
     elements.voiceTextInput.value = draft.voiceText;
     elements.formatSelect.value = generationFormatForAsset(assetId);
     elements.formatField.hidden = !canEditGenerationFormat(manifest, selectedAssetId, assetId);
-    syncImageModelControl(
+    syncGenerationModelControl(
       elements,
       asset,
       draft.model,
@@ -1916,7 +1916,7 @@ export function installAiAssetDesigner(
 
   elements.formatSelect.addEventListener("change", () => {
     capturePanelDraft();
-    syncImageModelControl(elements, manifest.assets[selectedTargetAssetId],
+    syncGenerationModelControl(elements, manifest.assets[selectedTargetAssetId],
       draftValuesFor(selectedTargetAssetId, selectedTilesetAnimationKey).model,
       normalizeAssetFormat(elements.formatSelect.value), selectedTilesetAnimationKey);
   });
@@ -2255,7 +2255,8 @@ export function installAiAssetDesigner(
         count: options.optionCount ?? 3,
         format: generationFormat,
         audioSettings: audioGenerationOverridesFromInputs(elements, manifest.assets[generationAssetId]),
-        voiceSettings: voiceGenerationOverridesFromInputs(elements, manifest.assets[generationAssetId]),
+        voiceSettings: voiceGenerationOverridesFromInputs(elements, manifest.assets[generationAssetId],
+          sessionDrafts.editedValue(draftContextFor(generationAssetId), "model")),
         styleGuide: await styleGuideRequest(styleGuideDraft),
         ...generationOverrides,
         settings: {

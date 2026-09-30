@@ -4,6 +4,7 @@ import type {
   AiAudioGenerationSettings,
   AiVoiceGenerationSettings
 } from "@ai-game-assets/core";
+import { DEFAULT_VOICE_LINE_MODEL } from "@ai-game-assets/core";
 import type { GeneratedAssetOption, GeneratedAssetOptionCallback } from "./provider.js";
 
 export type GenerateAudioAssetRequest = {
@@ -31,6 +32,8 @@ export type ElevenLabsAudioProviderOptions = {
   apiKey?: string;
   sfxModel?: string;
   musicModel?: string;
+  /** Speech model for voice lines without an explicit model. Defaults to Eleven v4. */
+  voiceLineModel?: string;
   outputFormat?: string;
   promptInfluence?: number;
   maxConcurrentMusicRequests?: number;
@@ -259,7 +262,8 @@ async function generateElevenLabsVoiceLine(
     const model =
       voiceSettings.model ??
       audioSettings.model ??
-      (direction ? "eleven_v3" : "eleven_multilingual_v2");
+      options.voiceLineModel ??
+      DEFAULT_VOICE_LINE_MODEL;
     const text = direction ? `[${sanitizeElevenLabsAudioTag(direction)}]\n${line}` : line;
     const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`);
     url.searchParams.set("output_format", options.outputFormat ?? elevenLabsOutputFormat(format));
@@ -295,6 +299,7 @@ async function generateElevenLabsVoiceLine(
       voiceSettings: {
         provider: "elevenlabs",
         ...voiceSettings,
+        model,
         voiceId,
         text: line,
         direction

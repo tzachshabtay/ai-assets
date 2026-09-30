@@ -83,6 +83,13 @@ export class DesignerSessionDrafts {
     }
   }
 
+  editedValue<K extends Field>(context: DesignerDraftContext, field: K): DesignerDraftValues[K] | undefined {
+    const record = this.records.get(designerDraftContextKey(context));
+    if (!record?.edited.has(field)) return undefined;
+    const value = record.values[field];
+    return (Array.isArray(value) ? [...value] : value) as DesignerDraftValues[K];
+  }
+
   copyChanges(from: DesignerDraftContext, to: DesignerDraftContext): void {
     const source = this.records.get(designerDraftContextKey(from));
     const target = this.records.get(designerDraftContextKey(to));
@@ -129,7 +136,9 @@ export function savedDesignerDraftValues(asset: AiAssetDefinition, animationKey?
     frameCount: String(animation?.frameCount ?? asset.frameGrid?.frameCount ??
       (asset.frameGrid ? asset.frameGrid.columns * asset.frameGrid.rows : tileset ? tileCount : 1)),
     format,
-    model: animationSettings?.model ?? asset.settings?.model ?? DEFAULT_IMAGE_MODEL,
+    model: asset.kind === "voice-line"
+      ? asset.voiceSettings?.model ?? asset.audioSettings?.model ?? ""
+      : animationSettings?.model ?? asset.settings?.model ?? DEFAULT_IMAGE_MODEL,
     audioFormat: asset.audioSettings?.format ?? "mp3",
     audioDuration: String(asset.audioSettings?.durationSeconds ?? version?.durationSeconds ?? ""),
     audioLoop: Boolean(asset.audioSettings?.loop),
