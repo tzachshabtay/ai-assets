@@ -485,3 +485,24 @@ The main example is the playable [Space Invaders demo](https://tzachshabtay.gith
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+### Resizable game view in the designer
+
+`installAiAssetDesigner` automatically fits the live game beside any open shared designer panel. Drag the right, bottom or corner handles to resize freely, including behind the panel. **Fill screen** expands the game to the visible viewport; **Fit game view** restores automatic fitting. Closing every panel restores the original layout. This changes display size only, without changing game coordinates or pausing gameplay.
+
+By default the viewport uses the canvas parent and Phaser's game aspect ratio. For a game with an outer shell and controls, configure the asset designer:
+
+```ts
+installAiAssetDesigner({
+  scene, manifest,
+  viewport: {
+    target: gameShell,
+    aspectRatio: 16 / 9,
+    chromeHeight: () => 134, // controls outside the canvas; zero for overlays
+  },
+});
+```
+
+The target receives `.ai-game-assets-designer-viewport` while a panel is open. Style its canvas region to fill the available space. The adapter refreshes Phaser's scale manager after a resize and cleans up on scene shutdown or designer destruction. `designer.viewport?.fit()` resets manual sizing. Set `viewport: false` to keep a custom layout.
+
+Other renderers can use `installInGameDesignerViewport({ target, aspectRatio, chromeHeight, onResize })` from `@ai-game-assets/core`; call its `destroy()` when removing the designer. Phaser integrations that do not use the asset panel can call `installAiAssetDesignerViewport(scene, options)` from `@ai-game-assets/phaser`. Install only one viewport controller per game container.

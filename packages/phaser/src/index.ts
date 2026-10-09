@@ -115,6 +115,7 @@ export type {
 } from "./designer.js";
 
 export { installAiAssetDesigner } from "./designer.js";
+export { installAiAssetDesignerViewport, type AiAssetDesignerViewportOptions } from './designer-viewport.js';
 
 export type {
   RegenerateAndPromoteVoiceLinesOptions,

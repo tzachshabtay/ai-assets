@@ -28,7 +28,7 @@ jobs:
         run: npm run build:packages
 
       - name: Test asset storage and Phaser runtime
-        run: node --test packages/dev/test/*.test.mjs packages/phaser/test/*.test.mjs
+        run: node --test packages/core/test/*.test.mjs packages/dev/test/*.test.mjs packages/phaser/test/*.test.mjs
 
       - name: Install browser for designer dock tests
         run: npx playwright install --with-deps chromium

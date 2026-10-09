@@ -72,3 +72,5 @@ export type {
 } from "./designer-dock.js";
 
 export * from "./scaled-variants.js";
+
+export { installInGameDesignerViewport, type InGameDesignerViewportOptions } from "./designer-viewport.js";

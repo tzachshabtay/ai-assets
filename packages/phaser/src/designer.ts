@@ -1,4 +1,5 @@
 import { DesignerGenerationRecovery, type PendingDesignerOption } from "./generation-recovery.js";
+import { installAiAssetDesignerViewport, type AiAssetDesignerViewportOptions, type DesignerViewportSceneLike } from './designer-viewport.js';
 import { openScaledVariantsDialog } from "./scaled-variants-dialog.js";
 import type {
   AiAssetAnimation,
@@ -82,7 +83,7 @@ type AiAssetTextureFrameConfig = {
   spacing?: number;
 };
 
-export type AiAssetDesignerSceneLike = {
+export type AiAssetDesignerSceneLike = DesignerViewportSceneLike & {
   textures: {
     exists(key: string): boolean;
     remove(key: string): unknown;
@@ -111,6 +112,8 @@ export type AiAssetDesignerOptions = {
   optionCount?: number;
   targetId?: string;
   mount?: HTMLElement;
+  /** Fit and resize the game alongside any shared designer panel. False opts out. */
+  viewport?: AiAssetDesignerViewportOptions;
   restartOnPromote?: boolean;
   /** Browser recovery for generated choices and pending edits. Scoped to this page and server by default. */
   generationRecoveryKey?: string | false;
@@ -135,6 +138,7 @@ export type AiAssetPreviewDisplaySize = {
 
 export type AiAssetDesigner = {
   root: HTMLDivElement;
+  viewport?: ReturnType<typeof installAiAssetDesignerViewport>;
   open(): void;
   close(): void;
   destroy(): void;
@@ -377,6 +381,7 @@ export function installAiAssetDesigner(
   }
   const mount = options.mount ?? document.body;
   mount.append(elements.root);
+  const viewport = installAiAssetDesignerViewport(options.scene, options.viewport);
   const unbindInputBoundary = bindDesignerInputBoundary(elements.root, elements.toggle);
   bindKeyboardCapture(elements.root, options.scene);
 
@@ -3821,10 +3826,12 @@ export function installAiAssetDesigner(
 
   return {
     root: elements.root,
+    viewport,
     open: () => setOpen(true),
     close: () => setOpen(false),
     destroy: () => {
       destroyed = true;
+      viewport?.destroy();
       window.removeEventListener("beforeunload", protectUnfinishedWork);
       mainReferenceControl?.destroy();
       activeGeneration?.controller.abort();
