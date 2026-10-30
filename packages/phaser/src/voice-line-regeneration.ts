@@ -56,7 +56,25 @@ export type VoiceLineRegenerationPlan = {
   missingTargetLineAssetIds: string[];
 };
 
+export type VoiceLineRegenerationScope = "all" | "missing";
+
+/** Only an active recording or a selected draft counts; unselected history does not. */
+export function voiceLinesForRegeneration(
+  manifest: AiAssetManifest,
+  lineAssetIds: string[],
+  scope: VoiceLineRegenerationScope,
+  selectedLineAssetIds: Iterable<string> = []
+): string[] {
+  const selected = new Set(selectedLineAssetIds);
+  return lineAssetIds.filter((id) => {
+    const asset = manifest.assets[id];
+    return scope === "all" || (!selected.has(id) && !asset?.versions[asset.activeVersion]?.file);
+  });
+}
+
 export type RegenerateAndPromoteVoiceLinesOptions = {
+  scope?: VoiceLineRegenerationScope;
+  selectedLineAssetIds?: Iterable<string>;
   manifest: AiAssetManifest;
   voiceAssetId: string;
   targetId?: string;
@@ -142,7 +160,9 @@ export async function regenerateAndPromoteVoiceLines(
     options.voiceAssetId,
     options.targetId
   );
-  const { baseVoiceAssetId, lineAssetIds } = plan;
+  const { baseVoiceAssetId } = plan;
+  const lineAssetIds = voiceLinesForRegeneration(options.manifest, plan.lineAssetIds,
+    options.scope ?? "all", options.selectedLineAssetIds);
   const voiceId = promotedVoiceId(options.manifest, baseVoiceAssetId);
   if (!voiceId) {
     throw new Error(
@@ -156,7 +176,7 @@ export async function regenerateAndPromoteVoiceLines(
         plan.missingTargetLineAssetIds.join(", ")
     );
   }
-  if (lineAssetIds.length === 0) {
+  if (plan.lineAssetIds.length === 0) {
     throw new Error(`Voice "${baseVoiceAssetId}" has no linked voice lines to regenerate.`);
   }
 

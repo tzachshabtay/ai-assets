@@ -5,7 +5,8 @@ import {
   linkedVoiceLineAssetIds,
   promotedVoiceId,
   regenerateAndPromoteVoiceLines,
-  voiceLineRegenerationPlan
+  voiceLineRegenerationPlan,
+  voiceLinesForRegeneration
 } from "../dist/voice-line-regeneration.js";
 
 const voiceLine = (id, voiceAssetId, text) => ({
@@ -512,4 +513,50 @@ test("designer and bulk regeneration never turn a spoken sentence into a deliver
   assert.equal(savedDesignerDraftValues(line).prompt, 'whispers');
   line.voiceSettings.direction = '';
   assert.equal(savedDesignerDraftValues(line).prompt, '', 'clearing a direction must not restore an older one');
+});
+
+
+test("missing mode skips promoted and selected recordings, but not unselected history", async () => {
+  const manifest = baseManifest();
+  addThirdLine(manifest);
+  manifest.assets["line.first"].activeVersion = "recorded";
+  manifest.assets["line.first"].versions.recorded = { file: "/first.mp3" };
+  manifest.assets["line.third"].versions.old = { file: "/unused.mp3" };
+  const ids = linkedVoiceLineAssetIds(manifest, "voice.detective");
+  assert.deepEqual(voiceLinesForRegeneration(manifest, ids, "all", ["line.second"]), ids);
+  assert.deepEqual(voiceLinesForRegeneration(manifest, ids, "missing", ["line.second"]), ["line.third"]);
+  const requests = [], progress = [];
+  const result = await regenerateAndPromoteVoiceLines({
+    manifest, voiceAssetId: "voice.detective", scope: "missing", selectedLineAssetIds: ["line.second"],
+    client: {
+      async generate(request) { requests.push(request.assetId); return [generatedOption(request.assetId, 0)]; },
+      async save(request) { return saveIntoManifest(manifest, request).result; }
+    },
+    onProgress: (update) => progress.push(update)
+  });
+  assert.deepEqual(requests, ["line.third"]);
+  assert.ok(progress.every(update => update.total === 1 && update.index === 0));
+  assert.equal(result.promoted.length, 1);
+  assert.deepEqual(result.manifest.assets["line.first"], manifest.assets["line.first"]);
+  assert.deepEqual(result.manifest.assets["line.second"], manifest.assets["line.second"]);
+});
+
+test("no missing lines makes no paid requests", async () => {
+  const manifest = baseManifest();
+  const result = await regenerateAndPromoteVoiceLines({
+    manifest, voiceAssetId: "voice.detective", scope: "missing",
+    selectedLineAssetIds: ["line.first", "line.second"],
+    client: { generate() { assert.fail("must not generate"); }, save() { assert.fail("must not save"); } }
+  });
+  assert.equal(result.manifest, manifest);
+  assert.deepEqual(result.promoted, []);
+});
+
+test("missing mode resolves target recordings independently from default recordings", () => {
+  const manifest = baseManifest();
+  addMobileTarget(manifest, true);
+  manifest.assets["line.first"].activeVersion = "recorded";
+  manifest.assets["line.first"].versions.recorded = { file: "/first.mp3" };
+  const plan = voiceLineRegenerationPlan(manifest, "voice.detective", "mobile");
+  assert.deepEqual(voiceLinesForRegeneration(manifest, plan.lineAssetIds, "missing", ["line.second.mobile"]), ["line.first.mobile"]);
 });

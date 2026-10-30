@@ -1,3 +1,4 @@
+import { openVoiceLineRegenerationDialog } from "./voice-line-regeneration-dialog.js";
 import { DesignerGenerationRecovery, type PendingDesignerOption } from "./generation-recovery.js";
 import { installAiAssetDesignerViewport, type AiAssetDesignerViewportOptions, type DesignerViewportSceneLike } from './designer-viewport.js';
 import { openScaledVariantsDialog } from "./scaled-variants-dialog.js";
@@ -73,7 +74,8 @@ import {
 import {
   promotedVoiceId,
   regenerateAndPromoteVoiceLines,
-  voiceLineRegenerationPlan
+  voiceLineRegenerationPlan,
+  voiceLinesForRegeneration
 } from "./voice-line-regeneration.js";
 
 type AiAssetTextureFrameConfig = {
@@ -257,6 +259,7 @@ export function installAiAssetDesigner(
   let editedCurrentOption: GeneratedDebugOption | undefined;
   let previewedVersionName: string | undefined;
   const pendingOptions = new Map<string, PendingDesignerOption>();
+  let voiceLineDialog: ReturnType<typeof openVoiceLineRegenerationDialog> | undefined;
   const generatedByAsset = new Map<string, GeneratedDebugOption[]>();
   const recoveryTouched = new Set<string>();
   const recovery = options.generationRecoveryKey !== false && typeof indexedDB !== "undefined"
@@ -505,8 +508,6 @@ export function installAiAssetDesigner(
       !selectedTilesetAnimationKey;
     const hasPromotedVoice = Boolean(promotedVoiceId(manifest, baseVoiceAssetId));
     const hasPendingBaseVoice = pendingOptions.has(baseVoiceAssetId);
-    const pendingLineCount = lineAssetIds.filter((assetId) => pendingOptions.has(assetId)).length;
-    const hasAnyPendingOption = pendingOptions.size > 0;
 
     elements.regenerateAllLinesButton.textContent = "Regenerate all lines";
     elements.regenerateAllLinesButton.hidden = !isBaseVoiceView;
@@ -514,8 +515,6 @@ export function installAiAssetDesigner(
       !isBaseVoiceView ||
       !hasPromotedVoice ||
       hasPendingBaseVoice ||
-      pendingLineCount > 0 ||
-      hasAnyPendingOption ||
       missingTargetLineAssetIds.length > 0 ||
       lineAssetIds.length === 0 ||
       activeFirstDrafts ||
@@ -527,17 +526,13 @@ export function installAiAssetDesigner(
         ? "Promote the selected base voice before regenerating its lines."
         : missingTargetLineAssetIds.length > 0
           ? `Create target variants for ${missingTargetLineAssetIds.length} linked line${missingTargetLineAssetIds.length === 1 ? "" : "s"} before regenerating this target voice.`
-          : pendingLineCount > 0
-            ? `Promote or revert the ${pendingLineCount} pending linked line${pendingLineCount === 1 ? "" : "s"} before regenerating all lines.`
-            : hasAnyPendingOption
-              ? "Promote or revert all pending asset options before regenerating voice lines."
-              : activeFirstDrafts
-                ? "Wait for automatic first drafts to finish before regenerating voice lines."
-                : !hasPromotedVoice
-                  ? "Promote a base voice before regenerating its lines."
-                  : lineAssetIds.length === 0
-                    ? "This voice has no linked lines to regenerate."
-                    : `Generate and promote one new option for ${lineAssetIds.length} linked line${lineAssetIds.length === 1 ? "" : "s"}.`;
+          : activeFirstDrafts
+            ? "Wait for automatic first drafts to finish before regenerating voice lines."
+            : !hasPromotedVoice
+              ? "Promote a base voice before regenerating its lines."
+              : lineAssetIds.length === 0
+                ? "This voice has no linked lines to regenerate."
+                : `Generate and promote one new option for ${lineAssetIds.length} linked line${lineAssetIds.length === 1 ? "" : "s"}.`;
   };
 
   const hasDeferredVoiceLineOption = () =>
@@ -573,7 +568,7 @@ export function installAiAssetDesigner(
     }).finally(() => { recoveryWrites--; });
   };
   const protectUnfinishedWork = (event: BeforeUnloadEvent) => {
-    if (!activeGeneration && recoveryWrites === 0 &&
+    if (!activeGeneration && !activeVoiceLineRegeneration && recoveryWrites === 0 &&
       !((!recovery || recoveryFailed) && (pendingOptions.size || generatedByAsset.size))) return;
     event.preventDefault();
     event.returnValue = "";
@@ -2360,34 +2355,30 @@ export function installAiAssetDesigner(
       setStatus(elements, "This voice has no linked lines to regenerate.", "error");
       return;
     }
-    const pendingLineAssetIds = lineAssetIds.filter((assetId) => pendingOptions.has(assetId));
-    if (pendingLineAssetIds.length > 0) {
-      setStatus(
-        elements,
-        `Promote or revert pending options for ${pendingLineAssetIds.map(readableAssetName).join(", ")} before regenerating all lines.`,
-        "error"
-      );
-      return;
-    }
-    if (pendingOptions.size > 0) {
-      setStatus(
-        elements,
-        "Promote or revert all pending asset options before regenerating voice lines.",
-        "error"
-      );
-      return;
-    }
-
+    if (voiceLineDialog) return;
     const targetLabel = selectedTargetId
       ? manifest.targets?.[selectedTargetId]?.label ?? readableAssetName(selectedTargetId)
       : "Default";
-    const confirmed = window.confirm(
-      `Regenerate and promote one new option for all ${lineAssetIds.length} linked line${lineAssetIds.length === 1 ? "" : "s"} of ${readableAssetName(baseVoiceAssetId)} (${targetLabel})?\n\nThis uses paid generation and replaces each line's active version as it completes.`
-    );
-    if (!confirmed) return;
+    const targetId = selectedTargetId;
+    const selectedLineAssetIds = [...pendingOptions.keys()];
+    const missing = voiceLinesForRegeneration(manifest, lineAssetIds, "missing", selectedLineAssetIds);
+    const controller = new AbortController();
+    const dialog = openVoiceLineRegenerationDialog({
+      root: elements.root,
+      voiceName: `${readableAssetName(baseVoiceAssetId)} · ${targetLabel}`,
+      allCount: lineAssetIds.length,
+      missingCount: missing.length,
+      onStop: () => controller.abort()
+    });
+    voiceLineDialog = dialog;
+    const scope = await dialog.selection;
+    if (!scope || destroyed) {
+      voiceLineDialog = undefined;
+      return;
+    }
+    const batchLineAssetIds = voiceLinesForRegeneration(manifest, lineAssetIds, scope, selectedLineAssetIds);
 
     const currentPromotionId = promotionId + 1;
-    const controller = new AbortController();
     promotionId = currentPromotionId;
     activePromotionId = currentPromotionId;
     activeVoiceLineRegeneration = { controller, id: currentPromotionId };
@@ -2399,16 +2390,20 @@ export function installAiAssetDesigner(
     let promotedCount = 0;
     let liveRefreshError: { assetId: string; error: unknown } | undefined;
     let batchCompletedCleanly = false;
+    let processedCount = 0;
 
     try {
       const result = await regenerateAndPromoteVoiceLines({
         manifest,
         voiceAssetId,
-        targetId: selectedTargetId,
+        targetId,
+        scope,
+        selectedLineAssetIds,
         client,
         signal: controller.signal,
         onProgress(progress) {
           if (activeVoiceLineRegeneration?.id !== currentPromotionId) return;
+          dialog.update(progress, readableAssetName(progress.assetId));
           const action = controller.signal.aborted
             ? "Finishing"
             : progress.phase === "generation" ? "Generating" : "Promoting";
@@ -2477,19 +2472,19 @@ export function installAiAssetDesigner(
       renderAssetBrowser();
 
       const firstFailure = result.failures[0];
-      const processedCount = result.promoted.length + result.failures.length;
+      processedCount = result.promoted.length + result.failures.length;
       if (result.cancelled) {
         setStatus(
           elements,
-          `Stopped after ${processedCount}/${lineAssetIds.length} lines; ${promotedCount} promoted` +
+          `Stopped after ${processedCount}/${batchLineAssetIds.length} lines; ${promotedCount} promoted` +
             `${result.failures.length > 0 ? ` and ${result.failures.length} failed` : ""}.`,
           result.failures.length > 0 ? "error" : "success"
         );
       } else if (firstFailure) {
-        const unattemptedCount = lineAssetIds.length - processedCount;
+        const unattemptedCount = batchLineAssetIds.length - processedCount;
         setStatus(
           elements,
-          `Regenerated and promoted ${promotedCount}/${lineAssetIds.length} lines. ` +
+          `Regenerated and promoted ${promotedCount}/${batchLineAssetIds.length} lines. ` +
             `${result.failures.length} failed; first failure was ${readableAssetName(firstFailure.assetId)} ` +
             `during ${firstFailure.phase}: ${errorMessage(firstFailure.error)}` +
             `${firstFailure.phase === "promotion" && unattemptedCount > 0
@@ -2516,7 +2511,7 @@ export function installAiAssetDesigner(
       } else {
         setStatus(
           elements,
-          `Regenerated and promoted all ${promotedCount} lines.`,
+          `Generated and promoted ${promotedCount} voice line${promotedCount === 1 ? "" : "s"}.`,
           "success"
         );
       }
@@ -2530,6 +2525,7 @@ export function installAiAssetDesigner(
         activePromotionId = undefined;
       }
       if (!destroyed) {
+        dialog.finish(elements.status.textContent ?? "Finished.", processedCount);
         elements.panel.removeAttribute("aria-busy");
         setVoiceLineBatchControlsLocked(false);
         syncPromoteAllButton();
@@ -2537,6 +2533,8 @@ export function installAiAssetDesigner(
       }
     }
 
+    await dialog.closed;
+    if (voiceLineDialog === dialog) voiceLineDialog = undefined;
     if (!destroyed && options.restartOnPromote && batchCompletedCleanly) {
       window.location.reload();
     }
@@ -3841,6 +3839,7 @@ export function installAiAssetDesigner(
       unbindInputBoundary();
       dockPanel.destroy();
       closeScaledVariants?.();
+      voiceLineDialog?.close();
       elements.root.remove();
     }
   };

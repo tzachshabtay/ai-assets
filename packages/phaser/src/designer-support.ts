@@ -4926,6 +4926,10 @@ export function ensureDesignerStyles(): void {
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
   padding: 14px;
 }
+.ai-game-assets-designer__voice-batch h2 { margin: 0; font-size: 20px; }
+.ai-game-assets-designer__voice-batch p { color: #c3cbd9; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.ai-game-assets-designer__voice-batch progress { width: 100%; height: 18px; accent-color: #819dff; }
+.ai-game-assets-designer__voice-batch [hidden] { display: none; }
 .ai-game-assets-designer__scaled-card h2 { margin: 0 0 10px; font-size: 20px; }
 .ai-game-assets-designer__scaled-card p { color: #b9c1cf; font-size: 13px; line-height: 1.5; }
 .ai-game-assets-designer__scaled-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
