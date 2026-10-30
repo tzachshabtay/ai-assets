@@ -261,3 +261,30 @@ function audioAsset(id, kind) {
     tags: []
   };
 }
+
+
+test("spoken text mirrored into prompts or legacy directions is sent exactly once", async () => {
+  const originalFetch = globalThis.fetch, requests = [];
+  globalThis.fetch = async (_url, init) => {
+    requests.push(JSON.parse(init.body));
+    return new Response(new Uint8Array([1]), { status: 200 });
+  };
+  try {
+    const provider = createElevenLabsAudioProvider({ apiKey: "test-key" });
+    const text = "The oldest beard in Bramblehollow. He knows every story.";
+    const asset = { ...audioAsset("line.elder", "voice-line"), prompt: text,
+      voiceSettings: { voiceId: "borin-voice", text, direction: text } };
+    for (const prompt of [text, `  ${text.toUpperCase()}  `, `[${text}]`, undefined]) {
+      const [option] = await provider.generate({ asset, prompt, count: 1 });
+      assert.equal(requests.at(-1).text, text);
+      assert.equal(option.voiceSettings.text, text);
+      assert.equal(option.voiceSettings.direction, undefined, 'do not persist the duplicate direction again');
+    }
+    await provider.generate({ asset, prompt: text, voiceSettings: { direction: 'quietly' } });
+    assert.equal(requests.at(-1).text, `[quietly]\n${text}`, 'keep a real direction when the prompt mirrors dialogue');
+    await provider.generate({ asset, prompt: 'angrily', voiceSettings: { direction: 'quietly' } });
+    assert.equal(requests.at(-1).text, `[angrily]\n${text}`, 'an explicit delivery edit still overrides saved directions');
+    await provider.generate({ asset, prompt: '', voiceSettings: { direction: 'quietly' } });
+    assert.equal(requests.at(-1).text, text, 'explicitly clearing direction requests plain speech');
+  } finally { globalThis.fetch = originalFetch; }
+});

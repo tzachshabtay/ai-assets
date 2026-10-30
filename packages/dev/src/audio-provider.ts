@@ -258,7 +258,15 @@ async function generateElevenLabsVoiceLine(
 
   const generatedByIndex = await Promise.all(Array.from({ length: count }, async (_, index) => {
     const line = voiceSettings.text ?? request.asset.prompt;
-    const direction = (request.prompt ?? voiceSettings.direction)?.trim();
+    // Dialog integrations often mirror the spoken text into prompt. It is
+    // not an acting direction: sending it as an audio tag can speak it twice.
+    // Ignore duplicate directions saved by older generations as well.
+    const sameAsLine = (value: string) => value.replace(/[\[\]]/g, "").replace(/\s+/g, " ").trim().toLocaleLowerCase() === line.replace(/\s+/g, " ").trim().toLocaleLowerCase();
+    const prompt = request.prompt?.trim();
+    const authoredDirection = voiceSettings.direction?.trim();
+    const direction = prompt === "" ? undefined
+      : prompt && !sameAsLine(prompt) ? prompt
+        : authoredDirection && !sameAsLine(authoredDirection) ? authoredDirection : undefined;
     const model =
       voiceSettings.model ??
       audioSettings.model ??
