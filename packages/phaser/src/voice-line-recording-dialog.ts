@@ -1,6 +1,7 @@
 import type { AiAssetManifest } from "@ai-game-assets/core";
 import type { AiAssetDebugClient } from "./debug-client.js";
 import { recordingToWav, startVoiceRecording } from "./voice-recording.js";
+import { createVoiceTakePlayer } from "./voice-take-player.js";
 import { voiceLineDirection } from "./voice-line-regeneration.js";
 
 type UnsavedTake = { id: string; blob: Blob; url: string; audio?: Awaited<ReturnType<typeof recordingToWav>> };
@@ -10,12 +11,16 @@ export function openVoiceLineRecordingDialog(options: {
   manifest: AiAssetManifest;
   lineAssetIds: string[];
   voiceName: string;
-  client: Pick<AiAssetDebugClient, "save" | "deleteVersion" | "selectVoiceLineVersion" | "updateVoiceLine"> & Partial<Pick<AiAssetDebugClient, "syncManifestModule">>;
+  client: Pick<AiAssetDebugClient, "save" | "deleteVersion" | "selectVoiceLineVersion" | "updateVoiceLine" | "trimVoiceLineVersion"> & Partial<Pick<AiAssetDebugClient, "syncManifestModule">>;
   resolveAssetUrl(file: string): string;
   onManifest(manifest: AiAssetManifest, assetId: string, activeChanged: boolean): void;
 }) {
   let manifest = options.manifest, index = 0, busy = false, disposed = false, requestingMicrophone = false;
   let moduleDirty = false;
+  let pendingTrim: string | undefined;
+  const takeRows = new Map<string, { row: HTMLDivElement; label: HTMLSpanElement; favorite: HTMLButtonElement; remove: HTMLButtonElement; player: ReturnType<typeof createVoiceTakePlayer> }>();
+  let draftRow: HTMLDivElement | undefined;
+  const empty = document.createElement("p"); empty.textContent = "No takes yet. Press Record when ready.";
   let editing: "text" | "direction" | undefined;
   const deferManifestModuleWrite = Boolean(options.client.syncManifestModule);
   let capture: Awaited<ReturnType<typeof startVoiceRecording>> | undefined;
@@ -51,8 +56,8 @@ export function openVoiceLineRecordingDialog(options: {
   let resolveClosed!: () => void;
   const closed = new Promise<void>(resolve => { resolveClosed = resolve; });
   const close = async (force = false) => {
-    if (!force && ((busy && !requestingMicrophone) || capture || unsaved || editing)) {
-      announce("Save or cancel your text edit, and stop recording or save any unsaved take before closing."); return;
+    if (!force && ((busy && !requestingMicrophone) || capture || unsaved || editing || pendingTrim)) {
+      announce("Save or cancel your text edit, and save any pending take or trim before closing."); return;
     }
     if (!force && moduleDirty && options.client.syncManifestModule) {
       busy = true; render(); announce("Finishing recording session…");
@@ -67,13 +72,14 @@ export function openVoiceLineRecordingDialog(options: {
     }
     disposed = true; capture?.stop(); capture = undefined;
     clearInterval(timer); stopPlayback();
+    for (const item of takeRows.values()) item.player.dispose(); takeRows.clear();
     if (unsaved) URL.revokeObjectURL(unsaved.url);
     window.removeEventListener("beforeunload", protect);
     if (force && !busy && moduleDirty) void options.client.syncManifestModule?.().catch(() => {});
     modal.remove(); if (previousFocus?.isConnected) previousFocus.focus(); resolveClosed();
   };
   const protect = (event: BeforeUnloadEvent) => {
-    if (busy || capture || unsaved || editing || (moduleDirty && deferManifestModuleWrite)) { event.preventDefault(); event.returnValue = ""; }
+    if (busy || capture || unsaved || editing || pendingTrim || (moduleDirty && deferManifestModuleWrite)) { event.preventDefault(); event.returnValue = ""; }
   };
   window.addEventListener("beforeunload", protect);
   const run = async (action: () => Promise<void>) => {
@@ -95,7 +101,8 @@ export function openVoiceLineRecordingDialog(options: {
       ...draft.audio, prompt: asset.prompt,
       voiceSettings: { ...active?.voiceSettings, ...asset.voiceSettings, direction: voiceLineDirection(asset),
         text: asset.voiceSettings?.text ?? active?.voiceSettings?.text ?? asset.prompt },
-      audioSettings: { ...asset.audioSettings, format: "wav" }, activate,
+      audioSettings: { ...asset.audioSettings, format: "wav" },
+      audioPlayback: { trimStartSeconds: 0, trimEndSeconds: draft.audio.durationSeconds }, activate,
       notes: "Microphone recording", deferManifestModuleWrite });
     // Clear the draft before notifying the game: callback failures must not duplicate saved audio.
     URL.revokeObjectURL(draft.url); unsaved = undefined;
@@ -103,14 +110,18 @@ export function openVoiceLineRecordingDialog(options: {
     announce(activate ? "Take saved and starred as the favorite." : "Take saved. Star it to use this recording in the game.");
   };
   const startEdit = (field: "text" | "direction") => {
-    if (busy || capture || unsaved || editing) return;
+    if (busy || capture || unsaved || editing || pendingTrim) return;
     editing = field;
     editInput.value = field === "text" ? script.textContent ?? "" : voiceLineDirection(manifest.assets[options.lineAssetIds[index]!]!);
     editInput.setAttribute("aria-label", field === "text" ? "Text to say" : "Director notes");
     render(); editInput.focus();
   };
-  const editScript = button("Edit", () => startEdit("text")); editScript.setAttribute("aria-label", "Edit line");
-  const editDirection = button("Edit", () => startEdit("direction")); editDirection.setAttribute("aria-label", "Edit director notes");
+  const editScript = button("", () => startEdit("text")); editScript.setAttribute("aria-label", "Edit line");
+  const editDirection = button("", () => startEdit("direction")); editDirection.setAttribute("aria-label", "Edit director notes");
+  for (const edit of [editScript, editDirection]) {
+    edit.title = edit.getAttribute("aria-label")!;
+    edit.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+  }
   const saveEdit = button("Save and promote", () => void run(async () => {
     const field = editing;
     if (!field || (field === "text" && !editInput.value.trim())) return;
@@ -128,7 +139,7 @@ export function openVoiceLineRecordingDialog(options: {
   scriptRow.append(script, editScript); directionRow.append(direction, editDirection);
   const record = button("Record", () => {
     if (capture) { capture.stop(); return; }
-    if (busy || unsaved || editing) return;
+    if (busy || unsaved || editing || pendingTrim) return;
     void (async () => {
       busy = true; requestingMicrophone = true; render(); announce("Waiting for microphone access…");
       const id = options.lineAssetIds[index]!;
@@ -155,9 +166,9 @@ export function openVoiceLineRecordingDialog(options: {
       }
     })();
   });
-  const previous = button("Previous", () => { if (!busy && !capture && !unsaved && !editing && index > 0) { stopPlayback(); index--; announce(""); render(); } });
+  const previous = button("Previous", () => { if (!busy && !capture && !unsaved && !editing && !pendingTrim && index > 0) { stopPlayback(); index--; announce(""); render(); } });
   const next = button("Next", () => {
-    if (busy || capture || unsaved || editing) return;
+    if (busy || capture || unsaved || editing || pendingTrim) return;
     if (index === options.lineAssetIds.length - 1) close();
     else { stopPlayback(); index++; announce(""); render(); }
   });
@@ -165,7 +176,7 @@ export function openVoiceLineRecordingDialog(options: {
   const actions = document.createElement("div"); actions.className = "ai-game-assets-designer__modal-actions";
   actions.append(exit, previous, next);
   const recordActions = document.createElement("div"); recordActions.className = "ai-game-assets-designer__modal-actions"; recordActions.append(record);
-  const hint = document.createElement("p"); hint.textContent = "★ Favorite = the recording used in the game. All other takes are saved in Previous versions. Next skips lines you do not record.";
+  const hint = document.createElement("p"); hint.textContent = "Drag the yellow markers to trim each take. ★ Favorite = the recording used in the game. All other takes are saved in Previous versions. Next skips lines you do not record.";
   card.append(title, counter, progress, scriptRow, directionRow, editor, recordActions, status, takes, hint, actions); modal.append(card);
   function render() {
     const id = options.lineAssetIds[index]!, asset = manifest.assets[id]!;
@@ -177,44 +188,68 @@ export function openVoiceLineRecordingDialog(options: {
     scriptRow.hidden = editing === "text"; directionRow.hidden = editing === "direction";
     editor.hidden = !editing;
     (editing === "text" ? scriptRow : directionRow).after(editor);
-    editScript.disabled = editDirection.disabled = busy || Boolean(capture || unsaved || editing);
+    editScript.disabled = editDirection.disabled = busy || Boolean(capture || unsaved || editing || pendingTrim);
     editInput.disabled = cancelEdit.disabled = busy;
     saveEdit.disabled = busy || (editing === "text" && !editInput.value.trim());
-    record.textContent = capture ? "Stop recording" : "Record";
-    record.disabled = busy || Boolean(unsaved || editing);
-    previous.disabled = busy || Boolean(capture || unsaved || editing) || index === 0;
-    next.disabled = busy || Boolean(capture || unsaved || editing);
-    exit.disabled = (busy && !requestingMicrophone) || Boolean(capture || unsaved || editing);
+    record.replaceChildren();
+    const recordIcon = document.createElement("span"); recordIcon.className = "ai-game-assets-designer__record-icon";
+    recordIcon.dataset.recording = String(Boolean(capture)); recordIcon.setAttribute("aria-hidden", "true");
+    record.append(recordIcon, capture ? "Stop recording" : "Record");
+    record.disabled = busy || Boolean(unsaved || editing || pendingTrim);
+    previous.disabled = busy || Boolean(capture || unsaved || editing || pendingTrim) || index === 0;
+    next.disabled = busy || Boolean(capture || unsaved || editing || pendingTrim);
+    exit.disabled = (busy && !requestingMicrophone) || Boolean(capture || unsaved || editing || pendingTrim);
     next.textContent = index === options.lineAssetIds.length - 1 ? "Done" : "Next";
-    stopPlayback(); takes.replaceChildren();
     const versions = Object.entries(asset.versions).filter(([, version]) => version.file);
+    const keys = new Set(versions.map(([name]) => `${id}:${name}`));
+    for (const [key, item] of takeRows) if (!keys.has(key)) { item.player.dispose(); item.row.remove(); takeRows.delete(key); }
     for (const [i, [name, version]] of versions.entries()) {
-      const row = document.createElement("div"); row.className = "ai-game-assets-designer__recording-take";
-      const label = document.createElement("span"); label.textContent = `Take ${i + 1}`; label.title = name;
-      const audio = document.createElement("audio"); audio.controls = true; audio.preload = "none";
-      audio.src = options.resolveAssetUrl(version.file); audio.setAttribute("aria-label", `Play take ${i + 1}`);
-      audio.addEventListener("play", () => takes.querySelectorAll("audio").forEach(other => { if (other !== audio) other.pause(); }));
-      const favorite = button(asset.activeVersion === name ? "★" : "☆", () => void run(async () => {
-        announce("Promoting favorite…");
-        publish(await options.client.selectVoiceLineVersion({ assetId: id, versionName: name, deferManifestModuleWrite }), id, true);
-        announce(`Take ${i + 1} is now the favorite.`);
-      }));
-      favorite.setAttribute("aria-label", `Favorite take ${i + 1}`);
-      favorite.setAttribute("aria-pressed", String(asset.activeVersion === name));
-      const remove = button("Delete", () => void run(async () => {
-        announce("Deleting take…");
-        const activeChanged = manifest.assets[id]!.activeVersion === name;
-        publish(await options.client.deleteVersion({ assetId: id, versionName: name,
-          replaceActiveVoiceLine: true, deferManifestModuleWrite }), id, activeChanged);
-        announce("Take deleted.");
-      }));
-      remove.setAttribute("aria-label", `Delete take ${i + 1}`);
-      favorite.disabled = remove.disabled = busy || Boolean(capture || unsaved || editing);
-      audio.hidden = Boolean(capture);
-      row.append(label, audio, favorite, remove); takes.append(row);
+      const key = `${id}:${name}`;
+      let item = takeRows.get(key);
+      if (!item) {
+        const row = document.createElement("div"); row.className = "ai-game-assets-designer__recording-take";
+        const header = document.createElement("div"); header.className = "ai-game-assets-designer__take-header";
+        const label = document.createElement("span"); label.title = name;
+        const favorite = button("☆", () => void run(async () => {
+          announce("Promoting favorite…");
+          publish(await options.client.selectVoiceLineVersion({ assetId: id, versionName: name, deferManifestModuleWrite }), id, true);
+          announce("Favorite promoted.");
+        }));
+        const remove = button("Delete", () => void run(async () => {
+          const activeChanged = manifest.assets[id]!.activeVersion === name;
+          publish(await options.client.deleteVersion({ assetId: id, versionName: name, replaceActiveVoiceLine: true, deferManifestModuleWrite }), id, activeChanged);
+          announce("Take deleted.");
+        }));
+        const player = createVoiceTakePlayer({ src: options.resolveAssetUrl(version.file), durationSeconds: version.durationSeconds,
+          playback: version.audioPlayback, onTrim: async (trimStartSeconds, trimEndSeconds) => {
+            pendingTrim = key; busy = true; render(); announce("Saving trim…");
+            try {
+              const updated = await options.client.trimVoiceLineVersion({ assetId: id, versionName: name, trimStartSeconds, trimEndSeconds, deferManifestModuleWrite });
+              publish(updated, id, manifest.assets[id]!.activeVersion === name);
+              pendingTrim = undefined; announce("Trim saved.");
+            } catch (error) {
+              announce(`Trim could not save: ${error instanceof Error ? error.message : String(error)}. Retry the trim save before continuing.`);
+              throw error;
+            } finally { busy = false; if (!disposed) render(); }
+          } });
+        player.audio.addEventListener("play", () => takes.querySelectorAll("audio").forEach(other => { if (other !== player.audio) other.pause(); }));
+        header.append(label, favorite, remove); row.append(header, player.root);
+        item = { row, label, favorite, remove, player }; takeRows.set(key, item);
+        takes.append(row);
+      }
+      item.label.textContent = `Take ${i + 1}`;
+      item.favorite.textContent = asset.activeVersion === name ? "★" : "☆";
+      item.favorite.setAttribute("aria-label", `Favorite take ${i + 1}`);
+      item.favorite.setAttribute("aria-pressed", String(asset.activeVersion === name));
+      item.remove.setAttribute("aria-label", `Delete take ${i + 1}`);
+      item.favorite.disabled = item.remove.disabled = busy || Boolean(capture || unsaved || editing || pendingTrim);
+      item.player.setLabel(`take ${i + 1}`);
+      item.player.setDisabled(busy || Boolean(capture || editing || (pendingTrim && pendingTrim !== key)));
     }
+    draftRow?.remove(); draftRow = undefined;
+    empty.remove();
     if (unsaved) {
-      const row = document.createElement("div"); row.className = "ai-game-assets-designer__recording-take";
+      const row = document.createElement("div"); row.className = "ai-game-assets-designer__recording-take"; draftRow = row;
       const label = document.createElement("span"); label.textContent = "Unsaved take";
       const audio = document.createElement("audio"); audio.controls = true; audio.src = unsaved.url;
       const retry = button("Retry save", () => void run(() => saveTake(id)));
@@ -223,12 +258,12 @@ export function openVoiceLineRecordingDialog(options: {
       retry.disabled = remove.disabled = busy;
       row.append(label, audio, retry, remove, download); takes.append(row);
     }
-    if (!versions.length && !unsaved) { const empty = document.createElement("p"); empty.textContent = "No takes yet. Press Record when ready."; takes.append(empty); }
+    if (!versions.length && !unsaved) takes.append(empty);
   }
   modal.addEventListener("keydown", event => {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (editing && !busy) { editing = undefined; render(); } else close(); }
     if (event.key === "Tab") {
-      const buttons = [...modal.querySelectorAll<HTMLElement>("button:not(:disabled), textarea:not(:disabled), audio[controls], a[href]")].filter(element => !element.closest("[hidden]"));
+      const buttons = [...modal.querySelectorAll<HTMLElement>("button:not(:disabled), textarea:not(:disabled), audio[controls], input:not(:disabled), a[href]")].filter(element => !element.closest("[hidden]"));
       if (event.shiftKey && document.activeElement === buttons[0]) { event.preventDefault(); buttons.at(-1)?.focus(); }
       else if (!event.shiftKey && document.activeElement === buttons.at(-1)) { event.preventDefault(); buttons[0]?.focus(); }
     }

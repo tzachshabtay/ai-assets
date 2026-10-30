@@ -511,6 +511,26 @@ export async function updateVoiceLine(
   return manifest;
 }
 
+/** Non-destructive, per-take trimming; the original recording and other takes stay intact. */
+export async function trimVoiceLineVersion(
+  options: AssetStoreOptions,
+  input: { assetId: string; versionName: string; trimStartSeconds: number; trimEndSeconds: number; deferManifestModuleWrite?: boolean }
+): Promise<AiAssetManifest> {
+  const { trimStartSeconds: start, trimEndSeconds: end } = input;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) throw new Error("Choose a valid start and end for the take.");
+  const manifest = await readManifest(options.manifestPath);
+  const asset = manifest.assets[input.assetId];
+  if (asset?.kind !== "voice-line") throw new Error("Only voice-line takes can be trimmed here.");
+  const version = asset.versions[input.versionName];
+  if (!version?.file) throw new Error("Unknown voice-line recording version.");
+  if (version.durationSeconds && end > version.durationSeconds + 0.01) throw new Error("The trim end exceeds the recording duration.");
+  version.audioPlayback = { ...version.audioPlayback, trimStartSeconds: start, trimEndSeconds: end };
+  assertManifest(manifest);
+  await writeManifest(options.manifestPath, manifest);
+  if (options.manifestModulePath && !input.deferManifestModuleWrite) await writeManifestModule(options.manifestModulePath, manifest);
+  return manifest;
+}
+
 /** Switch a recorded line's favorite without duplicating its audio file. */
 export async function selectVoiceLineVersion(
   options: AssetStoreOptions,

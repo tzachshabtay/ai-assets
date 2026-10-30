@@ -2541,6 +2541,10 @@ export function pauseSiblingAudioPlayers(container: HTMLElement): void {
 let sharedAudioContext: AudioContext | undefined;
 
 export async function audioWaveformPeaks(src: string, bucketCount = 96): Promise<AudioWaveformPeaks> {
+  return (await audioWaveformData(src, bucketCount)).peaks;
+}
+
+export async function audioWaveformData(src: string, bucketCount = 96): Promise<{ peaks: AudioWaveformPeaks; duration: number }> {
   const response = await fetch(src);
   const bytes = await response.arrayBuffer();
   const context = sharedAudioContext ??= new AudioContext();
@@ -2564,7 +2568,7 @@ export async function audioWaveformPeaks(src: string, bucketCount = 96): Promise
     peaks.push({ min, max });
   }
 
-  return peaks;
+  return { peaks, duration: buffer.duration };
 }
 
 export function drawAudioWaveform(
@@ -4946,6 +4950,39 @@ export function ensureDesignerStyles(): void {
 .ai-game-assets-designer__recording-take audio { flex: 1; min-width: 180px; height: 32px; }
 .ai-game-assets-designer__recording-take button { background: #273142; color: #fff; border: 1px solid #58657a; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
 .ai-game-assets-designer__recording-take button[aria-pressed="true"] { color: #ffd16b; }
+.ai-game-assets-designer__recording-copy { position: relative; display: block; }
+.ai-game-assets-designer__recording-copy blockquote { padding-right: 52px; }
+.ai-game-assets-designer__recording-copy .ai-game-assets-designer__recording-direction { padding: 4px 44px 4px 18px; min-height: 24px; }
+.ai-game-assets-designer__recording-copy > button {
+  position: absolute; top: 12px; right: 10px; display: grid; place-items: center;
+  width: 30px; height: 30px; padding: 0; border: 0; border-radius: 5px;
+  background: transparent; color: #aebbd0; cursor: pointer;
+}
+.ai-game-assets-designer__recording-copy:has(.ai-game-assets-designer__recording-direction) > button { top: 0; }
+.ai-game-assets-designer__recording-copy > button:hover { background: #354154; color: #fff; }
+.ai-game-assets-designer__recording-copy > button:disabled { opacity: .4; cursor: not-allowed; }
+.ai-game-assets-designer__recording-copy > button:focus-visible { outline: 2px solid #819dff; }
+.ai-game-assets-designer__record-icon { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: #ff6b78; margin-right: 9px; }
+.ai-game-assets-designer__record-icon[data-recording="true"] { border-radius: 2px; }
+.ai-game-assets-designer__recording-take { display: block; padding: 12px; }
+.ai-game-assets-designer__take-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ai-game-assets-designer__take-header > span { flex: 1; font-weight: 600; }
+.ai-game-assets-designer__take-waveform { position: relative; margin: 0 7px; touch-action: none; }
+.ai-game-assets-designer__take-waveform canvas { display: block; width: 100%; height: 76px; border-radius: 4px; }
+.ai-game-assets-designer__recording-take .ai-game-assets-designer__take-marker {
+  position: absolute; top: 0; transform: translateX(-50%); width: 14px; height: 76px;
+  background: transparent; border: 0;
+  border-radius: 0; padding: 0; cursor: ew-resize; touch-action: none;
+}
+.ai-game-assets-designer__take-marker::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 14px; background: #fbbf24; border-radius: 2px; }
+.ai-game-assets-designer__take-marker:focus-visible { outline: 2px solid #fff; }
+.ai-game-assets-designer__take-transport { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.ai-game-assets-designer__take-transport input { flex: 1; min-width: 60px; accent-color: #819dff; }
+.ai-game-assets-designer__take-time { white-space: nowrap; font: 12px monospace; color: #d6deeb; }
+.ai-game-assets-designer__take-trim { font-size: 12px; color: #aebbd0; margin-top: 6px; }
+.ai-game-assets-designer__take-player audio { display: none; }
+.ai-game-assets-designer__recording-take button:disabled { opacity: .45; cursor: not-allowed; }
+
 .ai-game-assets-designer__recording-take button:disabled { opacity: .45; cursor: default; }
 .ai-game-assets-designer__recording-take a { color: #b2c7ff; }
 .ai-game-assets-designer__voice-batch h2 { margin: 0; font-size: 20px; }
@@ -5389,7 +5426,6 @@ export function ensureDesignerStyles(): void {
   gap: 8px;
   margin-top: 14px;
 }
-.ai-game-assets-designer__recording-copy button,
 .ai-game-assets-designer__modal-actions button {
   border: 1px solid #58657a;
   border-radius: 6px;
@@ -5399,7 +5435,6 @@ export function ensureDesignerStyles(): void {
   font: inherit;
   cursor: pointer;
 }
-.ai-game-assets-designer__recording-copy button:disabled,
 .ai-game-assets-designer__modal-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.45;

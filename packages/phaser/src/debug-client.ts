@@ -493,6 +493,14 @@ export class AiAssetDebugClient {
     return body.manifest;
   }
 
+  async trimVoiceLineVersion(request: { assetId: string; versionName: string; trimStartSeconds: number; trimEndSeconds: number; deferManifestModuleWrite?: boolean }): Promise<AiAssetManifest> {
+    const response = await fetchDebugEndpoint(`${this.endpoint}/__ai-assets/trim-voice-line-version`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request)
+    });
+    if (!response.ok) throw new Error(await responseErrorMessage(response));
+    return (await response.json() as { manifest: AiAssetManifest }).manifest;
+  }
+
   async updateVoiceLine(request: { assetId: string; text?: string; direction?: string; deferManifestModuleWrite?: boolean }): Promise<AiAssetManifest> {
     const response = await fetchDebugEndpoint(`${this.endpoint}/__ai-assets/update-voice-line`, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request)

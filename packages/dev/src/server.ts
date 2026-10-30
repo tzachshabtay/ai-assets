@@ -31,6 +31,7 @@ import {
   deleteAssetVersion,
   selectVoiceLineVersion,
   updateVoiceLine,
+  trimVoiceLineVersion,
   ensureTargetVariant,
   readManifest,
   saveGeneratedOption,
@@ -541,6 +542,12 @@ async function routeRequest(
       filePath: result.filePath
     };
     sendJson(response, 200, responseBody);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/__ai-assets/trim-voice-line-version") {
+    const body = await readJson<Parameters<typeof trimVoiceLineVersion>[1]>(request);
+    sendJson(response, 200, { manifest: await trimVoiceLineVersion(options, body) });
     return;
   }
 

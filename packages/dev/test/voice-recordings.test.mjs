@@ -20,7 +20,7 @@ test('recorded takes persist independently; favorite switches without copies and
     assert.equal(response.status, 200, await response.clone().text()); return response.json();
   };
   try {
-    for (const name of ['take-1', 'take-2']) await post('save', { assetId: 'line', versionName: name, dataUrl: 'data:audio/wav;base64,UklGRg==', prompt: line.prompt, voiceSettings: line.voiceSettings, activate: name === 'take-1', notes: 'Microphone recording' });
+    for (const name of ['take-1', 'take-2']) await post('save', { assetId: 'line', versionName: name, dataUrl: 'data:audio/wav;base64,UklGRg==', prompt: line.prompt, voiceSettings: line.voiceSettings, activate: name === 'take-1', notes: 'Microphone recording', durationSeconds: 3 });
     let saved = JSON.parse(await readFile(manifestPath, 'utf8'));
     assert.equal(saved.assets.line.activeVersion, 'take-1');
     assert.deepEqual(Object.keys(saved.assets.line.versions), ['take-1', 'take-2']);
@@ -32,6 +32,17 @@ test('recorded takes persist independently; favorite switches without copies and
     assert.equal(saved.assets.line.activeVersion, 'take-2');
     assert.deepEqual(await readdir(assetsDir), files, 'Favoriting never duplicates audio');
     assert.match(await readFile(path.join(root, 'assets.ts'), 'utf8'), /take-2/);
+    const beforeTrimModule = await readFile(path.join(root, 'assets.ts'), 'utf8');
+    saved = (await post('trim-voice-line-version', { assetId: 'line', versionName: 'take-1', trimStartSeconds: .2, trimEndSeconds: 2.5, deferManifestModuleWrite: true })).manifest;
+    assert.deepEqual(saved.assets.line.versions['take-1'].audioPlayback, { trimStartSeconds: .2, trimEndSeconds: 2.5 });
+    assert.deepEqual(saved.assets.line.versions['take-2'].audioPlayback, {});
+    assert.equal(saved.assets.line.activeVersion, 'take-2');
+    assert.equal(await readFile(path.join(root, 'assets.ts'), 'utf8'), beforeTrimModule);
+    assert.deepEqual(await readdir(assetsDir), files, 'Trimming preserves original audio files');
+    for (const edit of [{ trimStartSeconds: -1, trimEndSeconds: 1 }, { trimStartSeconds: 2, trimEndSeconds: 1 }, { trimStartSeconds: 0, trimEndSeconds: 4 }, { trimStartSeconds: '0', trimEndSeconds: 1 }, { trimStartSeconds: 0, trimEndSeconds: null }]) {
+      const invalid = await fetch(`${origin}/__ai-assets/trim-voice-line-version`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetId: 'line', versionName: 'take-1', ...edit }) });
+      assert.equal(invalid.ok, false);
+    }
     saved = (await post('update-voice-line', { assetId: 'line', text: 'Good morning!', direction: 'Cheerfully', deferManifestModuleWrite: true })).manifest;
     assert.equal(saved.assets.line.voiceSettings.text, 'Good morning!');
     assert.equal(saved.assets.line.versions['take-2'].voiceSettings.text, 'Good morning!');
@@ -40,6 +51,7 @@ test('recorded takes persist independently; favorite switches without copies and
     assert.deepEqual(await readdir(assetsDir), files, 'Text edits do not copy or remove audio');
     saved = (await post('select-voice-line-version', { assetId: 'line', versionName: 'take-1' })).manifest;
     assert.equal(saved.assets.line.versions['take-1'].voiceSettings.text, 'Good morning!', 'Favorite switching cannot revert promoted wording');
+    assert.deepEqual(saved.assets.line.versions['take-1'].audioPlayback, { trimStartSeconds: .2, trimEndSeconds: 2.5 }, 'Favoriting preserves each take trim');
     await post('select-voice-line-version', { assetId: 'line', versionName: 'take-2' });
     saved = (await post('delete-version', { assetId: 'line', versionName: 'take-1' })).manifest;
     assert.equal(saved.assets.line.activeVersion, 'take-2');

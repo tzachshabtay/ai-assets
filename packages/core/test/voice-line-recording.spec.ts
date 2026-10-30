@@ -39,6 +39,12 @@ test.beforeEach(async ({ page, context }) => {
     w.manifest = { schemaVersion: 1, assets: { first: line('first', 'I will rescue the king!'), second: line('second', 'The forest is quiet.') } };
     w.saved = []; w.favorites = []; w.deleted = []; w.syncCount = 0;
     const client = {
+      async trimVoiceLineVersion(request: any) {
+        if (w.failTrim) throw new Error('Trim storage unavailable');
+        w.trims ??= []; w.trims.push(request);
+        w.manifest.assets[request.assetId].versions[request.versionName].audioPlayback = { trimStartSeconds: request.trimStartSeconds, trimEndSeconds: request.trimEndSeconds };
+        return structuredClone(w.manifest);
+      },
       async updateVoiceLine(request: any) {
         if (w.failEdit) throw new Error('Text storage unavailable');
         w.edits ??= []; w.edits.push(request);
@@ -54,7 +60,7 @@ test.beforeEach(async ({ page, context }) => {
         if (w.failSave) throw new Error('Storage unavailable');
         w.saved.push(request);
         const asset = w.manifest.assets[request.assetId];
-        const version = { name: request.versionName, file: request.dataUrl, voiceSettings: request.voiceSettings, notes: request.notes };
+        const version = { name: request.versionName, file: request.dataUrl, voiceSettings: request.voiceSettings, notes: request.notes, durationSeconds: request.durationSeconds };
         asset.versions[version.name] = version;
         if (request.activate) asset.activeVersion = version.name;
         return { manifest: structuredClone(w.manifest), asset, file: version.file, version, versionName: version.name };
@@ -185,7 +191,8 @@ test('closing retries a failed module refresh without regenerating or losing sav
 
 test('edit and promote script and smaller director notes; failures preserve drafts and navigation keeps edits', async ({ page }) => {
   const editNotes = page.getByRole('button', { name: 'Edit director notes', exact: true });
-  expect(await editNotes.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await page.getByRole('button', { name: 'Record', exact: true }).evaluate(el => getComputedStyle(el).backgroundColor));
+  await expect(editNotes.locator("svg")).toHaveCount(1);
+  await expect(editNotes).toHaveText("");
   await editNotes.click();
   await page.getByRole('textbox', { name: 'Director notes', exact: true }).fill('Quietly, with growing resolve.');
   await page.getByRole('button', { name: 'Save and promote', exact: true }).click();
@@ -222,4 +229,64 @@ test('edit and promote script and smaller director notes; failures preserve draf
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.evaluate(() => (window as any).openRecording());
   await expect(page.getByText('The king can count on me.', { exact: true })).toBeVisible();
+});
+
+
+test('take waveforms retain seek positions, show duration immediately, and persist independent trim markers', async ({ page }, testInfo) => {
+  await recordTake(page);
+  const first = page.locator('audio').first();
+  await expect.poll(() => first.evaluate((audio: HTMLAudioElement) => audio.duration)).toBeGreaterThan(0);
+  await expect(page.locator('.ai-game-assets-designer__take-time')).not.toContainText('0:00.00 / 0:00.00');
+  await first.evaluate((audio: HTMLAudioElement) => { (window as any).firstAudio = audio; audio.currentTime = 0.15; });
+  await page.getByRole('button', { name: 'Record', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText(/Recording ·/);
+  await expect(page.getByRole('slider', { name: 'Seek take 1', exact: true })).toBeVisible();
+  expect(await first.evaluate(audio => audio === (window as any).firstAudio)).toBe(true);
+  await page.waitForTimeout(500);
+  await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Record', exact: true })).toBeEnabled();
+  expect(await first.evaluate(audio => audio === (window as any).firstAudio)).toBe(true);
+  expect(await first.evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBeCloseTo(0.15, 2);
+  const start = page.getByRole('slider', { name: 'Trim start take 1', exact: true });
+  const end = page.getByRole('slider', { name: 'Trim end take 1', exact: true });
+  const canvas = page.locator('canvas').first();
+  const bounds = (await canvas.boundingBox())!;
+  const marker = (await start.boundingBox())!;
+  await page.mouse.move(marker.x + marker.width / 2, marker.y + 8); await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width * .2, marker.y + 8, { steps: 5 }); await page.mouse.up();
+  await expect(page.getByRole('status')).toHaveText('Trim saved.');
+  const trimmedStart = Number(await start.getAttribute('aria-valuenow'));
+  expect(trimmedStart).toBeGreaterThan(0);
+  await end.focus(); await page.keyboard.press('Shift+ArrowLeft');
+  await expect(page.getByRole('button', { name: 'Record', exact: true })).toBeEnabled();
+  const trimmedEnd = Number(await end.getAttribute('aria-valuenow'));
+  expect(trimmedEnd).toBeLessThan(await first.evaluate((audio: HTMLAudioElement) => audio.duration));
+  await page.getByRole('button', { name: 'Favorite take 2', exact: true }).click();
+  await page.getByRole('button', { name: 'Favorite take 1', exact: true }).click();
+  expect(await first.evaluate(audio => audio === (window as any).firstAudio)).toBe(true);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('button', { name: 'Previous', exact: true }).click();
+  expect(Number(await start.getAttribute('aria-valuenow'))).toBeCloseTo(trimmedStart, 2);
+  expect(Number(await end.getAttribute('aria-valuenow'))).toBeCloseTo(trimmedEnd, 2);
+  expect(await page.evaluate(() => Object.values((window as any).manifest.assets.first.versions).map((v: any) => v.audioPlayback))).toEqual([
+    { trimStartSeconds: trimmedStart, trimEndSeconds: trimmedEnd }, undefined
+  ]);
+  await page.getByRole('button', { name: 'Play take 1', exact: true }).click();
+  await expect.poll(() => first.evaluate((audio: HTMLAudioElement) => audio.paused)).toBe(true);
+  expect(await first.evaluate((audio: HTMLAudioElement) => audio.currentTime)).toBeCloseTo(trimmedStart, 2);
+  await page.screenshot({ path: testInfo.outputPath('recording-waveforms.png') });
+});
+
+test('failed trim saves keep the selection and block navigation until retry succeeds', async ({ page }) => {
+  await recordTake(page);
+  await page.evaluate(() => { (window as any).failTrim = true; });
+  const start = page.getByRole('slider', { name: 'Trim start take 1', exact: true });
+  await start.focus(); await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('status')).toContainText('Trim storage unavailable');
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  await page.evaluate(() => { (window as any).failTrim = false; });
+  await page.getByRole('button', { name: 'Retry trim save', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('Trim saved.');
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+  expect(Number(await start.getAttribute('aria-valuenow'))).toBeCloseTo(.01, 2);
 });
