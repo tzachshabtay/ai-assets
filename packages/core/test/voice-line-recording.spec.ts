@@ -184,7 +184,9 @@ test('closing retries a failed module refresh without regenerating or losing sav
 
 
 test('edit and promote script and smaller director notes; failures preserve drafts and navigation keeps edits', async ({ page }) => {
-  await page.getByRole('button', { name: 'Edit director notes', exact: true }).click();
+  const editNotes = page.getByRole('button', { name: 'Edit director notes', exact: true });
+  expect(await editNotes.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(await page.getByRole('button', { name: 'Record', exact: true }).evaluate(el => getComputedStyle(el).backgroundColor));
+  await editNotes.click();
   await page.getByRole('textbox', { name: 'Director notes', exact: true }).fill('Quietly, with growing resolve.');
   await page.getByRole('button', { name: 'Save and promote', exact: true }).click();
   const notes = page.getByText('Quietly, with growing resolve.', { exact: true });

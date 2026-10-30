@@ -5389,6 +5389,7 @@ export function ensureDesignerStyles(): void {
   gap: 8px;
   margin-top: 14px;
 }
+.ai-game-assets-designer__recording-copy button,
 .ai-game-assets-designer__modal-actions button {
   border: 1px solid #58657a;
   border-radius: 6px;
@@ -5398,6 +5399,7 @@ export function ensureDesignerStyles(): void {
   font: inherit;
   cursor: pointer;
 }
+.ai-game-assets-designer__recording-copy button:disabled,
 .ai-game-assets-designer__modal-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
