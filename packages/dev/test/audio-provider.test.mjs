@@ -288,3 +288,43 @@ test("spoken text mirrored into prompts or legacy directions is sent exactly onc
     assert.equal(requests.at(-1).text, text, 'explicitly clearing direction requests plain speech');
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test("WAV requests use plan-compatible PCM and produce a real WAV across speech, design, music and effects", async () => {
+  const originalFetch = globalThis.fetch, requests = [];
+  const samples = Buffer.from([0, 0, 0xff, 0x7f, 0, 0x80, 1, 0]);
+  globalThis.fetch = async url => {
+    const parsed = new URL(url); requests.push(parsed);
+    if (parsed.pathname.endsWith('/design')) return Response.json({ previews: [{
+      audio_base_64: samples.toString('base64'), generated_voice_id: 'designed-voice', media_type: 'audio/pcm'
+    }] });
+    return new Response(samples);
+  };
+  try {
+    const provider = createElevenLabsAudioProvider({ apiKey: 'test-key' });
+    for (const kind of ['voice-line', 'voice', 'sound', 'music']) {
+      const [option] = await provider.generate({ asset: { ...audioAsset('test', kind),
+        audioSettings: { format: 'wav' }, voiceSettings: { voiceId: 'test-voice', text: 'Hello' } } });
+      assert.equal(requests.at(-1).searchParams.get('output_format'), 'pcm_24000');
+      assert.equal(option.mimeType, 'audio/wav'); assert.equal(option.audioSettings.format, 'wav');
+      const bytes = Buffer.from(option.image);
+      assert.equal(bytes.toString('ascii', 0, 4), 'RIFF'); assert.equal(bytes.toString('ascii', 8, 12), 'WAVE');
+      assert.equal(bytes.readUInt32LE(4), bytes.length - 8);
+      assert.equal(bytes.readUInt16LE(20), 1); assert.equal(bytes.readUInt16LE(22), 1);
+      assert.equal(bytes.readUInt32LE(24), 24000); assert.equal(bytes.readUInt32LE(28), 48000);
+      assert.equal(bytes.readUInt16LE(32), 2); assert.equal(bytes.readUInt16LE(34), 16);
+      assert.equal(bytes.readUInt32LE(40), samples.length);
+      assert.deepEqual(bytes.subarray(44), samples, 'samples are preserved exactly');
+    }
+    const [raw] = await provider.generate({ asset: { ...audioAsset('test', 'voice-line'), audioSettings: { format: 'pcm' }, voiceSettings: { voiceId: 'voice' } } });
+    assert.equal(requests.at(-1).searchParams.get('output_format'), 'pcm_24000');
+    assert.equal(raw.mimeType, 'audio/pcm'); assert.deepEqual(Buffer.from(raw.image), samples);
+    const [custom] = await createElevenLabsAudioProvider({ apiKey: 'test-key', outputFormat: 'pcm_44100' }).generate({
+      asset: { ...audioAsset('test', 'voice-line'), audioSettings: { format: 'wav' }, voiceSettings: { voiceId: 'voice' } }
+    });
+    assert.equal(Buffer.from(custom.image).readUInt32LE(24), 44100, 'explicit higher-tier provider settings remain supported');
+    const [mp3] = await createElevenLabsAudioProvider({ apiKey: 'test-key', outputFormat: 'mp3_44100_128' }).generate({
+      asset: { ...audioAsset('test', 'voice-line'), audioSettings: { format: 'wav' }, voiceSettings: { voiceId: 'voice' } }
+    });
+    assert.equal(mp3.mimeType, 'audio/mpeg'); assert.equal(mp3.audioSettings.format, 'mp3', 'metadata describes the actual provider encoding');
+  } finally { globalThis.fetch = originalFetch; }
+});

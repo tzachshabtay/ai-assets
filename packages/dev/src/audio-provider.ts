@@ -197,15 +197,16 @@ async function generateElevenLabsVoicePreviews(
     for (const preview of body.previews ?? []) {
       if (!preview.audio_base_64 || !preview.generated_voice_id) continue;
 
+      const audio = packageElevenLabsAudio(Buffer.from(preview.audio_base_64, "base64"), format, outputFormat);
       const option = {
-        image: Buffer.from(preview.audio_base_64, "base64"),
-        mimeType: preview.media_type || mimeTypeForAudioFormat(format),
+        image: audio.bytes,
+        mimeType: audio.mimeType,
         prompt,
         model: voiceSettings.model ?? "eleven_multilingual_ttv_v2",
         audioSettings: {
           provider: "elevenlabs",
           ...audioSettings,
-          format
+          format: audio.format
         },
         audioPlayback: request.asset.audioPlayback,
         voiceSettings: {
@@ -273,8 +274,9 @@ async function generateElevenLabsVoiceLine(
       options.voiceLineModel ??
       DEFAULT_VOICE_LINE_MODEL;
     const text = direction ? `[${sanitizeElevenLabsAudioTag(direction)}]\n${line}` : line;
+    const outputFormat = options.outputFormat ?? elevenLabsOutputFormat(format);
     const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`);
-    url.searchParams.set("output_format", options.outputFormat ?? elevenLabsOutputFormat(format));
+    url.searchParams.set("output_format", outputFormat);
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -293,15 +295,16 @@ async function generateElevenLabsVoiceLine(
       );
     }
 
+    const audio = packageElevenLabsAudio(new Uint8Array(await response.arrayBuffer()), format, outputFormat);
     const option = {
-      image: new Uint8Array(await response.arrayBuffer()),
-      mimeType: mimeTypeForAudioFormat(format),
+      image: audio.bytes,
+      mimeType: audio.mimeType,
       prompt: direction ?? request.asset.prompt,
       model,
       audioSettings: {
         provider: "elevenlabs",
         ...audioSettings,
-        format
+        format: audio.format
       },
       audioPlayback: request.asset.audioPlayback,
       voiceSettings: {
@@ -401,30 +404,49 @@ async function generateElevenLabsAudio(
     );
   }
 
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const audio = packageElevenLabsAudio(new Uint8Array(await response.arrayBuffer()), format, outputFormat);
 
   return {
-    image: bytes,
-    mimeType: mimeTypeForAudioFormat(format),
+    image: audio.bytes,
+    mimeType: audio.mimeType,
     prompt,
     model: audioSettings.model ?? (isMusic ? options.musicModel ?? "music_v1" : options.sfxModel ?? "eleven_text_to_sound_v2"),
     audioSettings: {
       provider: "elevenlabs",
       ...audioSettings,
-      format
+      format: audio.format
     },
     durationSeconds: audioSettings.durationSeconds
   };
 }
 
+/** PCM responses contain raw signed 16-bit mono samples, not a WAV container. */
+function packageElevenLabsAudio(bytes: Uint8Array, requestedFormat: AiAudioFormat, outputFormat: string): { bytes: Uint8Array; mimeType: string; format: AiAudioFormat } {
+  const encoding = outputFormat.split("_")[0];
+  let format = ["mp3", "wav", "opus", "pcm", "ogg"].includes(encoding!) ? encoding as AiAudioFormat : requestedFormat;
+  if (requestedFormat === "wav" && encoding === "pcm") {
+    const sampleRate = Number(outputFormat.split("_")[1]);
+    if (!Number.isFinite(sampleRate) || sampleRate <= 0 || bytes.length % 2) throw new Error("ElevenLabs returned invalid 16-bit PCM audio.");
+    const wav = Buffer.alloc(44 + bytes.length);
+    wav.write("RIFF", 0); wav.writeUInt32LE(36 + bytes.length, 4); wav.write("WAVE", 8);
+    wav.write("fmt ", 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(sampleRate, 24); wav.writeUInt32LE(sampleRate * 2, 28);
+    wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
+    wav.write("data", 36); wav.writeUInt32LE(bytes.length, 40); wav.set(bytes, 44);
+    bytes = wav; format = "wav";
+  }
+  return { bytes, format, mimeType: mimeTypeForAudioFormat(format) };
+}
+
 function elevenLabsOutputFormat(format: AiAudioFormat): string {
   switch (format) {
     case "wav":
-      return "pcm_44100";
+      // 44.1 kHz PCM requires Pro; 24 kHz works without that plan restriction.
+      return "pcm_24000";
     case "opus":
       return "opus_48000_32";
     case "pcm":
-      return "pcm_44100";
+      return "pcm_24000";
     case "ogg":
       return "mp3_44100_128";
     case "mp3":
