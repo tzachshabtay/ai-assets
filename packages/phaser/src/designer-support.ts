@@ -4936,6 +4936,11 @@ export function ensureDesignerStyles(): void {
 }
 .ai-game-assets-designer__recording { width: min(760px, calc(100vw - 36px)); }
 .ai-game-assets-designer__recording blockquote { margin: 16px 0; padding: 18px; background: #202936; border-left: 3px solid #819dff; color: #f0f3fa; font-size: 20px; line-height: 1.5; white-space: pre-wrap; }
+.ai-game-assets-designer__recording-copy { display:flex; align-items:center; gap:12px; }
+.ai-game-assets-designer__recording-copy blockquote { flex:1; min-width:0; }
+.ai-game-assets-designer__recording-copy .ai-game-assets-designer__recording-direction { flex:1; margin:0 0 12px; color:#aebbd0; font-size:13px; line-height:1.5; white-space:pre-wrap; }
+.ai-game-assets-designer__recording-editor textarea { box-sizing:border-box; width:100%; min-height:90px; resize:vertical; padding:12px; background:#202936; color:#f0f3fa; border:1px solid #58657a; border-radius:5px; font:inherit; }
+.ai-game-assets-designer__recording [hidden] { display:none!important; }
 .ai-game-assets-designer__recording-takes { display: grid; gap: 8px; max-height: 35vh; overflow: auto; }
 .ai-game-assets-designer__recording-take { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px; border: 1px solid #384251; border-radius: 6px; }
 .ai-game-assets-designer__recording-take audio { flex: 1; min-width: 180px; height: 32px; }

@@ -14,7 +14,7 @@ export function voiceLineDirection(asset: AiAssetDefinition): string {
   if (asset.voiceSettings?.direction === "") return "";
   const text = asset.voiceSettings?.text ?? version?.voiceSettings?.text ?? asset.prompt;
   const normalized = (value: string) => value.replace(/[\[\]]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
-  for (const value of [asset.prompt, asset.voiceSettings?.direction, version?.voiceSettings?.direction, version?.prompt]) {
+  for (const value of [asset.voiceSettings?.direction, asset.prompt, version?.voiceSettings?.direction, version?.prompt]) {
     if (value?.trim() && normalized(value) !== normalized(text)) return value.trim();
   }
   return "";

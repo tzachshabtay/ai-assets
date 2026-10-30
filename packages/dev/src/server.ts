@@ -30,6 +30,7 @@ import {
   type AssetStoreOptions,
   deleteAssetVersion,
   selectVoiceLineVersion,
+  updateVoiceLine,
   ensureTargetVariant,
   readManifest,
   saveGeneratedOption,
@@ -540,6 +541,12 @@ async function routeRequest(
       filePath: result.filePath
     };
     sendJson(response, 200, responseBody);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/__ai-assets/update-voice-line") {
+    const body = await readJson<{ assetId: string; text?: string; direction?: string; deferManifestModuleWrite?: boolean }>(request);
+    sendJson(response, 200, { manifest: await updateVoiceLine(options, body) });
     return;
   }
 

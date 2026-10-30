@@ -10,12 +10,13 @@ export function openVoiceLineRecordingDialog(options: {
   manifest: AiAssetManifest;
   lineAssetIds: string[];
   voiceName: string;
-  client: Pick<AiAssetDebugClient, "save" | "deleteVersion" | "selectVoiceLineVersion"> & Partial<Pick<AiAssetDebugClient, "syncManifestModule">>;
+  client: Pick<AiAssetDebugClient, "save" | "deleteVersion" | "selectVoiceLineVersion" | "updateVoiceLine"> & Partial<Pick<AiAssetDebugClient, "syncManifestModule">>;
   resolveAssetUrl(file: string): string;
   onManifest(manifest: AiAssetManifest, assetId: string, activeChanged: boolean): void;
 }) {
   let manifest = options.manifest, index = 0, busy = false, disposed = false, requestingMicrophone = false;
   let moduleDirty = false;
+  let editing: "text" | "direction" | undefined;
   const deferManifestModuleWrite = Boolean(options.client.syncManifestModule);
   let capture: Awaited<ReturnType<typeof startVoiceRecording>> | undefined;
   let unsaved: UnsavedTake | undefined;
@@ -31,6 +32,11 @@ export function openVoiceLineRecordingDialog(options: {
   const progress = document.createElement("progress"); progress.max = options.lineAssetIds.length; progress.setAttribute("aria-label", "Current voice line");
   const script = document.createElement("blockquote");
   const direction = document.createElement("p");
+  direction.className = "ai-game-assets-designer__recording-direction";
+  const scriptRow = document.createElement("div"); scriptRow.className = "ai-game-assets-designer__recording-copy";
+  const directionRow = document.createElement("div"); directionRow.className = "ai-game-assets-designer__recording-copy";
+  const editor = document.createElement("div"); editor.className = "ai-game-assets-designer__recording-editor";
+  const editInput = document.createElement("textarea"); editInput.rows = 3;
   const status = document.createElement("p"); status.setAttribute("role", "status");
   const takes = document.createElement("div"); takes.className = "ai-game-assets-designer__recording-takes";
   const button = (label: string, action: () => void) => {
@@ -45,8 +51,8 @@ export function openVoiceLineRecordingDialog(options: {
   let resolveClosed!: () => void;
   const closed = new Promise<void>(resolve => { resolveClosed = resolve; });
   const close = async (force = false) => {
-    if (!force && ((busy && !requestingMicrophone) || capture || unsaved)) {
-      announce("Stop recording, then save or delete the unsaved take before closing."); return;
+    if (!force && ((busy && !requestingMicrophone) || capture || unsaved || editing)) {
+      announce("Save or cancel your text edit, and stop recording or save any unsaved take before closing."); return;
     }
     if (!force && moduleDirty && options.client.syncManifestModule) {
       busy = true; render(); announce("Finishing recording session…");
@@ -67,7 +73,7 @@ export function openVoiceLineRecordingDialog(options: {
     modal.remove(); if (previousFocus?.isConnected) previousFocus.focus(); resolveClosed();
   };
   const protect = (event: BeforeUnloadEvent) => {
-    if (busy || capture || unsaved || (moduleDirty && deferManifestModuleWrite)) { event.preventDefault(); event.returnValue = ""; }
+    if (busy || capture || unsaved || editing || (moduleDirty && deferManifestModuleWrite)) { event.preventDefault(); event.returnValue = ""; }
   };
   window.addEventListener("beforeunload", protect);
   const run = async (action: () => Promise<void>) => {
@@ -96,9 +102,33 @@ export function openVoiceLineRecordingDialog(options: {
     publish(saved.manifest, id, activate);
     announce(activate ? "Take saved and starred as the favorite." : "Take saved. Star it to use this recording in the game.");
   };
+  const startEdit = (field: "text" | "direction") => {
+    if (busy || capture || unsaved || editing) return;
+    editing = field;
+    editInput.value = field === "text" ? script.textContent ?? "" : voiceLineDirection(manifest.assets[options.lineAssetIds[index]!]!);
+    editInput.setAttribute("aria-label", field === "text" ? "Text to say" : "Director notes");
+    render(); editInput.focus();
+  };
+  const editScript = button("Edit", () => startEdit("text")); editScript.setAttribute("aria-label", "Edit line");
+  const editDirection = button("Edit", () => startEdit("direction")); editDirection.setAttribute("aria-label", "Edit director notes");
+  const saveEdit = button("Save and promote", () => void run(async () => {
+    const field = editing;
+    if (!field || (field === "text" && !editInput.value.trim())) return;
+    const id = options.lineAssetIds[index]!;
+    announce("Promoting text…");
+    const updated = await options.client.updateVoiceLine({ assetId: id, [field]: editInput.value, deferManifestModuleWrite });
+    editing = undefined;
+    publish(updated, id, false);
+    announce("Text promoted. Existing audio is unchanged; record a new take if the words have changed.");
+  }));
+  const cancelEdit = button("Cancel edit", () => { editing = undefined; announce(""); render(); });
+  editInput.oninput = () => { saveEdit.disabled = busy || (editing === "text" && !editInput.value.trim()); };
+  const editActions = document.createElement("div"); editActions.className = "ai-game-assets-designer__modal-actions";
+  editActions.append(cancelEdit, saveEdit); editor.append(editInput, editActions);
+  scriptRow.append(script, editScript); directionRow.append(direction, editDirection);
   const record = button("Record", () => {
     if (capture) { capture.stop(); return; }
-    if (busy || unsaved) return;
+    if (busy || unsaved || editing) return;
     void (async () => {
       busy = true; requestingMicrophone = true; render(); announce("Waiting for microphone access…");
       const id = options.lineAssetIds[index]!;
@@ -125,9 +155,9 @@ export function openVoiceLineRecordingDialog(options: {
       }
     })();
   });
-  const previous = button("Previous", () => { if (!busy && !capture && !unsaved && index > 0) { stopPlayback(); index--; announce(""); render(); } });
+  const previous = button("Previous", () => { if (!busy && !capture && !unsaved && !editing && index > 0) { stopPlayback(); index--; announce(""); render(); } });
   const next = button("Next", () => {
-    if (busy || capture || unsaved) return;
+    if (busy || capture || unsaved || editing) return;
     if (index === options.lineAssetIds.length - 1) close();
     else { stopPlayback(); index++; announce(""); render(); }
   });
@@ -136,20 +166,25 @@ export function openVoiceLineRecordingDialog(options: {
   actions.append(exit, previous, next);
   const recordActions = document.createElement("div"); recordActions.className = "ai-game-assets-designer__modal-actions"; recordActions.append(record);
   const hint = document.createElement("p"); hint.textContent = "★ Favorite = the recording used in the game. All other takes are saved in Previous versions. Next skips lines you do not record.";
-  card.append(title, counter, progress, script, direction, recordActions, status, takes, hint, actions); modal.append(card);
+  card.append(title, counter, progress, scriptRow, directionRow, editor, recordActions, status, takes, hint, actions); modal.append(card);
   function render() {
     const id = options.lineAssetIds[index]!, asset = manifest.assets[id]!;
     const active = asset.versions[asset.activeVersion];
     counter.textContent = `Line ${index + 1} of ${options.lineAssetIds.length}`;
     progress.value = index + 1;
     script.textContent = asset.voiceSettings?.text ?? active?.voiceSettings?.text ?? asset.prompt;
-    direction.textContent = voiceLineDirection(asset);
-    direction.hidden = !direction.textContent;
+    direction.textContent = voiceLineDirection(asset) || "No director notes.";
+    scriptRow.hidden = editing === "text"; directionRow.hidden = editing === "direction";
+    editor.hidden = !editing;
+    (editing === "text" ? scriptRow : directionRow).after(editor);
+    editScript.disabled = editDirection.disabled = busy || Boolean(capture || unsaved || editing);
+    editInput.disabled = cancelEdit.disabled = busy;
+    saveEdit.disabled = busy || (editing === "text" && !editInput.value.trim());
     record.textContent = capture ? "Stop recording" : "Record";
-    record.disabled = busy || Boolean(unsaved);
-    previous.disabled = busy || Boolean(capture || unsaved) || index === 0;
-    next.disabled = busy || Boolean(capture || unsaved);
-    exit.disabled = (busy && !requestingMicrophone) || Boolean(capture || unsaved);
+    record.disabled = busy || Boolean(unsaved || editing);
+    previous.disabled = busy || Boolean(capture || unsaved || editing) || index === 0;
+    next.disabled = busy || Boolean(capture || unsaved || editing);
+    exit.disabled = (busy && !requestingMicrophone) || Boolean(capture || unsaved || editing);
     next.textContent = index === options.lineAssetIds.length - 1 ? "Done" : "Next";
     stopPlayback(); takes.replaceChildren();
     const versions = Object.entries(asset.versions).filter(([, version]) => version.file);
@@ -174,7 +209,7 @@ export function openVoiceLineRecordingDialog(options: {
         announce("Take deleted.");
       }));
       remove.setAttribute("aria-label", `Delete take ${i + 1}`);
-      favorite.disabled = remove.disabled = busy || Boolean(capture || unsaved);
+      favorite.disabled = remove.disabled = busy || Boolean(capture || unsaved || editing);
       audio.hidden = Boolean(capture);
       row.append(label, audio, favorite, remove); takes.append(row);
     }
@@ -191,9 +226,9 @@ export function openVoiceLineRecordingDialog(options: {
     if (!versions.length && !unsaved) { const empty = document.createElement("p"); empty.textContent = "No takes yet. Press Record when ready."; takes.append(empty); }
   }
   modal.addEventListener("keydown", event => {
-    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
+    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (editing && !busy) { editing = undefined; render(); } else close(); }
     if (event.key === "Tab") {
-      const buttons = [...modal.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+      const buttons = [...modal.querySelectorAll<HTMLElement>("button:not(:disabled), textarea:not(:disabled), audio[controls], a[href]")].filter(element => !element.closest("[hidden]"));
       if (event.shiftKey && document.activeElement === buttons[0]) { event.preventDefault(); buttons.at(-1)?.focus(); }
       else if (!event.shiftKey && document.activeElement === buttons.at(-1)) { event.preventDefault(); buttons[0]?.focus(); }
     }

@@ -32,6 +32,15 @@ test('recorded takes persist independently; favorite switches without copies and
     assert.equal(saved.assets.line.activeVersion, 'take-2');
     assert.deepEqual(await readdir(assetsDir), files, 'Favoriting never duplicates audio');
     assert.match(await readFile(path.join(root, 'assets.ts'), 'utf8'), /take-2/);
+    saved = (await post('update-voice-line', { assetId: 'line', text: 'Good morning!', direction: 'Cheerfully', deferManifestModuleWrite: true })).manifest;
+    assert.equal(saved.assets.line.voiceSettings.text, 'Good morning!');
+    assert.equal(saved.assets.line.versions['take-2'].voiceSettings.text, 'Good morning!');
+    assert.equal(saved.assets.line.versions['take-1'].voiceSettings.text, 'Hello!', 'Other take metadata stays intact');
+    assert.equal(saved.assets.line.voiceSettings.direction, 'Cheerfully');
+    assert.deepEqual(await readdir(assetsDir), files, 'Text edits do not copy or remove audio');
+    saved = (await post('select-voice-line-version', { assetId: 'line', versionName: 'take-1' })).manifest;
+    assert.equal(saved.assets.line.versions['take-1'].voiceSettings.text, 'Good morning!', 'Favorite switching cannot revert promoted wording');
+    await post('select-voice-line-version', { assetId: 'line', versionName: 'take-2' });
     saved = (await post('delete-version', { assetId: 'line', versionName: 'take-1' })).manifest;
     assert.equal(saved.assets.line.activeVersion, 'take-2');
     assert.deepEqual(Object.keys(saved.assets.line.versions), ['take-2']);
@@ -39,5 +48,15 @@ test('recorded takes persist independently; favorite switches without copies and
     assert.equal(bad.ok, false, 'Base voices cannot accidentally be modified');
     saved = (await post('delete-version', { assetId: 'line', versionName: 'take-2', replaceActiveVoiceLine: true })).manifest;
     assert.equal(saved.assets.line.activeVersion, ''); assert.deepEqual(saved.assets.line.versions, {});
+    saved = (await post('update-voice-line', { assetId: 'line', text: 'No audio needed.', direction: '' })).manifest;
+    assert.equal(saved.assets.line.voiceSettings.text, 'No audio needed.');
+    assert.equal(saved.assets.line.voiceSettings.direction, '');
+    assert.deepEqual(saved.assets.line.versions, {});
+    assert.match(await readFile(path.join(root, 'assets.ts'), 'utf8'), /No audio needed/);
+    for (const body of [{ assetId: 'voice', text: 'Wrong kind' }, { assetId: 'line', text: '  ' }, { assetId: 'line', direction: 2 }]) {
+      const invalid = await fetch(`${origin}/__ai-assets/update-voice-line`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      assert.equal(invalid.ok, false);
+    }
+
   } finally { await server.close(); await rm(root, { recursive: true, force: true }); }
 });

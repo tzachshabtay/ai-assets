@@ -483,6 +483,34 @@ export async function saveStyleGuide(
   return manifest;
 }
 
+/** Promote authored speech metadata without regenerating or copying recordings. */
+export async function updateVoiceLine(
+  options: AssetStoreOptions,
+  input: { assetId: string; text?: string; direction?: string; deferManifestModuleWrite?: boolean }
+): Promise<AiAssetManifest> {
+  if (input.text !== undefined && (typeof input.text !== "string" || !input.text.trim())) throw new Error("Spoken text cannot be empty.");
+  if (input.direction !== undefined && typeof input.direction !== "string") throw new Error("Director notes must be text.");
+  if (input.text === undefined && input.direction === undefined) throw new Error("No voice-line edit was supplied.");
+  const manifest = await readManifest(options.manifestPath);
+  const asset = manifest.assets[input.assetId];
+  if (asset?.kind !== "voice-line") throw new Error("Only voice lines can edit spoken text and director notes.");
+  const active = asset.versions[asset.activeVersion];
+  const previousText = asset.voiceSettings?.text ?? active?.voiceSettings?.text ?? asset.prompt;
+  const normalized = (value: string) => value.replace(/[\[\]]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  const previousDirection = asset.voiceSettings?.direction ?? active?.voiceSettings?.direction
+    ?? (normalized(asset.prompt) === normalized(previousText) ? "" : asset.prompt);
+  const changes = { ...(input.text !== undefined ? { text: input.text.trim() } : {}),
+    direction: input.direction !== undefined ? input.direction.trim() : normalized(previousDirection) === normalized(previousText) ? "" : previousDirection };
+  asset.voiceSettings = { ...active?.voiceSettings, ...asset.voiceSettings, ...changes };
+  // Runtime clients can resolve the promoted version first. Keep its metadata in sync,
+  // while other takes and the original source prompt remain available as history.
+  if (active) active.voiceSettings = { ...active.voiceSettings, ...changes };
+  assertManifest(manifest);
+  await writeManifest(options.manifestPath, manifest);
+  if (options.manifestModulePath && !input.deferManifestModuleWrite) await writeManifestModule(options.manifestModulePath, manifest);
+  return manifest;
+}
+
 /** Switch a recorded line's favorite without duplicating its audio file. */
 export async function selectVoiceLineVersion(
   options: AssetStoreOptions,
@@ -494,7 +522,8 @@ export async function selectVoiceLineVersion(
   const version = asset.versions[input.versionName];
   if (!version?.file) throw new Error("Unknown voice-line recording version.");
   asset.activeVersion = input.versionName;
-  // Keep the line's authored text/direction; the version still records what was read.
+  // Favoriting another take must not revert an explicitly authored script or direction.
+  version.voiceSettings = { ...version.voiceSettings, ...asset.voiceSettings };
   assertManifest(manifest);
   await writeManifest(options.manifestPath, manifest);
   if (options.manifestModulePath && !input.deferManifestModuleWrite) await writeManifestModule(options.manifestModulePath, manifest);
@@ -528,6 +557,10 @@ export async function deleteAssetVersion(
     versions: remainingVersions,
     activeVersion: deletingActive ? Object.keys(remainingVersions)[0] ?? "" : asset.activeVersion
   };
+  if (deletingActive && asset.kind === "voice-line") {
+    const next = remainingVersions[manifest.assets[input.assetId]!.activeVersion];
+    if (next) next.voiceSettings = { ...next.voiceSettings, ...asset.voiceSettings };
+  }
 
   assertManifest(manifest);
 

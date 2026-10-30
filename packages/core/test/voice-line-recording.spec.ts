@@ -39,6 +39,13 @@ test.beforeEach(async ({ page, context }) => {
     w.manifest = { schemaVersion: 1, assets: { first: line('first', 'I will rescue the king!'), second: line('second', 'The forest is quiet.') } };
     w.saved = []; w.favorites = []; w.deleted = []; w.syncCount = 0;
     const client = {
+      async updateVoiceLine(request: any) {
+        if (w.failEdit) throw new Error('Text storage unavailable');
+        w.edits ??= []; w.edits.push(request);
+        const asset = w.manifest.assets[request.assetId];
+        for (const field of ['text', 'direction']) if (request[field] !== undefined) asset.voiceSettings[field] = request[field].trim();
+        return structuredClone(w.manifest);
+      },
       async syncManifestModule() {
         if (w.failSync) throw new Error('Module unavailable');
         w.syncCount++; return structuredClone(w.manifest);
@@ -173,4 +180,44 @@ test('closing retries a failed module refresh without regenerating or losing sav
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(await page.evaluate(() => [(window as any).saved.length, (window as any).syncCount])).toEqual([1, 1]);
+});
+
+
+test('edit and promote script and smaller director notes; failures preserve drafts and navigation keeps edits', async ({ page }) => {
+  await page.getByRole('button', { name: 'Edit director notes', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Director notes', exact: true }).fill('Quietly, with growing resolve.');
+  await page.getByRole('button', { name: 'Save and promote', exact: true }).click();
+  const notes = page.getByText('Quietly, with growing resolve.', { exact: true });
+  await expect(notes).toBeVisible();
+  const font = (locator: any) => locator.evaluate((el: Element) => parseFloat(getComputedStyle(el).fontSize));
+  expect(await font(notes)).toBeLessThan(await font(page.locator('blockquote')));
+  expect((await notes.boundingBox())!.y).toBeGreaterThan((await page.locator('blockquote').boundingBox())!.y);
+  await page.getByRole('button', { name: 'Edit line', exact: true }).click();
+  const input = page.getByRole('textbox', { name: 'Text to say', exact: true });
+  await input.fill('');
+  await expect(page.getByRole('button', { name: 'Save and promote', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  await input.fill('The king can count on me.');
+  await page.evaluate(() => { (window as any).failEdit = true; });
+  await page.getByRole('button', { name: 'Save and promote', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Text storage unavailable');
+  await expect(input).toHaveValue('The king can count on me.');
+  await page.evaluate(() => { (window as any).failEdit = false; });
+  await page.getByRole('button', { name: 'Save and promote', exact: true }).click();
+  await expect(page.getByText('The king can count on me.', { exact: true })).toBeVisible();
+  await recordTake(page);
+  expect(await page.evaluate(() => (window as any).saved[0].voiceSettings)).toMatchObject({ text: 'The king can count on me.', direction: 'Quietly, with growing resolve.' });
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByRole('button', { name: 'Previous', exact: true }).click();
+  await expect(notes).toBeVisible();
+  await page.getByRole('button', { name: 'Edit director notes', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Director notes', exact: true }).fill('');
+  await page.getByRole('button', { name: 'Save and promote', exact: true }).click();
+  await expect(page.getByText('No director notes.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Edit line', exact: true }).click();
+  await input.fill('Discard me'); await page.keyboard.press('Escape');
+  await expect(page.getByText('The king can count on me.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.evaluate(() => (window as any).openRecording());
+  await expect(page.getByText('The king can count on me.', { exact: true })).toBeVisible();
 });
