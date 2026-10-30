@@ -1,3 +1,4 @@
+import { openVoiceLineRecordingDialog } from "./voice-line-recording-dialog.js";
 import { openVoiceLineRegenerationDialog } from "./voice-line-regeneration-dialog.js";
 import { DesignerGenerationRecovery, type PendingDesignerOption } from "./generation-recovery.js";
 import { installAiAssetDesignerViewport, type AiAssetDesignerViewportOptions, type DesignerViewportSceneLike } from './designer-viewport.js';
@@ -259,6 +260,7 @@ export function installAiAssetDesigner(
   let editedCurrentOption: GeneratedDebugOption | undefined;
   let previewedVersionName: string | undefined;
   const pendingOptions = new Map<string, PendingDesignerOption>();
+  let recordingDialog: ReturnType<typeof openVoiceLineRecordingDialog> | undefined;
   let voiceLineDialog: ReturnType<typeof openVoiceLineRegenerationDialog> | undefined;
   const generatedByAsset = new Map<string, GeneratedDebugOption[]>();
   const recoveryTouched = new Set<string>();
@@ -509,6 +511,11 @@ export function installAiAssetDesigner(
     const hasPromotedVoice = Boolean(promotedVoiceId(manifest, baseVoiceAssetId));
     const hasPendingBaseVoice = pendingOptions.has(baseVoiceAssetId);
 
+    elements.recordAllLinesButton.hidden = !isBaseVoiceView;
+    elements.recordAllLinesButton.disabled = !isBaseVoiceView || lineAssetIds.length === 0 ||
+      missingTargetLineAssetIds.length > 0 || activeFirstDrafts || Boolean(activeGeneration) || activePromotionId !== undefined;
+    elements.recordAllLinesButton.title = missingTargetLineAssetIds.length
+      ? "Create target variants for the linked voice lines first." : "Record voice lines with your microphone. No generated base voice is required.";
     elements.regenerateAllLinesButton.textContent = "Regenerate all lines";
     elements.regenerateAllLinesButton.hidden = !isBaseVoiceView;
     elements.regenerateAllLinesButton.disabled =
@@ -2306,6 +2313,53 @@ export function installAiAssetDesigner(
     }
   });
 
+  elements.recordAllLinesButton.addEventListener("click", async () => {
+    if (voiceLineDialog || recordingDialog || activeGeneration || activeFirstDrafts || activePromotionId !== undefined) return;
+    const voiceAssetId = selectedAssetId;
+    const plan = voiceLineRegenerationPlan(manifest, voiceAssetId, selectedTargetId);
+    if (manifest.assets[voiceAssetId]?.kind !== "voice" || !plan.lineAssetIds.length || plan.missingTargetLineAssetIds.length) return;
+    const selectedLineAssetIds = [...pendingOptions.keys()];
+    const missing = voiceLinesForRegeneration(manifest, plan.lineAssetIds, "missing", selectedLineAssetIds);
+    const setup = openVoiceLineRegenerationDialog({ root: elements.root, mode: "record",
+      voiceName: readableAssetName(plan.baseVoiceAssetId), allCount: plan.lineAssetIds.length,
+      missingCount: missing.length, onStop() {} });
+    voiceLineDialog = setup;
+    setVoiceLineBatchControlsLocked(true);
+    const scope = await setup.selection;
+    voiceLineDialog = undefined;
+    if (!scope || destroyed) {
+      if (!destroyed) { setVoiceLineBatchControlsLocked(false); syncPromoteAllButton(); }
+      return;
+    }
+    const currentPromotionId = ++promotionId;
+    activePromotionId = currentPromotionId;
+    const dialog = openVoiceLineRecordingDialog({ root: elements.root, manifest,
+      lineAssetIds: voiceLinesForRegeneration(manifest, plan.lineAssetIds, scope, selectedLineAssetIds),
+      voiceName: readableAssetName(plan.baseVoiceAssetId), client, resolveAssetUrl,
+      onManifest(updated, assetId, activeChanged) {
+        manifest = updated;
+        if (activeChanged) {
+          pendingOptions.delete(assetId); persistRecovery(assetId);
+          resolveDeferredVoiceLinePendingOption(assetId);
+        }
+        options.onManifestUpdated?.(manifest);
+        if (activeChanged) {
+          const asset = manifest.assets[assetId]!;
+          const file = asset.versions[asset.activeVersion]?.file;
+          if (file) (options.onAssetReady ?? options.onPreview)(assetId, resolveAssetUrl(file), asset);
+        }
+      }
+    });
+    recordingDialog = dialog;
+    await dialog.closed;
+    if (recordingDialog === dialog) recordingDialog = undefined;
+    if (activePromotionId === currentPromotionId) activePromotionId = undefined;
+    if (!destroyed) {
+      setVoiceLineBatchControlsLocked(false); syncTargetAsset(plan.baseVoiceAssetId);
+      renderAssetBrowser(); syncPromoteAllButton(); syncMixTilesetButton();
+    }
+  });
+
   elements.regenerateAllLinesButton.addEventListener("click", async () => {
     if (activeVoiceLineRegeneration) {
       if (!activeVoiceLineRegeneration.controller.signal.aborted) {
@@ -3840,6 +3894,7 @@ export function installAiAssetDesigner(
       dockPanel.destroy();
       closeScaledVariants?.();
       voiceLineDialog?.close();
+      recordingDialog?.close();
       elements.root.remove();
     }
   };

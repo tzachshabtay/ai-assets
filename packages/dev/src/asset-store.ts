@@ -77,6 +77,8 @@ export type SaveStyleGuideInput = {
 };
 
 export type DeleteAssetVersionInput = {
+  replaceActiveVoiceLine?: boolean;
+  deferManifestModuleWrite?: boolean;
   assetId: string;
   versionName: string;
 };
@@ -481,6 +483,24 @@ export async function saveStyleGuide(
   return manifest;
 }
 
+/** Switch a recorded line's favorite without duplicating its audio file. */
+export async function selectVoiceLineVersion(
+  options: AssetStoreOptions,
+  input: { assetId: string; versionName: string; deferManifestModuleWrite?: boolean }
+): Promise<AiAssetManifest> {
+  const manifest = await readManifest(options.manifestPath);
+  const asset = manifest.assets[input.assetId];
+  if (asset?.kind !== "voice-line") throw new Error("Only voice lines can select a recording favorite.");
+  const version = asset.versions[input.versionName];
+  if (!version?.file) throw new Error("Unknown voice-line recording version.");
+  asset.activeVersion = input.versionName;
+  // Keep the line's authored text/direction; the version still records what was read.
+  assertManifest(manifest);
+  await writeManifest(options.manifestPath, manifest);
+  if (options.manifestModulePath && !input.deferManifestModuleWrite) await writeManifestModule(options.manifestModulePath, manifest);
+  return manifest;
+}
+
 export async function deleteAssetVersion(
   options: AssetStoreOptions,
   input: DeleteAssetVersionInput
@@ -496,7 +516,8 @@ export async function deleteAssetVersion(
     throw new Error(`Unknown version "${input.versionName}" for AI asset "${input.assetId}".`);
   }
 
-  if (asset.activeVersion === input.versionName) {
+  const deletingActive = asset.activeVersion === input.versionName;
+  if (deletingActive && !(input.replaceActiveVoiceLine === true && asset.kind === "voice-line")) {
     throw new Error(`Cannot delete active version "${input.versionName}" for AI asset "${input.assetId}".`);
   }
 
@@ -504,14 +525,15 @@ export async function deleteAssetVersion(
   const { [input.versionName]: _deleted, ...remainingVersions } = asset.versions;
   manifest.assets[input.assetId] = {
     ...asset,
-    versions: remainingVersions
+    versions: remainingVersions,
+    activeVersion: deletingActive ? Object.keys(remainingVersions)[0] ?? "" : asset.activeVersion
   };
 
   assertManifest(manifest);
 
   await writeManifest(options.manifestPath, manifest);
 
-  if (options.manifestModulePath) {
+  if (options.manifestModulePath && !input.deferManifestModuleWrite) {
     await writeManifestModule(options.manifestModulePath, manifest);
   }
 

@@ -172,6 +172,8 @@ export type SaveDebugOptionResult = {
 };
 
 export type DeleteDebugVersionRequest = {
+  replaceActiveVoiceLine?: boolean;
+  deferManifestModuleWrite?: boolean;
   assetId: string;
   versionName: string;
 };
@@ -489,6 +491,14 @@ export class AiAssetDebugClient {
 
     const body = await response.json() as { manifest: AiAssetManifest };
     return body.manifest;
+  }
+
+  async selectVoiceLineVersion(request: { assetId: string; versionName: string; deferManifestModuleWrite?: boolean }): Promise<AiAssetManifest> {
+    const response = await fetchDebugEndpoint(`${this.endpoint}/__ai-assets/select-voice-line-version`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request)
+    });
+    if (!response.ok) throw new Error(await responseErrorMessage(response));
+    return (await response.json() as { manifest: AiAssetManifest }).manifest;
   }
 
   async deleteVersion(request: DeleteDebugVersionRequest): Promise<AiAssetManifest> {

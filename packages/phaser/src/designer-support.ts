@@ -69,6 +69,7 @@ export type DesignerElements = {
   deriveButton: HTMLButtonElement;
   regenerateButton: HTMLButtonElement;
   regenerateAllLinesButton: HTMLButtonElement;
+  recordAllLinesButton: HTMLButtonElement;
   mixTilesetButton: HTMLButtonElement;
   versionsButton: HTMLButtonElement;
   promoteButton: HTMLButtonElement;
@@ -278,6 +279,11 @@ export function createDesignerElements(
   regenerateAllLinesButton.textContent = "Regenerate all lines";
   regenerateAllLinesButton.hidden = true;
 
+  const recordAllLinesButton = document.createElement("button");
+  recordAllLinesButton.type = "button";
+  recordAllLinesButton.textContent = "Record all lines";
+  recordAllLinesButton.hidden = true;
+
   const mixTilesetButton = document.createElement("button");
   mixTilesetButton.type = "button";
   mixTilesetButton.textContent = "Mix tileset";
@@ -310,6 +316,7 @@ export function createDesignerElements(
   actions.append(
     regenerateButton,
     regenerateAllLinesButton,
+    recordAllLinesButton,
     mixTilesetButton,
     uploadButton,
     deriveButton,
@@ -407,6 +414,7 @@ export function createDesignerElements(
     deriveButton,
     regenerateButton,
     regenerateAllLinesButton,
+    recordAllLinesButton,
     mixTilesetButton,
     versionsButton,
     promoteButton,
@@ -4926,6 +4934,15 @@ export function ensureDesignerStyles(): void {
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
   padding: 14px;
 }
+.ai-game-assets-designer__recording { width: min(760px, calc(100vw - 36px)); }
+.ai-game-assets-designer__recording blockquote { margin: 16px 0; padding: 18px; background: #202936; border-left: 3px solid #819dff; color: #f0f3fa; font-size: 20px; line-height: 1.5; white-space: pre-wrap; }
+.ai-game-assets-designer__recording-takes { display: grid; gap: 8px; max-height: 35vh; overflow: auto; }
+.ai-game-assets-designer__recording-take { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px; border: 1px solid #384251; border-radius: 6px; }
+.ai-game-assets-designer__recording-take audio { flex: 1; min-width: 180px; height: 32px; }
+.ai-game-assets-designer__recording-take button { background: #273142; color: #fff; border: 1px solid #58657a; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+.ai-game-assets-designer__recording-take button[aria-pressed="true"] { color: #ffd16b; }
+.ai-game-assets-designer__recording-take button:disabled { opacity: .45; cursor: default; }
+.ai-game-assets-designer__recording-take a { color: #b2c7ff; }
 .ai-game-assets-designer__voice-batch h2 { margin: 0; font-size: 20px; }
 .ai-game-assets-designer__voice-batch p { color: #c3cbd9; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .ai-game-assets-designer__voice-batch progress { width: 100%; height: 18px; accent-color: #819dff; }

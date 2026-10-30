@@ -29,6 +29,7 @@ import type { AiAudioProvider } from "./audio-provider.js";
 import {
   type AssetStoreOptions,
   deleteAssetVersion,
+  selectVoiceLineVersion,
   ensureTargetVariant,
   readManifest,
   saveGeneratedOption,
@@ -542,14 +543,25 @@ async function routeRequest(
     return;
   }
 
+  if (request.method === "POST" && url.pathname === "/__ai-assets/select-voice-line-version") {
+    const body = await readJson<{ assetId: string; versionName: string; deferManifestModuleWrite?: boolean }>(request);
+    if (typeof body.versionName !== "string") throw new Error("A recording version is required.");
+    sendJson(response, 200, { manifest: await selectVoiceLineVersion(options, body) });
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/__ai-assets/delete-version") {
     const body = await readJson<{
       assetId: string;
       versionName: string;
+      deferManifestModuleWrite?: boolean;
+      replaceActiveVoiceLine?: boolean;
     }>(request);
     const manifest = await deleteAssetVersion(options, {
       assetId: body.assetId,
-      versionName: body.versionName
+      versionName: body.versionName,
+      replaceActiveVoiceLine: body.replaceActiveVoiceLine,
+      deferManifestModuleWrite: body.deferManifestModuleWrite
     });
 
     sendJson(response, 200, { manifest });

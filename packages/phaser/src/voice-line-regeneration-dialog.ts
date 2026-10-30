@@ -3,28 +3,31 @@ import type { VoiceLineRegenerationProgress, VoiceLineRegenerationScope } from "
 /** A batch stays visible until acknowledged; stopping never discards the current paid result. */
 export function openVoiceLineRegenerationDialog(options: {
   root: HTMLElement;
+  mode?: "generate" | "record";
   voiceName: string;
   allCount: number;
   missingCount: number;
   onStop(): void;
 }) {
+  const recording = options.mode === "record";
+  const title = recording ? "Record voice lines" : "Generate voice lines";
   const previousFocus = document.activeElement as HTMLElement | null;
   const modal = document.createElement("div");
   modal.className = "ai-game-assets-designer__modal";
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
-  modal.setAttribute("aria-label", "Generate voice lines");
+  modal.setAttribute("aria-label", title);
   const card = document.createElement("div");
   card.className = "ai-game-assets-designer__modal-card ai-game-assets-designer__voice-batch";
   const heading = document.createElement("h2");
-  heading.textContent = "Generate voice lines";
+  heading.textContent = title;
   const voice = document.createElement("p");
   voice.textContent = options.voiceName;
   const label = document.createElement("label");
   label.className = "ai-game-assets-designer__field";
-  label.textContent = "Lines to generate";
+  label.textContent = recording ? "Lines to record" : "Lines to generate";
   const scope = document.createElement("select");
-  scope.setAttribute("aria-label", "Lines to generate");
+  scope.setAttribute("aria-label", recording ? "Lines to record" : "Lines to generate");
   for (const [value, text] of [
     ["missing", `Only missing recordings (${options.missingCount})`],
     ["all", `All lines (${options.allCount})`]
@@ -50,7 +53,7 @@ export function openVoiceLineRegenerationDialog(options: {
   cancel.textContent = "Cancel";
   const start = document.createElement("button");
   start.type = "button";
-  start.textContent = "Start generation";
+  start.textContent = recording ? "Start recording" : "Start generation";
   actions.append(cancel, start);
   card.append(heading, voice, label, explanation, progress, count, status, actions);
   modal.append(card);
@@ -68,15 +71,22 @@ export function openVoiceLineRegenerationDialog(options: {
   };
   const sync = () => {
     const missing = scope.value === "missing";
-    explanation.textContent = missing
+    explanation.textContent = recording
+      ? "Record each line with your microphone. Keep multiple takes and star your favorite to promote it. Other takes stay in version history."
+      : missing
       ? "Keep selected and promoted recordings. Generate and promote one recording for each remaining line."
       : "Generate and promote one new recording for every line, replacing its selected or active recording. Previous promoted versions are kept.";
     const total = missing ? options.missingCount : options.allCount;
     start.disabled = total === 0;
-    status.textContent = total === 0 ? "Every line already has a selected or promoted recording." : "Uses your configured voice provider and generation credits.";
+    status.textContent = total === 0 ? "Every line already has a selected or promoted recording." : recording ? "Microphone access is requested when you press Record. You can skip lines and return to them." : "Uses your configured voice provider and generation credits.";
   };
   scope.addEventListener("change", sync);
   start.addEventListener("click", () => {
+    if (recording) {
+      resolveSelection(scope.value as VoiceLineRegenerationScope);
+      close();
+      return;
+    }
     state = "running";
     scope.disabled = true;
     start.hidden = true;
