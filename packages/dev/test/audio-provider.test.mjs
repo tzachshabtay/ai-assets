@@ -278,7 +278,7 @@ test("spoken text mirrored into prompts or legacy directions is sent exactly onc
       const [option] = await provider.generate({ asset, prompt, count: 1 });
       assert.equal(requests.at(-1).text, text);
       assert.equal(option.voiceSettings.text, text);
-      assert.equal(option.voiceSettings.direction, undefined, 'do not persist the duplicate direction again');
+      assert.equal(option.voiceSettings.direction, '', 'clear the duplicate direction when saving the new recording');
     }
     await provider.generate({ asset, prompt: text, voiceSettings: { direction: 'quietly' } });
     assert.equal(requests.at(-1).text, `[quietly]\n${text}`, 'keep a real direction when the prompt mirrors dialogue');

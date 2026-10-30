@@ -3837,7 +3837,7 @@ export function voiceGenerationOverridesFromInputs(
     ...asset.voiceSettings,
     ...(modelDraft?.trim() ? { model: modelDraft.trim() } : {}),
     text: text || asset.voiceSettings?.text,
-    direction: elements.promptInput.value.trim() || asset.voiceSettings?.direction
+    direction: elements.promptInput.value.trim()
   };
 }
 

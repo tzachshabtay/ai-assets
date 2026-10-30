@@ -484,3 +484,32 @@ test("missing target line variants fail before spending requests", async () => {
   );
   assert.equal(called, false);
 });
+
+
+test("designer and bulk regeneration never turn a spoken sentence into a delivery direction", async () => {
+  const { savedDesignerDraftValues } = await import('../dist/session-drafts.js');
+  const manifest = baseManifest(), requests = [];
+  for (const id of ['line.first', 'line.second']) {
+    const line = manifest.assets[id];
+    line.prompt = line.voiceSettings.text;
+    line.voiceSettings.direction = line.voiceSettings.text; // Old generated metadata.
+    assert.equal(savedDesignerDraftValues(line).prompt, '');
+    assert.equal(savedDesignerDraftValues(line).voiceText, line.voiceSettings.text);
+  }
+  const result = await regenerateAndPromoteVoiceLines({ manifest, voiceAssetId:'voice.detective', client: {
+    async generate(request) {
+      requests.push(request);
+      assert.equal(request.prompt, '');
+      assert.equal(request.voiceSettings.direction, '');
+      assert.equal(request.voiceSettings.text, manifest.assets[request.assetId].voiceSettings.text);
+      return [generatedOption(request.assetId, 0)];
+    },
+    async save(request) { return saveIntoManifest(manifest, request); }
+  } });
+  assert.equal(requests.length, 2); assert.equal(result.failures.length, 0);
+  const line = manifest.assets['line.first'];
+  line.voiceSettings.direction = 'whispers';
+  assert.equal(savedDesignerDraftValues(line).prompt, 'whispers');
+  line.voiceSettings.direction = '';
+  assert.equal(savedDesignerDraftValues(line).prompt, '', 'clearing a direction must not restore an older one');
+});

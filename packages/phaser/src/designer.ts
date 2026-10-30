@@ -942,6 +942,7 @@ export function installAiAssetDesigner(
     stopCurrentAnimationPreview?.();
     stopCurrentAnimationPreview = undefined;
     elements.promptInput.value = draft.prompt;
+    elements.promptField.firstChild!.textContent = isVoiceLine ? "Delivery direction (optional)" : "Prompt";
     elements.widthInput.value = draft.width;
     elements.heightInput.value = draft.height;
     elements.audioFormatSelect.value = draft.audioFormat;

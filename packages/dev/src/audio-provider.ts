@@ -310,7 +310,7 @@ async function generateElevenLabsVoiceLine(
         model,
         voiceId,
         text: line,
-        direction
+        direction: direction ?? ""
       }
     };
 

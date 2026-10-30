@@ -1,10 +1,24 @@
-import type { AiAssetManifest, AiVoiceGenerationSettings } from "@ai-game-assets/core";
+import type { AiAssetDefinition, AiAssetManifest, AiVoiceGenerationSettings } from "@ai-game-assets/core";
 import { resolveTargetAssetId } from "@ai-game-assets/core";
 import type {
   AiAssetDebugClient,
   GeneratedDebugOption,
   SaveDebugOptionResult
 } from "./debug-client.js";
+
+/** Voice lines have spoken text and optional delivery directions. The generic
+ * asset prompt may mirror dialogue for catalog metadata; never copy that into
+ * the direction input or a batch-generation request. */
+export function voiceLineDirection(asset: AiAssetDefinition): string {
+  const version = asset.versions[asset.activeVersion];
+  if (asset.voiceSettings?.direction === "") return "";
+  const text = asset.voiceSettings?.text ?? version?.voiceSettings?.text ?? asset.prompt;
+  const normalized = (value: string) => value.replace(/[\[\]]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+  for (const value of [asset.prompt, asset.voiceSettings?.direction, version?.voiceSettings?.direction, version?.prompt]) {
+    if (value?.trim() && normalized(value) !== normalized(text)) return value.trim();
+  }
+  return "";
+}
 
 export type VoiceLineRegenerationPhase = "generation" | "promotion";
 
@@ -180,11 +194,12 @@ export async function regenerateAndPromoteVoiceLines(
         ...activeVersion?.voiceSettings,
         ...line?.voiceSettings,
         voiceAssetId: baseVoiceAssetId,
-        voiceId
+        voiceId,
+        direction: voiceLineDirection(line)
       };
       const generated = await options.client.generate({
         assetId,
-        prompt: line?.prompt ?? activeVersion?.prompt,
+        prompt: voiceSettings.direction,
         count: 1,
         audioSettings: {
           ...activeVersion?.audioSettings,

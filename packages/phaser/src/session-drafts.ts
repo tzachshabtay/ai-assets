@@ -1,3 +1,4 @@
+import { voiceLineDirection } from "./voice-line-regeneration.js";
 import { DEFAULT_IMAGE_MODEL } from "@ai-game-assets/core";
 import type { AiAssetDefinition, AiAssetFormat, AiAudioFormat } from "@ai-game-assets/core";
 
@@ -130,7 +131,7 @@ export function savedDesignerDraftValues(asset: AiAssetDefinition, animationKey?
   const format = asset.settings?.format ?? "png";
   const animationSettings = animationKey ? version?.tilesetAnimations?.[animationKey]?.settings : undefined;
   return {
-    prompt: animation?.prompt ?? asset.prompt,
+    prompt: asset.kind === "voice-line" ? voiceLineDirection(asset) : animation?.prompt ?? asset.prompt,
     width: String(asset.frameGrid?.frameWidth ?? tileset?.tileWidth ?? asset.dimensions?.width ?? 1),
     height: String(asset.frameGrid?.frameHeight ?? tileset?.tileHeight ?? asset.dimensions?.height ?? 1),
     frameCount: String(animation?.frameCount ?? asset.frameGrid?.frameCount ??
