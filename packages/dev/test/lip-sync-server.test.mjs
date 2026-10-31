@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, chmod, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { selectedLipSyncTrack } from '@ai-game-assets/core';
 import { createAiAssetDevServer } from '../dist/server.js';
 
 test('generated and uploaded voice takes get timing, and promotion binds it to the saved file',async()=>{
@@ -27,5 +28,17 @@ test('generated and uploaded voice takes get timing, and promotion binds it to t
     const recorded=await post('save',{assetId:'line',versionName:'recorded',activate:true,prompt:text,voiceSettings:line.voiceSettings,dataUrl:`data:audio/wav;base64,${wav.toString('base64')}`});
     assert.equal(recorded.version.lipSyncTrack.sourceFile,recorded.file);assert.equal(recorded.version.lipSyncTrack.source,'rhubarb');
     assert.ok(recorded.asset.versions.generated);assert.ok(recorded.asset.versions.recorded);
+    const changedText = `Changed words ${path.basename(root)}`;
+    const edited = await post('update-voice-line', { assetId: 'line', text: changedText });
+    assert.equal(selectedLipSyncTrack(edited.manifest.assets.line), undefined, 'old timing is invalid after text edits');
+    const regenerated = await post('generate', { assetId: 'line', count: 1 });
+    assert.equal(regenerated.options[0].lipSyncTrack.text, changedText);
+    const promoted = await post('save', { assetId: 'line', versionName: 'regenerated', activate: true, ...regenerated.options[0] });
+    assert.equal(selectedLipSyncTrack(promoted.asset).text, changedText);
+    const rerecorded = await post('save', { assetId: 'line', versionName: 'rerecorded', activate: true,
+      prompt: changedText, voiceSettings: edited.manifest.assets.line.voiceSettings, dataUrl: `data:audio/wav;base64,${wav.toString('base64')}` });
+    assert.equal(selectedLipSyncTrack(rerecorded.asset).text, changedText);
+    assert.equal(selectedLipSyncTrack(rerecorded.asset).sourceFile, rerecorded.file);
+    assert.equal(rerecorded.asset.versions.recorded.lipSyncTrack.text, text, 'old takes retain their own timing');
   }finally{await server.close();if(previous)process.env.RHUBARB_PATH=previous;else delete process.env.RHUBARB_PATH;await rm(root,{recursive:true,force:true});}
 });
