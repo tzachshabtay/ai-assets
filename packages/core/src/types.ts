@@ -1,3 +1,32 @@
+export type AiLipSyncShape = 'X' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H';
+export type AiLipSyncTrack = {
+  schemaVersion: 1;
+  source: 'text' | 'rhubarb' | 'manual';
+  text: string;
+  language: string;
+  duration: number;
+  cues: Array<{ start: number; end: number; shape: AiLipSyncShape }>;
+  sourceFile?: string;
+  audioHash?: string;
+  analyzer?: string;
+};
+export type AiMouthSet = {
+  frames: Record<AiLipSyncShape, number>;
+  /** Stored per version so uploaded sheets can use different layouts safely. */
+  frameGrid?: AiAssetFrameGrid;
+  sourceAssetId?: string;
+  sourceVersion?: string;
+  editRegion?: { x: number; y: number; width: number; height: number };
+};
+export type AiLipSyncSettings = {
+  enabled: boolean;
+  voiceAssetId: string;
+  mouthAssetId?: string;
+  language: string;
+  wordsPerMinute?: number;
+  pronunciations?: Record<string, string>;
+};
+
 export type AiAssetKind = "image" | "spritesheet" | "animation" | "tileset" | "collection" | "sound" | "music" | "voice" | "voice-line";
 
 export type AiAssetBackground = "transparent" | "opaque" | "auto";
@@ -177,6 +206,8 @@ export type AiAssetScaledVariant = {
 };
 
 export type AiAssetVersion = {
+  lipSyncTrack?: AiLipSyncTrack;
+  mouthSet?: AiMouthSet;
   scaledVariants?: Record<string, AiAssetScaledVariant>;
   scaledVariantSource?: { dimensions: AiAssetDimensions; frameGrid?: AiAssetFrameGrid };
   name: string;
@@ -206,6 +237,9 @@ export type AiAssetTarget = {
 };
 
 export type AiAssetDefinition = {
+  lipSync?: AiLipSyncSettings;
+  mouthSet?: AiMouthSet;
+  lipSyncTrack?: AiLipSyncTrack;
   id: string;
   kind: AiAssetKind;
   prompt: string;

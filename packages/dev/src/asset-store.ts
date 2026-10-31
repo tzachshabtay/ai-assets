@@ -168,6 +168,8 @@ export async function saveGeneratedOption(
     audioPlayback: input.option.audioPlayback,
     voiceSettings: input.option.voiceSettings,
     durationSeconds: input.option.durationSeconds,
+    lipSyncTrack: input.option.lipSyncTrack ? { ...input.option.lipSyncTrack, sourceFile: publicFile } : undefined,
+    mouthSet: input.option.mouthSet,
     parentVersion: asset.activeVersion || undefined,
     notes: input.notes,
     tilesetSourceFile: publicTilesetSourceFile,
@@ -190,6 +192,7 @@ export async function saveGeneratedOption(
         frameGrid: input.option.frameGrid ?? updatedAsset.frameGrid,
         tileset: input.option.tileset ?? updatedAsset.tileset,
         animations: input.option.animations ?? updatedAsset.animations,
+        mouthSet: input.option.mouthSet ?? updatedAsset.mouthSet,
         settings: {
           ...updatedAsset.settings,
           ...version.settings

@@ -41,6 +41,9 @@ import {
 } from "./asset-store.js";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { analyzeLipSyncAudio } from './lip-sync.js';
+import { lipSyncVoiceSettings } from '@ai-game-assets/core';
+import { handleLipSyncRequest } from './lip-sync-authoring.js';
 
 export type AiAssetDevServerOptions = AssetStoreOptions & {
   provider?: AiImageProvider;
@@ -51,6 +54,8 @@ export type AiAssetDevServerOptions = AssetStoreOptions & {
 };
 
 export type SerializedGeneratedAssetOption = {
+  lipSyncTrack?: AiAssetDefinition['lipSyncTrack'];
+  mouthSet?: AiAssetDefinition['mouthSet'];
   index: number;
   mimeType: string;
   prompt: string;
@@ -161,6 +166,11 @@ async function routeRequest(
   response: ServerResponse
 ): Promise<void> {
   const url = new URL(request.url ?? "/", "http://localhost");
+
+  if (request.method === 'POST' && url.pathname === '/__ai-assets/lip-sync') {
+    sendJson(response, 200, await handleLipSyncRequest(options, await readJson(request)));
+    return;
+  }
 
   if (request.method === "OPTIONS") {
     response.writeHead(204, corsHeaders());
@@ -452,6 +462,8 @@ async function routeRequest(
       audioPlayback?: AiAssetDefinition["audioPlayback"];
       voiceSettings?: AiAssetDefinition["voiceSettings"];
       durationSeconds?: number;
+      lipSyncTrack?: AiAssetDefinition['lipSyncTrack'];
+      mouthSet?: AiAssetDefinition['mouthSet'];
       tilesetSourceDataUrl?: string;
       tilesetTransforms?: AiTilesetTileTransform[];
       activate?: boolean;
@@ -472,9 +484,18 @@ async function routeRequest(
       audioSettings: body.audioSettings,
       audioPlayback: body.audioPlayback,
       voiceSettings: body.voiceSettings,
-      durationSeconds: body.durationSeconds
+      durationSeconds: body.durationSeconds,
+      lipSyncTrack: body.lipSyncTrack,
+      mouthSet: body.mouthSet
     });
     const asset = getAsset(await readManifest(options.manifestPath), body.assetId);
+    // Recordings and uploads use the same analyzer as generated takes. Persist the
+    // audio even if analysis fails: the designer can retry the missing timing.
+    if (asset.kind === 'voice-line' && !option.lipSyncTrack) {
+      const settings = lipSyncVoiceSettings(await readManifest(options.manifestPath), option.voiceSettings?.voiceAssetId ?? asset.voiceSettings?.voiceAssetId ?? '');
+      if (settings) try { option.lipSyncTrack = await analyzeLipSyncAudio(option.image, option.voiceSettings?.text ?? asset.voiceSettings?.text ?? asset.prompt, settings); }
+      catch (error) { console.warn('Voice saved without lip-sync timing; retry analysis in Lip sync.', error); }
+    }
     if (asset.kind === "voice" && options.audioProvider?.createVoice) {
       const voiceSettings = await options.audioProvider.createVoice({
         asset,
@@ -705,7 +726,21 @@ async function generateAudio(
     );
   }
 
-  return options.audioProvider.generate({
+  const settings = asset.kind === 'voice-line' ? lipSyncVoiceSettings(manifest, body.voiceSettings?.voiceAssetId ?? asset.voiceSettings?.voiceAssetId ?? '') : undefined;
+  const analyses = new WeakMap<GeneratedAssetOption, Promise<void>>();
+  const analyze = (option: GeneratedAssetOption, index: number): Promise<void> => {
+    let pending = analyses.get(option);
+    if (!pending) {
+      pending = (async () => {
+      if (settings) try { option.lipSyncTrack = await analyzeLipSyncAudio(option.image, option.voiceSettings?.text ?? body.voiceSettings?.text ?? asset.voiceSettings?.text ?? asset.prompt, settings); }
+      catch (error) { console.warn('Voice generated without lip-sync timing; retry analysis in Lip sync.', error); }
+      await onOption?.(option, index);
+      })();
+      analyses.set(option, pending);
+    }
+    return pending;
+  };
+  const generated = await options.audioProvider.generate({
     asset,
     prompt: body.prompt,
     count: body.count,
@@ -716,7 +751,9 @@ async function generateAudio(
       const activeVoice = voiceAsset?.versions[voiceAsset.activeVersion];
       return activeVoice?.voiceSettings?.voiceId ?? voiceAsset?.voiceSettings?.voiceId;
     }
-  }, onOption);
+  }, analyze);
+  await Promise.all(generated.map(analyze));
+  return generated;
 }
 
 function serializeGeneratedOption(
@@ -738,6 +775,8 @@ function serializeGeneratedOption(
     audioPlayback: option.audioPlayback,
     voiceSettings: option.voiceSettings,
     durationSeconds: option.durationSeconds,
+    lipSyncTrack: option.lipSyncTrack,
+    mouthSet: option.mouthSet,
     dataUrl: `data:${option.mimeType};base64,${Buffer.from(option.image).toString("base64")}`
   };
 }
@@ -1162,6 +1201,8 @@ async function readJson<T>(request: IncomingMessage): Promise<T> {
 function optionFromDataUrl(
   dataUrl: string,
   metadata: {
+    lipSyncTrack?: AiAssetDefinition['lipSyncTrack'];
+    mouthSet?: AiAssetDefinition['mouthSet'];
     prompt: string;
     model?: string;
     revisedPrompt?: string;
@@ -1192,7 +1233,9 @@ function optionFromDataUrl(
     audioSettings: metadata.audioSettings,
     audioPlayback: metadata.audioPlayback,
     voiceSettings: metadata.voiceSettings,
-    durationSeconds: metadata.durationSeconds
+    durationSeconds: metadata.durationSeconds,
+    lipSyncTrack: metadata.lipSyncTrack,
+    mouthSet: metadata.mouthSet
   };
 }
 

@@ -144,3 +144,4 @@ export type {
 
 export { aiScaledVariantTextureKey, applyAiScaledVariant, loadAiScaledVariants } from "./scaled-variants.js";
 export type { AiScaledTextureTarget } from "./scaled-variants.js";
+export { AiPortraitLipSync, type AiLipSyncClock } from './lip-sync-player.js';

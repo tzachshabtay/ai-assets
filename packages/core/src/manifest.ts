@@ -1,3 +1,4 @@
+import { assertLipSyncTrack, LIP_SYNC_SHAPES } from './lip-sync.js';
 import { assertScaledVariants } from "./scaled-variants.js";
 import type {
   AiAssetDefinition,
@@ -81,6 +82,13 @@ export function assertManifest(manifest: AiAssetManifest): void {
 }
 
 export function assertAsset(asset: AiAssetDefinition): void {
+  if (asset.lipSyncTrack) assertLipSyncTrack(asset.lipSyncTrack);
+  if (asset.lipSync && (typeof asset.lipSync.enabled !== 'boolean' || !asset.lipSync.voiceAssetId || !asset.lipSync.language)) throw new Error('Lip sync requires a voice and language.');
+  if (asset.mouthSet) for (const shape of LIP_SYNC_SHAPES) {
+    const frame = asset.mouthSet.frames[shape];
+    if (!Number.isInteger(frame) || frame < 0 || frame >= (asset.frameGrid?.frameCount ?? (asset.frameGrid?.columns ?? 0) * (asset.frameGrid?.rows ?? 0))) throw new Error(`Invalid mouth frame for ${shape}.`);
+  }
+
   assertNonEmpty(asset.id, "asset.id");
   if (!aiAssetKinds.has(asset.kind)) {
     throw new Error(`${asset.id}.kind must be a supported AI asset kind.`);
@@ -441,6 +449,12 @@ function assertVersion(
   version: AiAssetVersion
 ): void {
   assertScaledVariants(asset, version);
+  if (version.lipSyncTrack) assertLipSyncTrack(version.lipSyncTrack);
+  if (version.mouthSet) for (const shape of LIP_SYNC_SHAPES) {
+    const frame = version.mouthSet.frames[shape];
+    const grid = version.mouthSet.frameGrid ?? asset.frameGrid;
+    if (!Number.isInteger(frame) || frame < 0 || frame >= (grid?.frameCount ?? (grid?.columns ?? 0) * (grid?.rows ?? 0))) throw new Error('Invalid mouth-shape frame.');
+  }
   const assetId = asset.id;
   assertNonEmpty(versionName, `${assetId}.versions key`);
   assertNonEmpty(version.name, `${assetId}.versions.${versionName}.name`);

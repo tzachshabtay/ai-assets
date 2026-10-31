@@ -64,6 +64,7 @@ export type DesignerElements = {
   currentRevertButton: HTMLButtonElement;
   currentTouchUpButton: HTMLButtonElement;
   scaledVariantsButton: HTMLButtonElement;
+  lipSyncButton: HTMLButtonElement;
   currentPreview: HTMLDivElement;
   uploadButton: HTMLButtonElement;
   deriveButton: HTMLButtonElement;
@@ -255,6 +256,9 @@ export function createDesignerElements(
   scaledVariantsButton.className = "ai-game-assets-designer__animate-button";
   scaledVariantsButton.textContent = "Scaled variants...";
   scaledVariantsButton.hidden = true;
+  const lipSyncButton = document.createElement('button');
+  lipSyncButton.type = 'button'; lipSyncButton.textContent = 'Lip sync…';
+  lipSyncButton.className = 'ai-game-assets-designer__animate-button'; lipSyncButton.hidden = true;
   const currentRevertButton = document.createElement("button");
   currentRevertButton.type = "button";
   currentRevertButton.className = "ai-game-assets-designer__animate-button";
@@ -267,6 +271,7 @@ export function createDesignerElements(
     currentAnimationButton,
     currentTouchUpButton,
     scaledVariantsButton,
+    lipSyncButton,
     currentRevertButton
   );
 
@@ -409,6 +414,7 @@ export function createDesignerElements(
     currentRevertButton,
     currentTouchUpButton,
     scaledVariantsButton,
+    lipSyncButton,
     currentPreview,
     uploadButton,
     deriveButton,
@@ -2947,7 +2953,10 @@ export async function openAssetVersionsDialog(options: {
       audioSettings: version.audioSettings,
       audioPlayback: version.audioPlayback,
       voiceSettings: version.voiceSettings,
-      durationSeconds: version.durationSeconds
+      durationSeconds: version.durationSeconds,
+      lipSyncTrack: version.lipSyncTrack,
+      mouthSet: version.mouthSet,
+      frameGrid: version.mouthSet?.frameGrid
     });
     dialog.remove();
   };
@@ -4018,6 +4027,13 @@ export function assetWithGeneratedGeometry(
         ? asset.animations
         : candidateAnimationDefinitions(asset, option.frameGrid ?? asset.frameGrid)),
     audioPlayback: option.audioPlayback ?? asset.audioPlayback,
+    mouthSet: option.mouthSet ?? asset.mouthSet,
+    ...(asset.kind === 'voice-line' ? {
+      activeVersion: '__audition',
+      versions: { ...asset.versions, __audition: { name: '__audition', file: option.dataUrl, prompt: option.prompt, createdAt: new Date().toISOString(),
+        voiceSettings: option.voiceSettings ?? asset.voiceSettings, audioPlayback: option.audioPlayback ?? asset.audioPlayback,
+        lipSyncTrack: option.lipSyncTrack ? { ...option.lipSyncTrack, sourceFile: option.dataUrl } : undefined } },
+    } : {}),
     voiceSettings: option.voiceSettings ?? asset.voiceSettings
   };
 }
@@ -4986,6 +5002,22 @@ export function ensureDesignerStyles(): void {
 .ai-game-assets-designer__recording-take button:disabled { opacity: .45; cursor: default; }
 .ai-game-assets-designer__recording-take a { color: #b2c7ff; }
 .ai-game-assets-designer__voice-batch h2 { margin: 0; font-size: 20px; }
+.ai-game-assets-designer__lip-sync { font: 14px/1.5 system-ui,sans-serif; color:#dbe4f0; }
+.ai-game-assets-designer__lip-sync button,
+.ai-game-assets-designer__lip-sync input:not([type=checkbox]):not([type=range]),
+.ai-game-assets-designer__lip-sync select {
+  box-sizing:border-box; border:1px solid #455169; border-radius:6px;
+  background:#202a3a; color:#e0eaff; padding:7px 10px; font:inherit;
+}
+.ai-game-assets-designer__lip-sync input[type=checkbox] { accent-color:#9cb3ff; }
+.ai-game-assets-designer__lip-sync button { cursor:pointer; }
+.ai-game-assets-designer__lip-sync button:is(:hover,:focus-visible) { background:#35445d; border-color:#91c7ee; }
+.ai-game-assets-designer__lip-sync :disabled { opacity:.5; cursor:wait; }
+.ai-game-assets-designer__lip-sync h2,.ai-game-assets-designer__lip-sync h3 { margin:0; }
+.ai-game-assets-designer__lip-sync h3 { padding-top:14px;border-top:1px solid #394457; }
+.ai-game-assets-designer__lip-sync p { color:#bdc8d9; }
+.ai-game-assets-designer__lip-sync blockquote { margin:0;padding:12px;border-left:3px solid #9cb3ff;background:#1d2533; }
+.ai-game-assets-designer__lip-sync [hidden] { display:none; }
 .ai-game-assets-designer__voice-batch p { color: #c3cbd9; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .ai-game-assets-designer__voice-batch progress { width: 100%; height: 18px; accent-color: #819dff; }
 .ai-game-assets-designer__voice-batch [hidden] { display: none; }

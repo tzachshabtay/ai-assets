@@ -1,3 +1,4 @@
+import { openLipSyncDialog } from './lip-sync-dialog.js';
 import { openVoiceLineRecordingDialog } from "./voice-line-recording-dialog.js";
 import { openVoiceLineRegenerationDialog } from "./voice-line-regeneration-dialog.js";
 import { DesignerGenerationRecovery, type PendingDesignerOption } from "./generation-recovery.js";
@@ -1024,6 +1025,7 @@ export function installAiAssetDesigner(
     elements.currentAnimationButton.textContent = isTilesetAnimation
       ? "Edit animation..."
       : "Edit...";
+    elements.lipSyncButton.hidden = !asset.versions[asset.activeVersion]?.file || !!asset.frameGrid || !['image','animation','spritesheet'].includes(asset.kind);
     elements.scaledVariantsButton.hidden = !asset.versions[asset.activeVersion]?.file ||
       !["image", "spritesheet", "animation", "tileset"].includes(asset.kind) || Boolean(selectedTilesetAnimationKey);
     elements.currentTouchUpButton.textContent = isBaseTileset ? "Edit tileset..." : "Touch up...";
@@ -1095,6 +1097,7 @@ export function installAiAssetDesigner(
     elements.currentAnimationButton.hidden = isTilesetAnimation && selectedTilesetAnimationKey
       ? !hasEditableTilesetAnimationFrames(selectedTargetAssetId, selectedTilesetAnimationKey)
       : !optionAsset.frameGrid && !isAudio;
+    elements.lipSyncButton.hidden = !asset.versions[asset.activeVersion]?.file || !!asset.frameGrid || !['image','animation','spritesheet'].includes(asset.kind);
     elements.scaledVariantsButton.hidden = !asset.versions[asset.activeVersion]?.file ||
       !["image", "spritesheet", "animation", "tileset"].includes(asset.kind) || Boolean(selectedTilesetAnimationKey);
     elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(optionAsset)
@@ -1521,6 +1524,7 @@ export function installAiAssetDesigner(
           selectedTilesetAnimationKey
         )
       : !asset.frameGrid && !isAudio;
+    elements.lipSyncButton.hidden = !asset.versions[asset.activeVersion]?.file || !!asset.frameGrid || !['image','animation','spritesheet'].includes(asset.kind);
     elements.scaledVariantsButton.hidden = !asset.versions[asset.activeVersion]?.file ||
       !["image", "spritesheet", "animation", "tileset"].includes(asset.kind) || Boolean(selectedTilesetAnimationKey);
     elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(asset)
@@ -2838,6 +2842,7 @@ export function installAiAssetDesigner(
           audioSettings: promotedOption.audioSettings,
           audioPlayback: promotedOption.audioPlayback,
           voiceSettings: promotedOption.voiceSettings,
+          lipSyncTrack: promotedOption.lipSyncTrack, mouthSet: promotedOption.mouthSet,
           durationSeconds: promotedOption.durationSeconds,
           activate: true,
           notes: "Promoted from the AI asset designer."
@@ -3058,6 +3063,7 @@ export function installAiAssetDesigner(
             audioSettings: pending.option.audioSettings,
             audioPlayback: pending.option.audioPlayback,
             voiceSettings: pending.option.voiceSettings,
+          lipSyncTrack: pending.option.lipSyncTrack, mouthSet: pending.option.mouthSet,
             durationSeconds: pending.option.durationSeconds,
             activate: true,
             notes: "Promoted from the AI asset designer with Promote all."
@@ -3183,6 +3189,13 @@ export function installAiAssetDesigner(
   });
 
   let closeScaledVariants: (() => void) | undefined;
+  let closeLipSync: (() => void) | undefined;
+  elements.lipSyncButton.addEventListener('click', () => {
+    closeLipSync?.();
+    closeLipSync = openLipSyncDialog({ root: elements.root, manifest, assetId: selectedTargetAssetId, client, resolveAssetUrl,
+      onManifest(updated) { manifest = updated; options.onManifestUpdated?.(updated); syncAnimationChoices(selectedAssetId); syncTargetAsset(selectedTargetAssetId); renderAssetBrowser(); }
+    });
+  });
   elements.scaledVariantsButton.addEventListener("click", event => {
     event.stopPropagation();
     void (async () => {
@@ -3894,6 +3907,7 @@ export function installAiAssetDesigner(
       dockPanel.destroy();
       closeScaledVariants?.();
       voiceLineDialog?.close();
+      closeLipSync?.();
       recordingDialog?.close();
       elements.root.remove();
     }

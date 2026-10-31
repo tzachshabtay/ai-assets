@@ -262,6 +262,7 @@ export async function regenerateAndPromoteVoiceLines(
         audioSettings: generatedOption.audioSettings,
         audioPlayback: generatedOption.audioPlayback,
         voiceSettings: generatedOption.voiceSettings,
+          lipSyncTrack: generatedOption.lipSyncTrack, mouthSet: generatedOption.mouthSet,
         durationSeconds: generatedOption.durationSeconds,
         activate: true,
         notes: "Regenerated from the selected base voice with Regenerate all lines.",

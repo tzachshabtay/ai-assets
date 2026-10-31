@@ -67,6 +67,8 @@ export type GenerateAssetReference = {
 };
 
 export type GeneratedAssetOption = {
+  lipSyncTrack?: AiAssetDefinition['lipSyncTrack'];
+  mouthSet?: AiAssetDefinition['mouthSet'];
   image: Uint8Array;
   mimeType: string;
   prompt: string;

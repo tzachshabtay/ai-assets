@@ -10,6 +10,8 @@ import type {
 } from "./types.js";
 
 export type CreateVersionInput = {
+  lipSyncTrack?: AiAssetVersion['lipSyncTrack'];
+  mouthSet?: AiAssetVersion['mouthSet'];
   name: string;
   file: string;
   prompt?: string;
@@ -33,6 +35,8 @@ export function createAiAssetVersion(
   input: CreateVersionInput
 ): AiAssetVersion {
   return {
+    lipSyncTrack: input.lipSyncTrack,
+    mouthSet: input.mouthSet,
     name: input.name,
     file: input.file,
     prompt: input.prompt ?? asset.prompt,

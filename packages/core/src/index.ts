@@ -74,3 +74,6 @@ export type {
 export * from "./scaled-variants.js";
 
 export { installInGameDesignerViewport, type InGameDesignerViewportOptions } from "./designer-viewport.js";
+
+export * from './lip-sync.js';
+export type { AiLipSyncShape, AiLipSyncTrack, AiLipSyncSettings, AiMouthSet } from './types.js';

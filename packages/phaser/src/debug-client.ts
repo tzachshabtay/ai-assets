@@ -48,6 +48,8 @@ export type DebugStyleGuideDraft = {
 };
 
 export type GeneratedDebugOption = {
+  lipSyncTrack?: AiAssetDefinition['lipSyncTrack'];
+  mouthSet?: AiAssetDefinition['mouthSet'];
   index: number;
   dataUrl: string;
   mimeType: string;
@@ -137,6 +139,8 @@ export type SaveTilesetAnimationResult = {
 };
 
 export type SaveDebugOptionRequest = {
+  lipSyncTrack?: AiAssetDefinition['lipSyncTrack'];
+  mouthSet?: AiAssetDefinition['mouthSet'];
   assetId: string;
   versionName: string;
   dataUrl: string;
@@ -227,6 +231,18 @@ export class AiAssetDebugClient {
     }
 
     return `${this.endpoint}/${file.replace(/^\//, "")}`;
+  }
+
+  async lipSync(request: Record<string, unknown>, signal?: AbortSignal): Promise<{
+    manifest?: AiAssetManifest;
+    track?: NonNullable<AiAssetDefinition['lipSyncTrack']>;
+    candidates?: Array<{ index: number; dataUrl: string; mouthSet: NonNullable<AiAssetDefinition['mouthSet']>; frameGrid: NonNullable<AiAssetDefinition['frameGrid']>; prompt: string }>;
+  }> {
+    const response = await fetchDebugEndpoint(`${this.endpoint}/__ai-assets/lip-sync`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request), signal,
+    });
+    if (!response.ok) throw new Error(await responseErrorMessage(response));
+    return response.json();
   }
 
   async scaledVariant(request: {

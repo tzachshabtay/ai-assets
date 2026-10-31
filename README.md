@@ -507,3 +507,7 @@ installAiAssetDesigner({
 The target receives `.ai-game-assets-designer-viewport` while a panel is open. Style its canvas region to fill the available space. The adapter refreshes Phaser's scale manager after a resize and cleans up on scene shutdown or designer destruction. `designer.viewport?.fit()` resets manual sizing. Set `viewport: false` to keep a custom layout.
 
 Other renderers can use `installInGameDesignerViewport({ target, aspectRatio, chromeHeight, onResize })` from `@ai-game-assets/core`; call its `destroy()` when removing the designer. Phaser integrations that do not use the asset panel can call `installAiAssetDesignerViewport(scene, options)` from `@ai-game-assets/phaser`. Install only one viewport controller per game container.
+
+### Portrait lip sync
+
+Opt a portrait into automatic voice-based mouth timing, with text-based timing for unvoiced lines. Generate or upload mouth poses, preview recordings, and adjust cues in the designer. See the [portrait lip-sync guide](docs/lip-sync.md).
