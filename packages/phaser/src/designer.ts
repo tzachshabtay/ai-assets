@@ -750,6 +750,7 @@ export function installAiAssetDesigner(
     const asset = manifest.assets[assetId];
     const linkedAnimations = Object.entries(asset.linkedAnimationAssets ?? {});
     const isVoice = asset.kind === "voice";
+    elements.voiceLinePicker.setEnabled(isVoice);
     elements.animationSelect.innerHTML = "";
 
     if (isDesignerTilesetAsset(resolvedAsset)) {
@@ -786,6 +787,10 @@ export function installAiAssetDesigner(
       const option = document.createElement("option");
       option.value = resolveTargetAssetId(manifest, linkedAnimation.assetId, selectedTargetId);
       option.textContent = linkedAnimation.label || readableAssetName(key);
+      if (isVoice) {
+        const line = manifest.assets[option.value];
+        option.dataset.searchText = line?.versions[line.activeVersion]?.voiceSettings?.text ?? line?.voiceSettings?.text ?? line?.prompt ?? option.textContent;
+      }
       elements.animationSelect.append(option);
     }
 
@@ -3904,6 +3909,7 @@ export function installAiAssetDesigner(
       activeVoiceLineRegeneration?.controller.abort();
       stopStatusAnimation(elements.status);
       unbindInputBoundary();
+      elements.voiceLinePicker.destroy();
       dockPanel.destroy();
       closeScaledVariants?.();
       voiceLineDialog?.close();

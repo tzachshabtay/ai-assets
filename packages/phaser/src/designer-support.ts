@@ -1,3 +1,4 @@
+import { searchableSelect } from './searchable-select.js';
 import type {
   AiAssetAnimation,
   AiAssetAnimationFrameTiming,
@@ -34,6 +35,7 @@ export type DesignerElements = {
   targetVariantLabel: HTMLDivElement;
   animationSelect: HTMLSelectElement;
   animationField: HTMLLabelElement;
+  voiceLinePicker: ReturnType<typeof searchableSelect>;
   widthInput: HTMLInputElement;
   widthField: HTMLLabelElement;
   heightInput: HTMLInputElement;
@@ -169,6 +171,7 @@ export function createDesignerElements(
   const animationSelect = document.createElement("select");
   animationSelect.className = "ai-game-assets-designer__animation-select";
   const animationField = labelWrap("Animation", animationSelect);
+  const voiceLinePicker = searchableSelect(animationSelect, "Voice line");
 
   const promptInput = document.createElement("textarea");
   promptInput.className = "ai-game-assets-designer__prompt";
@@ -383,6 +386,7 @@ export function createDesignerElements(
     targetField,
     targetVariantLabel,
     animationSelect,
+    voiceLinePicker,
     animationField,
     widthInput,
     widthField,

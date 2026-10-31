@@ -1,3 +1,4 @@
+import { searchableSelect } from './searchable-select.js';
 import { LIP_SYNC_SHAPES, LIP_SYNC_LABELS, selectedLipSyncTrack, type AiAssetManifest, type AiLipSyncTrack, type AiMouthSet, type AiAssetFrameGrid, type AiPortraitEyePose, type AiPortraitEyes } from '@ai-game-assets/core';
 import type { AiAssetDebugClient } from './debug-client.js';
 import { openFrameTouchUpEditor, startGeneratingStatusAnimation, stopStatusAnimation } from './designer-support.js';
@@ -196,12 +197,14 @@ export function openLipSyncDialog(options: {
     status.textContent='Mouth set saved and selected for this portrait.';
   }));
   const line=make('select');line.setAttribute('aria-label','Preview voice line');line.style.maxWidth='100%';
+  const lineHost=make('div');lineHost.style.cssText='min-width:0;flex:1';lineHost.append(line);
+  const linePicker=searchableSelect(line,'Preview voice line');linePicker.setEnabled(true);
   const take=make('select');take.setAttribute('aria-label','Preview recording');
   const script=make('blockquote');const transport=make('div');const cues=make('div');cues.style.cssText='max-height:220px;overflow:auto';
   function populateLines() {
     const previous=line.value;line.replaceChildren();
     for(const asset of Object.values(manifest.assets).filter(a=>a.kind==='voice-line'&&(a.voiceSettings?.voiceAssetId??a.versions[a.activeVersion]?.voiceSettings?.voiceAssetId)===voice.value)){
-      const option=make('option',asset.voiceSettings?.text??asset.prompt);option.value=asset.id;line.append(option);
+      const option=make('option',asset.versions[asset.activeVersion]?.voiceSettings?.text??asset.voiceSettings?.text??asset.prompt);option.value=asset.id;line.append(option);
     }
     if([...line.options].some(o=>o.value===previous))line.value=previous;
     populateTakes();
@@ -256,10 +259,10 @@ export function openLipSyncDialog(options: {
   }));
   const saveCues=btn('Save timing edits',()=>void run(async()=>{if(!track)return;if(!take.value&&manifest.assets[line.value]?.activeVersion)throw new Error('This is an estimated text preview. Choose a recording to edit its saved timing.');publish((await options.client.lipSync({action:'save-track',assetId:line.value,versionName:take.value||undefined,track})).manifest);status.textContent='Timing saved.';}));
   const details=make('details');details.append(make('summary','Edit mouth cues'),cues,saveCues);
-  const dispose=()=>{disposed=true;player?.dispose();renderer.destroy();cancelAnimationFrame(raf);stopStatusAnimation(status);modal.remove();if(previousFocus?.isConnected)previousFocus.focus();};
+  const dispose=()=>{disposed=true;linePicker.destroy();player?.dispose();renderer.destroy();cancelAnimationFrame(raf);stopStatusAnimation(status);modal.remove();if(previousFocus?.isConnected)previousFocus.focus();};
   const close=btn('Close',()=>{if(busy){status.textContent='Please wait for the current save or analysis to finish.';return;}dispose();});
   card.append(make('h2','Portrait lip sync'),status,intro,settings,make('h3','1 · Mouth artwork'),row(stage,regionHelp),row(...regionInputs.map(i=>i.label)),row(generate,field('Sheet columns',columns),field('Rows',rows),btn('Upload mouth sheet',()=>{if(!busy)upload.click();}),upload),generated,poses,save,
-    layerPanel,make('h3','2 · Speech timing'),row(line,take),script,row(preview,shapeLabel,eyePreview),transport,row(analyze,mode,analyzeAll),progress,details,row(close));
+    layerPanel,make('h3','2 · Speech timing'),row(lineHost,take),script,row(preview,shapeLabel,eyePreview),transport,row(analyze,mode,analyzeAll),progress,details,row(close));
   modal.append(card);options.root.append(modal);showRegion();populateLines();
   const mouth=manifest.assets[portrait().lipSync?.mouthAssetId??''];const version=mouth?.versions[mouth.activeVersion];
   if(mouth?.mouthSet&&mouth.frameGrid&&version)void choose({dataUrl:options.resolveAssetUrl(version.file),mouthSet:structuredClone(version.mouthSet??mouth.mouthSet),frameGrid:version.mouthSet?.frameGrid??mouth.frameGrid}).catch(e=>{status.textContent=String(e);});
