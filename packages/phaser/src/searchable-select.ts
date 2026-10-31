@@ -4,12 +4,12 @@ export function searchableSelect(select: HTMLSelectElement, label: string) {
   const root = doc.createElement('div'); root.style.cssText = 'position:relative;min-width:0;width:100%';
   const trigger = doc.createElement('button'); trigger.type = 'button';
   trigger.setAttribute('aria-label', label); trigger.setAttribute('aria-haspopup', 'listbox');
-  trigger.style.cssText = 'width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere';
+  trigger.style.cssText = 'width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;background:#171e2a;color:#f1f3f7;border:1px solid #3a4558;border-radius:5px;padding:8px 10px;font:inherit;cursor:pointer';
   const panel = doc.createElement('div'); panel.hidden = true;
   panel.style.cssText = 'position:absolute;top:100%;left:0;right:0;z-index:20;background:#20232c;border:1px solid #626978;border-radius:6px;padding:8px;box-shadow:0 8px 24px #0008';
   const search = doc.createElement('input'); search.type = 'search'; search.placeholder = 'Search spoken text…';
   search.setAttribute('aria-label', `Search ${label.toLowerCase()}`);
-  search.style.cssText = 'width:100%;box-sizing:border-box;margin-bottom:6px';
+  search.style.cssText = 'width:100%;box-sizing:border-box;margin-bottom:6px;background:#10151e;color:#f1f3f7;border:1px solid #626978;border-radius:4px;padding:8px;font:inherit';
   const list = doc.createElement('div'); list.id = `voice-lines-${crypto.randomUUID()}`;
   list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', label);
   list.style.cssText = 'max-height:240px;overflow:auto;display:grid;gap:3px';
@@ -44,7 +44,7 @@ export function searchableSelect(select: HTMLSelectElement, label: string) {
       button.id = `${list.id}-${index}`; button.setAttribute('role', 'option');
       button.setAttribute('aria-selected', String(option.value === select.value));
       button.textContent = option.dataset.searchText || option.textContent;
-      button.style.cssText = 'display:block;width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;padding:8px;color:#f1f3f7;border:0;border-radius:4px';
+      button.style.cssText = 'display:block;width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;padding:8px;color:#f1f3f7;border:0;border-radius:4px;font:inherit;cursor:pointer';
       button.onpointermove = () => highlight(index);
       button.onclick = event => { event.preventDefault(); event.stopPropagation(); choose(option); };
       list.append(button); return button;
