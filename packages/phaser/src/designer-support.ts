@@ -4985,7 +4985,7 @@ export function ensureDesignerStyles(): void {
 .ai-game-assets-designer__take-header > span { flex: 1; font-weight: 600; }
 .ai-game-assets-designer__take-waveform { position: relative; margin: 0 7px; touch-action: none; }
 .ai-game-assets-designer__take-waveform canvas { display: block; width: 100%; height: 76px; border-radius: 4px; }
-.ai-game-assets-designer__recording-take .ai-game-assets-designer__take-marker {
+.ai-game-assets-designer__take-player .ai-game-assets-designer__take-marker {
   position: absolute; top: 0; transform: translateX(-50%); width: 14px; height: 76px;
   background: transparent; border: 0;
   border-radius: 0; padding: 0; cursor: ew-resize; touch-action: none;
@@ -5003,15 +5003,15 @@ export function ensureDesignerStyles(): void {
 .ai-game-assets-designer__recording-take a { color: #b2c7ff; }
 .ai-game-assets-designer__voice-batch h2 { margin: 0; font-size: 20px; }
 .ai-game-assets-designer__lip-sync { font: 14px/1.5 system-ui,sans-serif; color:#dbe4f0; }
-.ai-game-assets-designer__lip-sync button,
+.ai-game-assets-designer__lip-sync button:where(:not(.ai-game-assets-designer__take-marker)),
 .ai-game-assets-designer__lip-sync input:not([type=checkbox]):not([type=range]),
 .ai-game-assets-designer__lip-sync select {
   box-sizing:border-box; border:1px solid #455169; border-radius:6px;
   background:#202a3a; color:#e0eaff; padding:7px 10px; font:inherit;
 }
 .ai-game-assets-designer__lip-sync input[type=checkbox] { accent-color:#9cb3ff; }
-.ai-game-assets-designer__lip-sync button { cursor:pointer; }
-.ai-game-assets-designer__lip-sync button:is(:hover,:focus-visible) { background:#35445d; border-color:#91c7ee; }
+.ai-game-assets-designer__lip-sync button:where(:not(.ai-game-assets-designer__take-marker)) { cursor:pointer; }
+.ai-game-assets-designer__lip-sync button:where(:not(.ai-game-assets-designer__take-marker)):is(:hover,:focus-visible) { background:#35445d; border-color:#91c7ee; }
 .ai-game-assets-designer__lip-sync :disabled { opacity:.5; cursor:wait; }
 .ai-game-assets-designer__lip-sync h2,.ai-game-assets-designer__lip-sync h3 { margin:0; }
 .ai-game-assets-designer__lip-sync h3 { padding-top:14px;border-top:1px solid #394457; }

@@ -14,7 +14,7 @@ export function createVoiceTakePlayer(options: {
   const canvas = document.createElement("canvas"); canvas.width = 720; canvas.height = 100;
   const marker = (label: string) => {
     const el = document.createElement("button"); el.type = "button"; el.className = "ai-game-assets-designer__take-marker";
-    el.setAttribute("role", "slider"); el.title = `${label}: drag to trim, or use arrow keys`;
+    el.setAttribute("role", "slider"); el.setAttribute("aria-label", label); el.title = `${label}: drag to trim, or use arrow keys`;
     return el;
   };
   const startMarker = marker("Trim start"), endMarker = marker("Trim end");
