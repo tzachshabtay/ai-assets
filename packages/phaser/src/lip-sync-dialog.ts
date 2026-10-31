@@ -1,7 +1,8 @@
-import { LIP_SYNC_SHAPES, LIP_SYNC_LABELS, lipSyncShapeAt, selectedLipSyncTrack, type AiAssetManifest, type AiLipSyncTrack, type AiMouthSet, type AiAssetFrameGrid } from '@ai-game-assets/core';
+import { LIP_SYNC_SHAPES, LIP_SYNC_LABELS, selectedLipSyncTrack, type AiAssetManifest, type AiLipSyncTrack, type AiMouthSet, type AiAssetFrameGrid, type AiPortraitEyePose, type AiPortraitEyes } from '@ai-game-assets/core';
 import type { AiAssetDebugClient } from './debug-client.js';
 import { openFrameTouchUpEditor, startGeneratingStatusAnimation, stopStatusAnimation } from './designer-support.js';
 import { createVoiceTakePlayer } from './voice-take-player.js';
+import { AiPortraitLipSync } from './lip-sync-player.js';
 
 type Candidate = { dataUrl: string; mouthSet: AiMouthSet; frameGrid: AiAssetFrameGrid; prompt?: string };
 const drafts = new Map<string, Candidate[]>();
@@ -12,9 +13,10 @@ export function openLipSyncDialog(options: {
   resolveAssetUrl(file: string): string; onManifest(manifest: AiAssetManifest): void;
 }) {
   let manifest = options.manifest, busy = false, disposed = false, candidate: Candidate | undefined;
+  let previewManifest: AiAssetManifest | undefined;
   let sheet: HTMLImageElement | undefined, track: AiLipSyncTrack | undefined;
   let player: ReturnType<typeof createVoiceTakePlayer> | undefined;
-  let textStart = 0, playingText = false, raf = 0;
+  let raf = 0;
   const portrait = () => manifest.assets[options.assetId]!;
   const doc = options.root.ownerDocument;
   const make = <K extends keyof HTMLElementTagNameMap>(tag: K, text?: string) => { const el = doc.createElement(tag); if (text) el.textContent = text; return el; };
@@ -27,7 +29,7 @@ export function openLipSyncDialog(options: {
   const btn = (label: string, action: () => void) => { const b = make('button',label); b.type = 'button'; b.onclick = action; return b; };
   const field = (label: string, input: HTMLElement) => { const el = make('label',label + ' '); el.append(input); return el; };
   const row = (...children: HTMLElement[]) => { const el = make('div'); el.style.cssText = 'display:flex;gap:12px;align-items:center;flex-wrap:wrap'; el.append(...children); return el; };
-  const publish = (next?: AiAssetManifest) => { if (next) { manifest = next; if (!disposed) options.onManifest(next); } };
+  const publish = (next?: AiAssetManifest) => { if (next) { manifest = next; previewManifest=undefined; if (!disposed) options.onManifest(next); } };
   const run = async (action: () => Promise<void>) => {
     if (busy || disposed) return;
     busy = true; card.setAttribute('aria-busy','true');
@@ -43,7 +45,7 @@ export function openLipSyncDialog(options: {
   const language = make('input'); language.value = portrait().lipSync?.language ?? 'en'; language.size = 5; language.setAttribute('aria-label','Language code');
   const wpm = make('input'); wpm.type = 'number'; wpm.min = '40'; wpm.max = '400'; wpm.value = String(portrait().lipSync?.wordsPerMinute ?? 150); wpm.style.width = '80px';
   async function saveSettings() {
-    const settings = { ...portrait().lipSync, enabled: enabled.checked, voiceAssetId: voice.value, language: language.value.trim() || 'en', wordsPerMinute: Number(wpm.value) || 150 };
+    const settings = { ...portrait().lipSync, enabled: enabled.checked, voiceAssetId: voice.value, language: language.value.trim() || 'en', wordsPerMinute: Number(wpm.value) || 150, ...layerSettings() };
     publish((await options.client.lipSync({ action: 'settings', assetId: options.assetId, settings })).manifest);
     populateLines(); status.textContent = 'Portrait settings saved.';
   }
@@ -72,7 +74,46 @@ export function openLipSyncDialog(options: {
   const regionHelp = make('p','Drag a rectangle around the lips and jaw. Pixels outside it remain identical to the base portrait. Include enough space for an open mouth.');
   const generated = make('div'); generated.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px';
   const poses = make('div'); poses.style.cssText='display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px';
-  const preview = make('canvas'); preview.width=256; preview.height=256; preview.style.cssText='width:224px;height:224px;object-fit:contain;background:#252730';
+  const layered=make('input');layered.type='checkbox';layered.checked=portrait().lipSync?.layered??false;
+  const eyeAsset=make('select');eyeAsset.setAttribute('aria-label','Eye artwork');
+  const noEyes=make('option','No eye artwork');noEyes.value='';eyeAsset.append(noEyes);
+  for(const a of Object.values(manifest.assets).filter(a=>a.frameGrid?.frameWidth===size.width&&a.frameGrid?.frameHeight===size.height&&!a.mouthSet)){
+    const option=make('option',a.id);option.value=a.id;eyeAsset.append(option);
+  }
+  eyeAsset.value=portrait().lipSync?.eyes?.assetId??'';
+  const blink=make('input'),gaze=make('input');blink.type=gaze.type='checkbox';
+  blink.checked=portrait().lipSync?.eyes?.blink!==false;gaze.checked=portrait().lipSync?.eyes?.gaze!==false;
+  const eyeRegion=portrait().lipSync?.eyes?.region??{x:Math.round(size.width*.25),y:Math.round(size.height*.35),width:Math.round(size.width*.5),height:Math.round(size.height*.12)};
+  const eyeBounds=(['x','y','width','height'] as const).map(key=>{
+    const input=make('input');input.type='number';input.min=key==='x'||key==='y'?'0':'1';input.value=String(eyeRegion[key]);input.style.width='65px';input.setAttribute('aria-label',`Eye region ${key}`);
+    return {key,input,label:field(key,input)};
+  });
+  const eyePoses=['open','half','closed','left','right'] as const;
+  const eyeFrames=eyePoses.map((pose,index)=>{
+    const input=make('input');input.type='number';input.min='1';input.value=String((portrait().lipSync?.eyes?.frames[pose]??index)+1);input.style.width='60px';input.setAttribute('aria-label',`Eye ${pose} frame`);
+    return {pose,input,label:field(pose,input)};
+  });
+  function layerSettings(){
+    const eyes:AiPortraitEyes|undefined=eyeAsset.value?{...portrait().lipSync?.eyes,assetId:eyeAsset.value,region:Object.fromEntries(eyeBounds.map(({key,input})=>[key,Number(input.value)])) as AiPortraitEyes['region'],
+      frames:Object.fromEntries(eyeFrames.map(({pose,input})=>[pose,Number(input.value)-1])) as AiPortraitEyes['frames'],blink:blink.checked,gaze:gaze.checked}:undefined;
+    return {layered:layered.checked,eyes};
+  }
+  const renderer=new AiPortraitLipSync({document:doc,size:224,resolveAssetUrl:options.resolveAssetUrl,manifest:()=>{
+    if(previewManifest)return previewManifest;
+    const current=portrait(),id=current.lipSync?.mouthAssetId??`${current.id}.mouths`;
+    return previewManifest={...manifest,assets:{...manifest.assets,[current.id]:{...current,lipSync:{...current.lipSync!,...layerSettings(),mouthAssetId:id}},
+      ...(candidate?{[id]:{...manifest.assets[id]!,id,kind:'spritesheet' as const,frameGrid:candidate.frameGrid,mouthSet:candidate.mouthSet,activeVersion:'preview',versions:{preview:{name:'preview',file:candidate.dataUrl,prompt:'Preview',createdAt:'',mouthSet:candidate.mouthSet}}}}:{})}};
+  }});
+  const preview=renderer.canvas;preview.style.background='#252730';
+  const eyePreview=make('select');eyePreview.setAttribute('aria-label','Preview eye pose');
+  for(const pose of ['automatic',...eyePoses]){const option=make('option',pose==='automatic'?'Automatic blink and gaze':pose);option.value=pose;eyePreview.append(option);}
+  eyePreview.onchange=()=>renderer.previewEyePose(eyePreview.value==='automatic'?undefined:eyePreview.value as AiPortraitEyePose);
+  for(const input of [layered,eyeAsset,blink,gaze,...eyeBounds.map(x=>x.input),...eyeFrames.map(x=>x.input)])input.addEventListener('change',()=>{previewManifest=undefined;renderer.show(options.assetId);renderer.refresh();});
+  const layerPanel=make('details');layerPanel.open=layered.checked;
+  layerPanel.append(make('summary','Independent face layers'),make('p','Keep the base face fixed. The mouth/jaw region is replaced by speech; the eye region blinks and looks around on a separate clock. Eye sheets use full-size portrait cells, so all layers share the same anchor.'),
+    row(field('Use independent layers',layered),field('Eye artwork',eyeAsset)),row(field('Blink',blink),field('Look around',gaze)),row(...eyeBounds.map(x=>x.label)),row(...eyeFrames.map(x=>x.label)),
+    btn('Save face layers',()=>void run(saveSettings)));
+
   const shapeLabel = make('span','Rest');
   function draw(canvas: HTMLCanvasElement, frame: number) {
     if (!sheet || !candidate) return;
@@ -83,7 +124,7 @@ export function openLipSyncDialog(options: {
   }
   async function choose(next: Candidate) {
     const image = new Image(); image.crossOrigin='anonymous'; image.src=next.dataUrl; await image.decode();
-    candidate=next; sheet=image; renderPoses();
+    candidate=next; sheet=image; previewManifest=undefined; renderPoses(); renderer.show(options.assetId); renderer.refresh();
   }
   function renderPoses() {
     poses.replaceChildren(); if (!candidate) return;
@@ -91,7 +132,7 @@ export function openLipSyncDialog(options: {
       const tile=make('div'), canvas=make('canvas'); canvas.width=160;canvas.height=160;canvas.style.cssText='width:100%;max-height:160px;object-fit:contain;background:#252730';
       const mapping=make('select'); mapping.setAttribute('aria-label',`${LIP_SYNC_LABELS[shape]} frame`);
       for(let i=0;i<(candidate.frameGrid.frameCount??candidate.frameGrid.columns*candidate.frameGrid.rows);i++){const option=make('option',`Frame ${i+1}`);option.value=String(i);mapping.append(option);}
-      mapping.value=String(candidate.mouthSet.frames[shape]); mapping.onchange=()=>{ if (busy || !candidate)return;candidate.mouthSet.frames[shape]=Number(mapping.value);draw(canvas,Number(mapping.value)); };
+      mapping.value=String(candidate.mouthSet.frames[shape]); mapping.onchange=()=>{ if (busy || !candidate)return;candidate.mouthSet.frames[shape]=Number(mapping.value);previewManifest=undefined;draw(canvas,Number(mapping.value)); };
       draw(canvas,candidate.mouthSet.frames[shape]);
       const edit=btn('Touch up',()=>{
         if(busy||!candidate)return;
@@ -173,7 +214,7 @@ export function openLipSyncDialog(options: {
   }
   let lineRevision=0;
   async function loadLine(){
-    const revision=++lineRevision;player?.dispose();player=undefined;transport.replaceChildren();track=undefined;playingText=false;
+    const revision=++lineRevision;player?.dispose();player=undefined;transport.replaceChildren();track=undefined;
     const asset=manifest.assets[line.value];if(!asset)return;
     const version=asset.versions[take.value],text=version?.voiceSettings?.text??asset.voiceSettings?.text??asset.prompt;script.textContent=text;
     track=selectedLipSyncTrack({...asset,activeVersion:take.value});
@@ -185,8 +226,11 @@ export function openLipSyncDialog(options: {
     }else{
       try{const result=await options.client.lipSync({action:'text',assetId:asset.id,text,settings:portrait().lipSync});if(revision!==lineRevision)return;track=result.track;}
       catch(error){status.textContent=String(error);}
-      transport.append(btn('Preview text speech',()=>{playingText=true;textStart=performance.now();}));
+      transport.append(btn('Preview text speech',()=>{renderer.speak(Symbol(),text);}));
     }
+    if(revision!==lineRevision)return;
+    renderer.stop();renderer.show(options.assetId);
+    if(version?.file) renderer.speak(revision,text,{...asset,activeVersion:take.value},()=>({seconds:player?.audio.currentTime??0,playing:!!player&&!player.audio.paused&&!player.audio.ended,paused:!!player&&player.audio.paused&&player.audio.currentTime>0&&!player.audio.ended}));
     renderCues();
   }
   function renderCues(){cues.replaceChildren();if(!track)return;
@@ -212,18 +256,15 @@ export function openLipSyncDialog(options: {
   }));
   const saveCues=btn('Save timing edits',()=>void run(async()=>{if(!track)return;if(!take.value&&manifest.assets[line.value]?.activeVersion)throw new Error('This is an estimated text preview. Choose a recording to edit its saved timing.');publish((await options.client.lipSync({action:'save-track',assetId:line.value,versionName:take.value||undefined,track})).manifest);status.textContent='Timing saved.';}));
   const details=make('details');details.append(make('summary','Edit mouth cues'),cues,saveCues);
-  const dispose=()=>{disposed=true;player?.dispose();cancelAnimationFrame(raf);stopStatusAnimation(status);modal.remove();if(previousFocus?.isConnected)previousFocus.focus();};
+  const dispose=()=>{disposed=true;player?.dispose();renderer.destroy();cancelAnimationFrame(raf);stopStatusAnimation(status);modal.remove();if(previousFocus?.isConnected)previousFocus.focus();};
   const close=btn('Close',()=>{if(busy){status.textContent='Please wait for the current save or analysis to finish.';return;}dispose();});
   card.append(make('h2','Portrait lip sync'),status,intro,settings,make('h3','1 · Mouth artwork'),row(stage,regionHelp),row(...regionInputs.map(i=>i.label)),row(generate,field('Sheet columns',columns),field('Rows',rows),btn('Upload mouth sheet',()=>{if(!busy)upload.click();}),upload),generated,poses,save,
-    make('h3','2 · Speech timing'),row(line,take),script,row(preview,shapeLabel),transport,row(analyze,mode,analyzeAll),progress,details,row(close));
+    layerPanel,make('h3','2 · Speech timing'),row(line,take),script,row(preview,shapeLabel,eyePreview),transport,row(analyze,mode,analyzeAll),progress,details,row(close));
   modal.append(card);options.root.append(modal);showRegion();populateLines();
   const mouth=manifest.assets[portrait().lipSync?.mouthAssetId??''];const version=mouth?.versions[mouth.activeVersion];
   if(mouth?.mouthSet&&mouth.frameGrid&&version)void choose({dataUrl:options.resolveAssetUrl(version.file),mouthSet:structuredClone(version.mouthSet??mouth.mouthSet),frameGrid:version.mouthSet?.frameGrid??mouth.frameGrid}).catch(e=>{status.textContent=String(e);});
   renderCandidates(drafts.get(options.assetId)??[]);
-  const tick=()=>{if(disposed)return;const seconds=player?player.audio.currentTime:(performance.now()-textStart)/1000;
-    const playing=player?!player.audio.ended:playingText;
-    if(playingText&&seconds>=(track?.duration??0))playingText=false;
-    const shape=playing?lipSyncShapeAt(track,seconds):'X';shapeLabel.textContent=LIP_SYNC_LABELS[shape];if(candidate)draw(preview,candidate.mouthSet.frames[shape]);raf=requestAnimationFrame(tick);};tick();
+  const tick=()=>{if(disposed)return;const shape=(preview.dataset.lipSyncShape??'X') as keyof typeof LIP_SYNC_LABELS;shapeLabel.textContent=LIP_SYNC_LABELS[shape];raf=requestAnimationFrame(tick);};tick();
   modal.addEventListener('keydown',event=>{
     if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close.click();}
     if(event.key==='Tab'){const focusable=[...modal.querySelectorAll<HTMLElement>('button:not(:disabled),input:not([hidden]),select,summary')].filter(el=>el.getClientRects().length);const first=focusable[0],last=focusable.at(-1);

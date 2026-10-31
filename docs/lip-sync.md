@@ -65,3 +65,25 @@ Rhubarb is MIT licensed; its distribution includes notices for its bundled
 recognizers. See [Rhubarb Lip Sync](https://github.com/DanielSWolf/rhubarb-lip-sync).
 The CMU pronunciation dictionary package is ISC licensed. AI mouth generation
 uses the configured image provider and its existing account credentials.
+
+### Independent portrait layers
+
+Opt in with `lipSync.layered: true`. The renderer uses the unchanged portrait base,
+replaces only the selected mouth set's `editRegion`, and optionally replaces an
+independent eye region. These are separate canvas layers: the original eyes/lips
+are cleared before drawing replacements, including transparent pixels. Existing
+full portrait sheets remain editable and reversible; no destructive extraction
+or changes to in-world characters are needed.
+
+`lipSync.eyes` selects a regular spritesheet asset, a region in portrait pixels,
+and zero-based `open`, `half`, `closed`, `left`, and `right` frame mappings. Its
+cells must match the portrait dimensions. Eye and mouth regions must not overlap.
+The eye sheet can be generated, uploaded, versioned, or touched up like other art.
+Blink and gaze have independent clocks and can each be disabled. Optional
+`blinkInterval`, `blinkDuration`, and `gazeInterval` use seconds. Pausing the game
+pauses ambient facial motion; starting, ending, or seeking speech does not reset it.
+
+The lip-sync dialog's **Independent face layers** controls edit these settings.
+Its speech preview uses the same renderer as the game. **Preview eye pose** can
+hold a pose while speech continues, making registration and independence easy to
+inspect. Leave it on automatic to see blinking and occasional glances.

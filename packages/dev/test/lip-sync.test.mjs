@@ -58,6 +58,13 @@ test('mouth generation locks all pixels outside region and saves a reusable chil
     assert.equal(saved.manifest.assets.portrait.linkedAnimationAssets['lip-sync'].assetId,'portrait.mouths');
     for(const[s,i]of LIP_SYNC_SHAPES.map((s,i)=>[s,i]))assert.equal(saved.version.mouthSet.frames[s],i);
     await assert.rejects(()=>handleLipSyncRequest(options,{action:'save-mouths',assetId:'portrait',...candidate,...candidate.frameGrid,mouthSet:{...candidate.mouthSet,sourceVersion:'old'}}),/portrait changed/i);
+    const layered={...saved.manifest.assets.portrait.lipSync,layered:true};
+    await handleLipSyncRequest(options,{action:'settings',assetId:'portrait',settings:layered});
+    const eyes={assetId:'portrait.mouths',region:{x:0,y:1,width:8,height:8},frames:{open:0,half:1,closed:2,left:3,right:4}};
+    await handleLipSyncRequest(options,{action:'settings',assetId:'portrait',settings:{...layered,eyes}});
+    await assert.rejects(()=>handleLipSyncRequest(options,{action:'settings',assetId:'portrait',settings:{...layered,eyes:{...eyes,region}}}),/must not overlap/);
+    await assert.rejects(()=>handleLipSyncRequest(options,{action:'settings',assetId:'portrait',settings:{...layered,eyes:{...eyes,frames:{...eyes.frames,closed:30}}}}),/outside the eye sheet/);
+    await assert.rejects(()=>handleLipSyncRequest(options,{action:'settings',assetId:'portrait',settings:{...layered,eyes:{...eyes,blinkInterval:[6,2]}}}),/intervals/);
     const disk=JSON.parse(await readFile(manifestPath,'utf8'));assert.equal(disk.assets.voice.prompt,'A voice');
   }finally{await rm(root,{recursive:true,force:true});}
 });

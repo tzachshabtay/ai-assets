@@ -31,6 +31,22 @@ export async function handleLipSyncRequest(options: AiAssetDevServerOptions, req
       if (!['image','animation','spritesheet'].includes(asset.kind) || asset.frameGrid) throw new Error('Select the portrait base image to enable lip sync.');
       if (!request.settings || manifest.assets[request.settings.voiceAssetId]?.kind !== 'voice') throw new Error('Select a voice for this portrait.');
       if (request.settings.mouthAssetId && !manifest.assets[request.settings.mouthAssetId]?.mouthSet) throw new Error('Select a mouth-shape asset.');
+      assertAsset({ ...asset, lipSync: request.settings });
+      if (request.settings.layered) {
+        const mouths = manifest.assets[request.settings.mouthAssetId ?? ''];
+        const mouthSet = mouths?.versions[mouths.activeVersion]?.mouthSet ?? mouths?.mouthSet;
+        if (!mouthSet?.editRegion) throw new Error('Choose a mouth set with a mouth/jaw region before enabling layers.');
+        const mouthGrid=mouthSet.frameGrid??mouths?.frameGrid;
+        if(mouthGrid?.frameWidth!==asset.dimensions?.width||mouthGrid?.frameHeight!==asset.dimensions?.height) throw new Error('Mouth layers must use cells the same size as the base portrait.');
+        const eyes = request.settings.eyes;
+        if (eyes) {
+          const eyeAsset = manifest.assets[eyes.assetId], grid = eyeAsset?.frameGrid;
+          if (!grid || grid.frameWidth !== asset.dimensions?.width || grid.frameHeight !== asset.dimensions?.height) throw new Error('Eye artwork must use cells the same size as the base portrait.');
+          if (Object.values(eyes.frames).some(frame => frame >= (grid.frameCount ?? grid.columns * grid.rows))) throw new Error('An eye pose points outside the eye sheet.');
+          const a=eyes.region, b=mouthSet.editRegion;
+          if (a.x < b.x+b.width && a.x+a.width > b.x && a.y < b.y+b.height && a.y+a.height > b.y) throw new Error('Eye and mouth/jaw regions must not overlap.');
+        }
+      }
       asset.lipSync = request.settings;
     } else if (request.action === 'save-track') {
       if (asset.kind !== 'voice-line' || !request.track) throw new Error('Select a voice line and timing track.');

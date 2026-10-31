@@ -84,6 +84,15 @@ export function assertManifest(manifest: AiAssetManifest): void {
 export function assertAsset(asset: AiAssetDefinition): void {
   if (asset.lipSyncTrack) assertLipSyncTrack(asset.lipSyncTrack);
   if (asset.lipSync && (typeof asset.lipSync.enabled !== 'boolean' || !asset.lipSync.voiceAssetId || !asset.lipSync.language)) throw new Error('Lip sync requires a voice and language.');
+  if (asset.lipSync?.layered !== undefined && typeof asset.lipSync.layered !== 'boolean') throw new Error('Layered portrait must be enabled or disabled.');
+  const eyes = asset.lipSync?.eyes;
+  if (eyes) {
+    const r = eyes.region;
+    if (!eyes.assetId || !r || ![r.x,r.y,r.width,r.height].every(Number.isInteger) || r.x < 0 || r.y < 0 || r.width <= 0 || r.height <= 0 || r.x+r.width > (asset.dimensions?.width ?? 0) || r.y+r.height > (asset.dimensions?.height ?? 0)) throw new Error('Eye region must fit inside the portrait.');
+    for (const pose of ['open','half','closed','left','right'] as const) if (!Number.isInteger(eyes.frames?.[pose]) || eyes.frames[pose] < 0) throw new Error(`Invalid eye pose: ${pose}.`);
+    for (const range of [eyes.blinkInterval, eyes.gazeInterval]) if (range && (range.length !== 2 || !range.every(n => Number.isFinite(n) && n > 0) || range[1] < range[0])) throw new Error('Eye animation intervals must be positive and ordered.');
+    if (eyes.blinkDuration !== undefined && (!Number.isFinite(eyes.blinkDuration) || eyes.blinkDuration <= 0)) throw new Error('Blink duration must be positive.');
+  }
   if (asset.mouthSet) for (const shape of LIP_SYNC_SHAPES) {
     const frame = asset.mouthSet.frames[shape];
     if (!Number.isInteger(frame) || frame < 0 || frame >= (asset.frameGrid?.frameCount ?? (asset.frameGrid?.columns ?? 0) * (asset.frameGrid?.rows ?? 0))) throw new Error(`Invalid mouth frame for ${shape}.`);

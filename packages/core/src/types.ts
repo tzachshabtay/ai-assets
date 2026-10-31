@@ -18,10 +18,27 @@ export type AiMouthSet = {
   sourceVersion?: string;
   editRegion?: { x: number; y: number; width: number; height: number };
 };
+export type AiPortraitRegion = { x: number; y: number; width: number; height: number };
+export type AiPortraitEyePose = 'open' | 'half' | 'closed' | 'left' | 'right';
+/** Eye sheets use full portrait cells, sharing the base portrait's registration. */
+export type AiPortraitEyes = {
+  assetId: string;
+  region: AiPortraitRegion;
+  frames: Record<AiPortraitEyePose, number>;
+  blink?: boolean;
+  gaze?: boolean;
+  /** Seconds between blinks, and total seconds for closing and reopening. */
+  blinkInterval?: [number, number];
+  blinkDuration?: number;
+  gazeInterval?: [number, number];
+};
 export type AiLipSyncSettings = {
   enabled: boolean;
   voiceAssetId: string;
   mouthAssetId?: string;
+  /** Composite a fixed base with only the mouth/jaw editRegion from each pose. */
+  layered?: boolean;
+  eyes?: AiPortraitEyes;
   language: string;
   wordsPerMinute?: number;
   pronunciations?: Record<string, string>;
