@@ -35,6 +35,7 @@ export type {
 } from "./asset-store.js";
 
 export {
+  updateVoiceLine,
   readManifest,
   saveGeneratedOption,
   saveTilesetAnimation,

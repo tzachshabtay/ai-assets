@@ -45,11 +45,13 @@ test('recorded takes persist independently; favorite switches without copies and
     }
     saved = (await post('update-voice-line', { assetId: 'line', text: 'Good morning!', direction: 'Cheerfully', deferManifestModuleWrite: true })).manifest;
     assert.equal(saved.assets.line.voiceSettings.text, 'Good morning!');
+    assert.equal(saved.assets.line.versions['take-2'].recordedText, 'Hello!', 'Editing script preserves the actual recording transcript');
     assert.equal(saved.assets.line.versions['take-2'].voiceSettings.text, 'Good morning!');
     assert.equal(saved.assets.line.versions['take-1'].voiceSettings.text, 'Hello!', 'Other take metadata stays intact');
     assert.equal(saved.assets.line.voiceSettings.direction, 'Cheerfully');
     assert.deepEqual(await readdir(assetsDir), files, 'Text edits do not copy or remove audio');
     saved = (await post('select-voice-line-version', { assetId: 'line', versionName: 'take-1' })).manifest;
+    assert.equal(saved.assets.line.versions['take-1'].recordedText, 'Hello!');
     assert.equal(saved.assets.line.versions['take-1'].voiceSettings.text, 'Good morning!', 'Favorite switching cannot revert promoted wording');
     assert.deepEqual(saved.assets.line.versions['take-1'].audioPlayback, { trimStartSeconds: .2, trimEndSeconds: 2.5 }, 'Favoriting preserves each take trim');
     await post('select-voice-line-version', { assetId: 'line', versionName: 'take-2' });

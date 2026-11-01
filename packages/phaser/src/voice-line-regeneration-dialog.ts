@@ -29,7 +29,7 @@ export function openVoiceLineRegenerationDialog(options: {
   const scope = document.createElement("select");
   scope.setAttribute("aria-label", recording ? "Lines to record" : "Lines to generate");
   for (const [value, text] of [
-    ["missing", `Only missing recordings (${options.missingCount})`],
+    ["missing", `Missing or outdated recordings (${options.missingCount})`],
     ["all", `All lines (${options.allCount})`]
   ]) {
     const option = document.createElement("option");
@@ -74,11 +74,11 @@ export function openVoiceLineRegenerationDialog(options: {
     explanation.textContent = recording
       ? "Record each line with your microphone. Keep multiple takes and star your favorite to promote it. Other takes stay in version history."
       : missing
-      ? "Keep selected and promoted recordings. Generate and promote one recording for each remaining line."
+      ? "Keep selected and promoted recordings that match the current text. Generate and promote one recording for each remaining line."
       : "Generate and promote one new recording for every line, replacing its selected or active recording. Previous promoted versions are kept.";
     const total = missing ? options.missingCount : options.allCount;
     start.disabled = total === 0;
-    status.textContent = total === 0 ? "Every line already has a selected or promoted recording." : recording ? "Microphone access is requested when you press Record. You can skip lines and return to them." : "Uses your configured voice provider and generation credits.";
+    status.textContent = total === 0 ? "Every line already has a recording matching its current text." : recording ? "Microphone access is requested when you press Record. You can skip lines and return to them." : "Uses your configured voice provider and generation credits.";
   };
   scope.addEventListener("change", sync);
   start.addEventListener("click", () => {

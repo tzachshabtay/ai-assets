@@ -35,6 +35,7 @@ export function createAiAssetVersion(
   input: CreateVersionInput
 ): AiAssetVersion {
   return {
+    recordedText: asset.kind === "voice-line" ? input.voiceSettings?.text ?? asset.voiceSettings?.text : undefined,
     lipSyncTrack: input.lipSyncTrack,
     mouthSet: input.mouthSet,
     name: input.name,

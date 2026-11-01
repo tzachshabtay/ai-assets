@@ -223,6 +223,8 @@ export type AiAssetScaledVariant = {
 };
 
 export type AiAssetVersion = {
+  /** Immutable transcript of the audio, separate from subsequently edited script text. */
+  recordedText?: string;
   lipSyncTrack?: AiLipSyncTrack;
   mouthSet?: AiMouthSet;
   scaledVariants?: Record<string, AiAssetScaledVariant>;

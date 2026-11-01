@@ -63,18 +63,26 @@ export function voiceLinesForRegeneration(
   manifest: AiAssetManifest,
   lineAssetIds: string[],
   scope: VoiceLineRegenerationScope,
-  selectedLineAssetIds: Iterable<string> = []
+  selectedLineAssetIds: Iterable<string> = [],
+  selectedLineTexts?: ReadonlyMap<string, string | undefined>
 ): string[] {
   const selected = new Set(selectedLineAssetIds);
   return lineAssetIds.filter((id) => {
     const asset = manifest.assets[id];
-    return scope === "all" || (!selected.has(id) && !asset?.versions[asset.activeVersion]?.file);
+    if (scope === "all") return true;
+    const version = asset?.versions[asset.activeVersion];
+    const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
+    const script = asset?.voiceSettings?.text ?? version?.voiceSettings?.text;
+    const stale = (text: string | undefined) => script !== undefined && text !== undefined && normalize(text) !== normalize(script);
+    if (selected.has(id)) return stale(selectedLineTexts?.get(id));
+    return !version?.file || stale(version.recordedText ?? version.lipSyncTrack?.text ?? version.voiceSettings?.text);
   });
 }
 
 export type RegenerateAndPromoteVoiceLinesOptions = {
   scope?: VoiceLineRegenerationScope;
   selectedLineAssetIds?: Iterable<string>;
+  selectedLineTexts?: ReadonlyMap<string, string | undefined>;
   manifest: AiAssetManifest;
   voiceAssetId: string;
   targetId?: string;
@@ -162,7 +170,7 @@ export async function regenerateAndPromoteVoiceLines(
   );
   const { baseVoiceAssetId } = plan;
   const lineAssetIds = voiceLinesForRegeneration(options.manifest, plan.lineAssetIds,
-    options.scope ?? "all", options.selectedLineAssetIds);
+    options.scope ?? "all", options.selectedLineAssetIds, options.selectedLineTexts);
   const voiceId = promotedVoiceId(options.manifest, baseVoiceAssetId);
   if (!voiceId) {
     throw new Error(

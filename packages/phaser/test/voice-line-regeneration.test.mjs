@@ -560,3 +560,14 @@ test("missing mode resolves target recordings independently from default recordi
   const plan = voiceLineRegenerationPlan(manifest, "voice.detective", "mobile");
   assert.deepEqual(voiceLinesForRegeneration(manifest, plan.lineAssetIds, "missing", ["line.second.mobile"]), ["line.first.mobile"]);
 });
+
+
+test("missing mode includes outdated promoted and selected recordings", () => {
+  const line = (text, recordedText) => ({ kind: "voice-line", voiceSettings: { text }, activeVersion: "take", versions: { take: { file: "take.wav", voiceSettings: { text }, recordedText } } });
+  const manifest = { assets: { fresh: line("Hello", "Hello"), stale: line("Goodbye", "Hello"), legacy: line("New script", undefined), selected: line("New script", "Old script") } };
+  manifest.assets.legacy.versions.take.lipSyncTrack = { text: "Old script" };
+  assert.deepEqual(voiceLinesForRegeneration(manifest, Object.keys(manifest.assets), "missing", ["selected"], new Map([["selected", "Old script"]])), ["stale", "legacy", "selected"]);
+  assert.deepEqual(voiceLinesForRegeneration(manifest, ["selected"], "missing", ["selected"], new Map([["selected", "New script"]])), []);
+  manifest.assets.stale.voiceSettings.text = "  Hello  ";
+  assert.deepEqual(voiceLinesForRegeneration(manifest, ["stale"], "missing"), []);
+});

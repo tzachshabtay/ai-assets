@@ -488,7 +488,7 @@ export async function saveStyleGuide(
 
 /** Promote authored speech metadata without regenerating or copying recordings. */
 export async function updateVoiceLine(
-  options: AssetStoreOptions,
+  options: Pick<AssetStoreOptions, "manifestPath" | "manifestModulePath">,
   input: { assetId: string; text?: string; direction?: string; deferManifestModuleWrite?: boolean }
 ): Promise<AiAssetManifest> {
   if (input.text !== undefined && (typeof input.text !== "string" || !input.text.trim())) throw new Error("Spoken text cannot be empty.");
@@ -507,7 +507,10 @@ export async function updateVoiceLine(
   asset.voiceSettings = { ...active?.voiceSettings, ...asset.voiceSettings, ...changes };
   // Runtime clients can resolve the promoted version first. Keep its metadata in sync,
   // while other takes and the original source prompt remain available as history.
-  if (active) active.voiceSettings = { ...active.voiceSettings, ...changes };
+  if (active) {
+    active.recordedText ??= active.lipSyncTrack?.text ?? active.voiceSettings?.text ?? previousText;
+    active.voiceSettings = { ...active.voiceSettings, ...changes };
+  }
   assertManifest(manifest);
   await writeManifest(options.manifestPath, manifest);
   if (options.manifestModulePath && !input.deferManifestModuleWrite) await writeManifestModule(options.manifestModulePath, manifest);
@@ -546,6 +549,7 @@ export async function selectVoiceLineVersion(
   if (!version?.file) throw new Error("Unknown voice-line recording version.");
   asset.activeVersion = input.versionName;
   // Favoriting another take must not revert an explicitly authored script or direction.
+  version.recordedText ??= version.lipSyncTrack?.text ?? version.voiceSettings?.text ?? asset.voiceSettings?.text;
   version.voiceSettings = { ...version.voiceSettings, ...asset.voiceSettings };
   assertManifest(manifest);
   await writeManifest(options.manifestPath, manifest);
@@ -582,7 +586,10 @@ export async function deleteAssetVersion(
   };
   if (deletingActive && asset.kind === "voice-line") {
     const next = remainingVersions[manifest.assets[input.assetId]!.activeVersion];
-    if (next) next.voiceSettings = { ...next.voiceSettings, ...asset.voiceSettings };
+    if (next) {
+      next.recordedText ??= next.lipSyncTrack?.text ?? next.voiceSettings?.text ?? asset.voiceSettings?.text;
+      next.voiceSettings = { ...next.voiceSettings, ...asset.voiceSettings };
+    }
   }
 
   assertManifest(manifest);

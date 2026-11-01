@@ -2328,7 +2328,8 @@ export function installAiAssetDesigner(
     const plan = voiceLineRegenerationPlan(manifest, voiceAssetId, selectedTargetId);
     if (manifest.assets[voiceAssetId]?.kind !== "voice" || !plan.lineAssetIds.length || plan.missingTargetLineAssetIds.length) return;
     const selectedLineAssetIds = [...pendingOptions.keys()];
-    const missing = voiceLinesForRegeneration(manifest, plan.lineAssetIds, "missing", selectedLineAssetIds);
+    const selectedLineTexts = new Map([...pendingOptions].map(([id, pending]) => [id, pending.option.voiceSettings?.text]));
+    const missing = voiceLinesForRegeneration(manifest, plan.lineAssetIds, "missing", selectedLineAssetIds, selectedLineTexts);
     const setup = openVoiceLineRegenerationDialog({ root: elements.root, mode: "record",
       voiceName: readableAssetName(plan.baseVoiceAssetId), allCount: plan.lineAssetIds.length,
       missingCount: missing.length, onStop() {} });
@@ -2343,7 +2344,7 @@ export function installAiAssetDesigner(
     const currentPromotionId = ++promotionId;
     activePromotionId = currentPromotionId;
     const dialog = openVoiceLineRecordingDialog({ root: elements.root, manifest,
-      lineAssetIds: voiceLinesForRegeneration(manifest, plan.lineAssetIds, scope, selectedLineAssetIds),
+      lineAssetIds: voiceLinesForRegeneration(manifest, plan.lineAssetIds, scope, selectedLineAssetIds, selectedLineTexts),
       voiceName: readableAssetName(plan.baseVoiceAssetId), client, resolveAssetUrl,
       onManifest(updated, assetId, activeChanged) {
         manifest = updated;
@@ -2424,7 +2425,8 @@ export function installAiAssetDesigner(
       : "Default";
     const targetId = selectedTargetId;
     const selectedLineAssetIds = [...pendingOptions.keys()];
-    const missing = voiceLinesForRegeneration(manifest, lineAssetIds, "missing", selectedLineAssetIds);
+    const selectedLineTexts = new Map([...pendingOptions].map(([id, pending]) => [id, pending.option.voiceSettings?.text]));
+    const missing = voiceLinesForRegeneration(manifest, lineAssetIds, "missing", selectedLineAssetIds, selectedLineTexts);
     const controller = new AbortController();
     const dialog = openVoiceLineRegenerationDialog({
       root: elements.root,
@@ -2439,7 +2441,7 @@ export function installAiAssetDesigner(
       voiceLineDialog = undefined;
       return;
     }
-    const batchLineAssetIds = voiceLinesForRegeneration(manifest, lineAssetIds, scope, selectedLineAssetIds);
+    const batchLineAssetIds = voiceLinesForRegeneration(manifest, lineAssetIds, scope, selectedLineAssetIds, selectedLineTexts);
 
     const currentPromotionId = promotionId + 1;
     promotionId = currentPromotionId;
@@ -2462,6 +2464,7 @@ export function installAiAssetDesigner(
         targetId,
         scope,
         selectedLineAssetIds,
+        selectedLineTexts,
         client,
         signal: controller.signal,
         onProgress(progress) {
