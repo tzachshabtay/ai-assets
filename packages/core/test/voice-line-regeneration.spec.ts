@@ -116,7 +116,7 @@ test("designer missing batch preserves recovered selected audio and promotes onl
   await expect(page.getByRole("button", { name: "Regenerate all lines", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Regenerate all lines", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Generate voice lines" });
-  await expect(dialog.getByRole("combobox")).toHaveText(/Only missing recordings \(1\)/);
+  await expect(dialog.getByRole("combobox")).toHaveText(/Missing or outdated recordings \(1\)/);
   await dialog.getByRole("button", { name: "Start generation" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).requests)).toEqual(["line.missing"]);
   await expect(dialog.getByRole("button", { name: "Stop after current line" })).toBeEnabled();
