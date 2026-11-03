@@ -334,7 +334,7 @@ The designer supports:
 - selecting a generated or saved option updates the Current preview without promoting it, so it can be edited in place; Revert preview restores the active promoted version
 - cancelable generations
 - upload for images, spritesheets, animation frames, sound effects, music, and voice lines
-- a voice-line generation dialog with all-lines or missing-recordings scope, batch progress, and safe stopping after the current line is saved; missing mode keeps both selected drafts and promoted recordings
+- a voice-line generation dialog with all-lines or missing-recordings scope, batch progress, and safe stopping after the current line is saved; missing mode keeps both selected drafts and promoted recordings; browser-authored lines remain in the batch across server promotions, and new lines with text and a valid voice are persisted when their first take is saved
 - a microphone recording marathon for all or missing voice lines, with Previous/Next navigation, playable takes, deletion, and a mutually exclusive favorite star; takes save as WAV versions and the favorite becomes active, without requiring an AI base voice
 - version history, revert, promote, and delete
 - style guide prompt and reference image management

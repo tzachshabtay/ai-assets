@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PNG } from "pngjs";
+import { resolveVoiceLineDraft } from './voice-line-draft.js';
 
 export type AssetStoreOptions = {
   manifestPath: string;
@@ -123,11 +124,8 @@ export async function saveGeneratedOption(
   input: SaveGeneratedOptionInput
 ): Promise<SaveGeneratedOptionResult> {
   const manifest = await readManifest(options.manifestPath);
-  const asset = manifest.assets[input.assetId];
-
-  if (!asset) {
-    throw new Error(`Unknown AI asset "${input.assetId}".`);
-  }
+  const asset = resolveVoiceLineDraft(manifest, input.assetId,
+    input.option.mimeType.startsWith('audio/') ? input.option.voiceSettings : undefined);
 
   const extension = extensionFromMimeType(input.option.mimeType);
   const fileName = `${sanitizeFilePart(input.assetId)}.${sanitizeFilePart(input.versionName)}.${extension}`;

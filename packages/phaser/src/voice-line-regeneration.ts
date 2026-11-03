@@ -202,7 +202,7 @@ export async function regenerateAndPromoteVoiceLines(
   };
 
   for (const [index, assetId] of lineAssetIds.entries()) {
-    const line = manifest.assets[assetId];
+    const line = manifest.assets[assetId] ?? options.manifest.assets[assetId];
     const activeVersion = line?.versions[line.activeVersion];
     const progress = {
       assetId,
@@ -210,6 +210,7 @@ export async function regenerateAndPromoteVoiceLines(
       total: lineAssetIds.length
     };
     let generatedOption: GeneratedDebugOption;
+    let generationVoiceSettings: AiVoiceGenerationSettings;
 
     if (options.signal?.aborted) {
       cancelled = progress;
@@ -225,6 +226,7 @@ export async function regenerateAndPromoteVoiceLines(
         voiceId,
         direction: voiceLineDirection(line)
       };
+      generationVoiceSettings = voiceSettings;
       const generated = await options.client.generate({
         assetId,
         prompt: voiceSettings.direction,
@@ -269,14 +271,14 @@ export async function regenerateAndPromoteVoiceLines(
         settings: generatedOption.settings,
         audioSettings: generatedOption.audioSettings,
         audioPlayback: generatedOption.audioPlayback,
-        voiceSettings: generatedOption.voiceSettings,
+        voiceSettings: generatedOption.voiceSettings ?? generationVoiceSettings!,
           lipSyncTrack: generatedOption.lipSyncTrack, mouthSet: generatedOption.mouthSet,
         durationSeconds: generatedOption.durationSeconds,
         activate: true,
         notes: "Regenerated from the selected base voice with Regenerate all lines.",
         deferManifestModuleWrite: Boolean(options.client.syncManifestModule)
       });
-      manifest = saved.manifest;
+      manifest = retainPendingVoiceLines(options.manifest, saved.manifest, lineAssetIds);
       promoted.push(saved);
     } catch (error) {
       failures.push({
@@ -300,7 +302,7 @@ export async function regenerateAndPromoteVoiceLines(
       manifestModuleSyncDeferred = true;
     } else {
       try {
-        manifest = await options.client.syncManifestModule();
+        manifest = retainPendingVoiceLines(options.manifest, await options.client.syncManifestModule(), lineAssetIds);
       } catch (error) {
         manifestModuleSyncError = error;
       }
@@ -315,4 +317,24 @@ export async function regenerateAndPromoteVoiceLines(
     manifestModuleSyncDeferred: manifestModuleSyncDeferred || undefined,
     manifestModuleSyncError
   };
+}
+
+/** Server promotions may omit lines that only exist in the current designer draft.
+ * Keep just the planned lines and their voice links; server recordings always win. */
+function retainPendingVoiceLines(source: AiAssetManifest, saved: AiAssetManifest, ids: string[]): AiAssetManifest {
+  const missing = new Set(ids.filter(id => !saved.assets[id] && source.assets[id]));
+  if (!missing.size) return saved;
+  const result = structuredClone(saved);
+  for (const id of missing) {
+    result.assets[id] = structuredClone(source.assets[id]!);
+    if (source.assetPaths?.[id]) (result.assetPaths ??= {})[id] = [...source.assetPaths[id]!];
+  }
+  for (const voice of Object.values(source.assets)) {
+    const current = result.assets[voice.id];
+    if (voice.kind !== 'voice' || current?.kind !== 'voice') continue;
+    for (const [key, link] of Object.entries(voice.linkedAnimationAssets ?? {})) {
+      if (missing.has(link.assetId)) (current.linkedAnimationAssets ??= {})[key] = {...link};
+    }
+  }
+  return result;
 }

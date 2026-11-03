@@ -44,6 +44,7 @@ import path from "node:path";
 import { analyzeLipSyncAudio } from './lip-sync.js';
 import { lipSyncVoiceSettings } from '@ai-game-assets/core';
 import { handleLipSyncRequest } from './lip-sync-authoring.js';
+import { resolveVoiceLineDraft } from './voice-line-draft.js';
 
 export type AiAssetDevServerOptions = AssetStoreOptions & {
   provider?: AiImageProvider;
@@ -193,7 +194,7 @@ async function routeRequest(
   if (request.method === "POST" && url.pathname === "/__ai-assets/generate") {
     const body = await readJson<GenerateRequestBody>(request);
     const manifest = await readManifest(options.manifestPath);
-    const asset = applyGenerationOverrides(getAsset(manifest, body.assetId), {
+    const asset = applyGenerationOverrides(resolveVoiceLineDraft(manifest, body.assetId, body.voiceSettings), {
       dimensions: body.dimensions,
       frameCount: body.frameCount,
       tileset: body.tileset
@@ -211,7 +212,7 @@ async function routeRequest(
   if (request.method === "POST" && url.pathname === "/__ai-assets/generate-stream") {
     const body = await readJson<GenerateRequestBody>(request);
     const manifest = await readManifest(options.manifestPath);
-    const asset = applyGenerationOverrides(getAsset(manifest, body.assetId), {
+    const asset = applyGenerationOverrides(resolveVoiceLineDraft(manifest, body.assetId, body.voiceSettings), {
       dimensions: body.dimensions,
       frameCount: body.frameCount,
       tileset: body.tileset
@@ -488,7 +489,8 @@ async function routeRequest(
       lipSyncTrack: body.lipSyncTrack,
       mouthSet: body.mouthSet
     });
-    const asset = getAsset(await readManifest(options.manifestPath), body.assetId);
+    const asset = resolveVoiceLineDraft(await readManifest(options.manifestPath), body.assetId,
+      option.mimeType.startsWith('audio/') ? option.voiceSettings : undefined);
     // Recordings and uploads use the same analyzer as generated takes. Persist the
     // audio even if analysis fails: the designer can retry the missing timing.
     if (asset.kind === 'voice-line' && !option.lipSyncTrack) {
@@ -729,6 +731,7 @@ async function generateAudio(
   const settings = asset.kind === 'voice-line' ? lipSyncVoiceSettings(manifest, body.voiceSettings?.voiceAssetId ?? asset.voiceSettings?.voiceAssetId ?? '') : undefined;
   const analyses = new WeakMap<GeneratedAssetOption, Promise<void>>();
   const analyze = (option: GeneratedAssetOption, index: number): Promise<void> => {
+    if (asset.kind === 'voice-line') option.voiceSettings = { ...asset.voiceSettings, ...body.voiceSettings, ...option.voiceSettings };
     let pending = analyses.get(option);
     if (!pending) {
       pending = (async () => {
