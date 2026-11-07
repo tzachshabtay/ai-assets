@@ -126,7 +126,7 @@ test("opaque spritesheet prompts preserve the background without transparency in
 test("native transparency supports PNG and WebP independently of the model name", () => {
   const request = animationRequest();
 
-  for (const model of ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2", "gpt-image-1.5"]) {
+  for (const model of ["gpt-image-2.6-sunburst", "gpt-image-2.6-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2", "gpt-image-1.5"]) {
     for (const outputFormat of ["png", "webp", "jpeg"]) {
       assert.equal(shouldRequestTransparency(request, {
         prompt: request.asset.prompt,

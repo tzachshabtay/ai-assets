@@ -259,7 +259,7 @@ test("base tileset variations never receive animation variation instructions", (
   assert.doesNotMatch(animationPrompt, /Base tileset variation direction/i);
 });
 
-test("image generation chooses a valid flexible canvas for GPT Image 2 and 2.5", () => {
+test("image generation chooses a valid flexible canvas for GPT Image 2, 2.5 and 2.6", () => {
   assert.equal(closestImageGenerationSize({ width: 128, height: 64 }), "1440x720");
   assert.equal(closestImageGenerationSize({ width: 64, height: 128 }), "720x1440");
   assert.equal(closestImageGenerationSize({ width: 96, height: 96 }), "1024x1024");
@@ -283,7 +283,9 @@ test("image generation chooses a valid flexible canvas for GPT Image 2 and 2.5",
     "gpt-image-2.5-flare",
     "gpt-image-2.5-sunburst",
     "gpt-image-2.5-flare-snapshot",
-    "gpt-image-2.5-sunburst-snapshot"
+    "gpt-image-2.5-sunburst-snapshot",
+    "gpt-image-2.6-flare",
+    "gpt-image-2.6-sunburst"
   ]) {
     assert.equal(closestImageGenerationSize({ width: 128, height: 64 }, model), "1440x720");
     assert.equal(closestImageGenerationSize(

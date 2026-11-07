@@ -198,15 +198,15 @@ cutout sprites: the provider requests native alpha with PNG or WebP and preserve
 sprite composition, and tileset extraction. JPEG uses an opaque background. An explicit background
 setting takes precedence over words in the asset prompt.
 
-The image model selector in the designer offers **GPT Image 2.5 Sunburst** (the default for new assets,
-editing precision) and **GPT Image 2.5 Flare** (fast everyday generation). The selected model is used
+The image model selector in the designer offers **GPT Image 2.5 Sunburst** (the existing default),
+**GPT Image 2.5 Flare**, **GPT Image 2.6 Sunburst**, and **GPT Image 2.6 Flare**. The selected model is used
 for generation, edits, derived assets, and tileset animations, and is saved when a candidate is promoted.
-Existing assets with an explicit model keep that selection; choose a 2.5 model to migrate those assets.
+Existing assets with an explicit model keep that selection; choose a 2.6 model to try it on an asset.
 Historical variants keep their original model metadata. SVG and audio use their own providers.
 
 Set `settings.model` on an asset or generation request, or pass `model` to `createOpenAiImageProvider`,
 to choose a model programmatically. Request settings take precedence over asset settings, then provider
-defaults. GPT Image 2.5 supports `low`, `medium`, `high`, `xhigh`, `max`, and `auto` quality.
+defaults. GPT Image 2.5 and 2.6 support `low`, `medium`, `high`, `xhigh`, `max`, and `auto` quality.
 
 ```ts
 settings: { model: "gpt-image-2.5-sunburst", format: "png", background: "transparent" }
@@ -214,6 +214,9 @@ settings: { model: "gpt-image-2.5-sunburst", format: "png", background: "transpa
 
 See the [OpenAI image generation guide](https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options)
 for supported formats and size constraints.
+GPT Image 2.6 can generate looping GIFs in the Images API, but the API's transparent-background
+instructions specify PNG or WebP. AI Assets therefore continues to use transparent PNG/WebP
+spritesheets for cutout animations; GIF output is not a transparent-sprite alternative here.
 
 ## Phaser Runtime
 

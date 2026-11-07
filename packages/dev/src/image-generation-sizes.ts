@@ -22,7 +22,8 @@ export const GPT_IMAGE_2_SIZE_CONSTRAINTS = {
 const DEFAULT_IMAGE_GENERATION_MINIMUM_PIXELS = 1_048_576;
 
 export function isGptImage2Model(model: string): boolean {
-  return ["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"].some(
+  return ["gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst",
+    "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"].some(
     (family) => model === family || model.startsWith(`${family}-`)
   );
 }

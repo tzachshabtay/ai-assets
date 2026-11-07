@@ -8,6 +8,8 @@ import { createImageGenerationSession, tilesetAnimationSettingsForEdit } from ".
 import { createMixedTilesetOption } from "../dist/tileset-dialog.js";
 
 const flare = "gpt-image-2.5-flare";
+const sunburst26 = "gpt-image-2.6-sunburst";
+const flare26 = "gpt-image-2.6-flare";
 const asset = {
   id: "hero",
   kind: "image",
@@ -81,14 +83,17 @@ test("model control preserves configured custom models and hides itself for SVG 
     assert.equal(elements.modelField.hidden, false);
     assert.equal(elements.modelSelect.disabled, false);
     assert.deepEqual(elements.modelSelect.children.map((option) => option.value),
-      [DEFAULT_IMAGE_MODEL, flare, "custom-image-model"]);
-    assert.deepEqual(elements.modelSelect.children.slice(0, 2).map((option) => option.textContent),
-      ["GPT Image 2.5 Sunburst", "GPT Image 2.5 Flare"]);
+      [DEFAULT_IMAGE_MODEL, flare, sunburst26, flare26, "custom-image-model"]);
+    assert.deepEqual(elements.modelSelect.children.slice(0, 4).map((option) => option.textContent),
+      ["GPT Image 2.5 Sunburst", "GPT Image 2.5 Flare", "GPT Image 2.6 Sunburst", "GPT Image 2.6 Flare"]);
     assert.equal(elements.modelSelect.value, "custom-image-model");
 
     syncImageModelControl(elements, asset, flare);
     assert.equal(elements.modelSelect.value, flare);
-    assert.equal(elements.modelSelect.children.length, 2);
+    assert.equal(elements.modelSelect.children.length, 4);
+
+    syncImageModelControl(elements, asset, sunburst26);
+    assert.equal(elements.modelSelect.value, sunburst26);
 
     for (const hiddenAsset of [asset, { ...asset, kind: "music" }]) {
       syncImageModelControl(elements, hiddenAsset, flare, "svg");

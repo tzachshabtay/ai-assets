@@ -283,7 +283,9 @@ test("adaptive tileset planning jointly chooses the model canvas and packing gri
     "gpt-image-2.5-flare",
     "gpt-image-2.5-sunburst",
     "gpt-image-2.5-flare-snapshot",
-    "gpt-image-2.5-sunburst-snapshot"
+    "gpt-image-2.5-sunburst-snapshot",
+    "gpt-image-2.6-flare",
+    "gpt-image-2.6-sunburst"
   ]) {
     assert.deepEqual(planTilesetSheetGeneration(props, "auto", model), autoPropsPlan);
   }

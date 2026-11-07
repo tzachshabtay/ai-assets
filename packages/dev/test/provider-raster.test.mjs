@@ -82,9 +82,15 @@ test("model selection respects request, asset, provider, and new default precede
       asset: pinnedAsset,
       settings: { model: "gpt-image-2.5-sunburst" }
     });
-    assert.deepEqual(models, ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2", "gpt-image-2.5-sunburst"]);
+    const [latestOption] = await provider.generate({
+      asset,
+      settings: { model: "gpt-image-2.6-sunburst" }
+    });
+    assert.deepEqual(models, ["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2", "gpt-image-2.5-sunburst", "gpt-image-2.6-sunburst"]);
     assert.equal(option.model, "gpt-image-2.5-sunburst");
     assert.equal(option.settings.model, option.model);
+    assert.equal(latestOption.model, "gpt-image-2.6-sunburst");
+    assert.equal(latestOption.settings.model, latestOption.model);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -469,7 +475,7 @@ test("transparent spritesheets generate isolated frames and composite exact cell
   }
 });
 
-for (const model of ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]) {
+for (const model of ["gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"]) {
   for (const format of ["png", "webp"]) {
     test(`${model} requests native ${format} alpha and preserves transparent holes and colored edges`, async () => {
       const originalFetch = globalThis.fetch;
