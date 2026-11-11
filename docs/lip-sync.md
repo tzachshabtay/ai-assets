@@ -2,6 +2,9 @@
 
 Lip sync is opt-in on a **portrait base image**. It does not change character
 sprites, directional animations, or ordinary linked speaking animations.
+Tag a new portrait asset with `portrait` to show **Lip sync…** in the designer.
+Assets that already have `lipSync` settings keep the button so their settings
+can be edited or re-enabled. Other graphics do not show the button.
 
 1. Select a portrait's **Base image**, then **Lip sync…**.
 2. Enable it and select the character's voice. Save settings.

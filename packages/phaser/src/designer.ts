@@ -1,4 +1,5 @@
 import { openLipSyncDialog } from './lip-sync-dialog.js';
+import { canAuthorLipSync } from './lip-sync-availability.js';
 import { openVoiceLineRecordingDialog } from "./voice-line-recording-dialog.js";
 import { openVoiceLineRegenerationDialog } from "./voice-line-regeneration-dialog.js";
 import { DesignerGenerationRecovery, type PendingDesignerOption } from "./generation-recovery.js";
@@ -1030,7 +1031,7 @@ export function installAiAssetDesigner(
     elements.currentAnimationButton.textContent = isTilesetAnimation
       ? "Edit animation..."
       : "Edit...";
-    elements.lipSyncButton.hidden = !asset.versions[asset.activeVersion]?.file || !!asset.frameGrid || !['image','animation','spritesheet'].includes(asset.kind);
+    elements.lipSyncButton.hidden = !canAuthorLipSync(asset);
     elements.scaledVariantsButton.hidden = !asset.versions[asset.activeVersion]?.file ||
       !["image", "spritesheet", "animation", "tileset"].includes(asset.kind) || Boolean(selectedTilesetAnimationKey);
     elements.currentTouchUpButton.textContent = isBaseTileset ? "Edit tileset..." : "Touch up...";
@@ -1102,7 +1103,7 @@ export function installAiAssetDesigner(
     elements.currentAnimationButton.hidden = isTilesetAnimation && selectedTilesetAnimationKey
       ? !hasEditableTilesetAnimationFrames(selectedTargetAssetId, selectedTilesetAnimationKey)
       : !optionAsset.frameGrid && !isAudio;
-    elements.lipSyncButton.hidden = !asset.versions[asset.activeVersion]?.file || !!asset.frameGrid || !['image','animation','spritesheet'].includes(asset.kind);
+    elements.lipSyncButton.hidden = !canAuthorLipSync(asset);
     elements.scaledVariantsButton.hidden = !asset.versions[asset.activeVersion]?.file ||
       !["image", "spritesheet", "animation", "tileset"].includes(asset.kind) || Boolean(selectedTilesetAnimationKey);
     elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(optionAsset)
@@ -1529,7 +1530,7 @@ export function installAiAssetDesigner(
           selectedTilesetAnimationKey
         )
       : !asset.frameGrid && !isAudio;
-    elements.lipSyncButton.hidden = !asset.versions[asset.activeVersion]?.file || !!asset.frameGrid || !['image','animation','spritesheet'].includes(asset.kind);
+    elements.lipSyncButton.hidden = !canAuthorLipSync(asset);
     elements.scaledVariantsButton.hidden = !asset.versions[asset.activeVersion]?.file ||
       !["image", "spritesheet", "animation", "tileset"].includes(asset.kind) || Boolean(selectedTilesetAnimationKey);
     elements.currentTouchUpButton.textContent = isDesignerTilesetAsset(asset)
